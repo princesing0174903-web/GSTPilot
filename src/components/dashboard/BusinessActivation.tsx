@@ -127,7 +127,7 @@ export function BusinessActivation() {
             <h3 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               Business Activation
             </h3>
-            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
               {completedCount}/{STEPS.length}
             </span>
           </div>
@@ -190,7 +190,7 @@ export function BusinessActivation() {
                     )}
                   </div>
                   {/* Step number */}
-                  <span className="text-[10px] font-medium text-muted-foreground/50">
+                  <span className="text-[11px] font-medium text-muted-foreground/50">
                     {String(i + 1).padStart(2, '0')}
                   </span>
                 </div>

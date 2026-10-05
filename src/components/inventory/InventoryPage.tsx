@@ -63,7 +63,7 @@ function StockByCategoryChart() {
     acc[p.category] = (acc[p.category] ?? 0) + p.stock
     return acc
   }, {})
-  const palette = ['#10b981', '#34d399', '#f59e0b', '#6ee7b7', '#a7f3d0', '#fbbf24', '#94a3b8', '#d1d5db']
+  const palette = ['#2563EB', '#3B82F6', '#f59e0b', '#60A5FA', '#93C5FD', '#fbbf24', '#94a3b8', '#d1d5db']
   const data = Object.entries(categoryMap).map(([label, value], i) => ({ label, value, color: palette[i % palette.length] }))
   const maxVal = Math.max(1, ...data.map(d => d.value))
   const barH = 26
@@ -112,7 +112,7 @@ function WarehouseCapacityChart() {
       {data.map((d, i) => {
         const x = padL + i * gapX + (gapX - barW) / 2
         const barH = (d.capacity / 100) * chartH
-        const fillColor = d.capacity > 80 ? '#ef4444' : d.capacity > 60 ? '#f59e0b' : '#10b981'
+        const fillColor = d.capacity > 80 ? '#ef4444' : d.capacity > 60 ? '#f59e0b' : '#2563EB'
         return (
           <g key={d.code}>
             <rect x={x} y={padT + chartH - barH} width={barW} height={barH} rx="3" fill={fillColor} opacity="0.8">

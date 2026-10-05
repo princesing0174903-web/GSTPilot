@@ -58,21 +58,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency, formatNumber } from '@/lib/gst-utils';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Lightbulb as LightbulbIcon } from 'lucide-react';
+import { CHART_COLORS } from '@/lib/chart-theme';
 
 // ─── Color Palette ────────────────────────────────────────────────────────
+// Sourced from @/lib/chart-theme so every chart in this module stays aligned
+// with the GSTPilot Infinity™ brand system (blue primary, violet secondary,
+// amber for warning, red for danger, green reserved for success only).
+// The COLORS keys are kept (legacy compatibility) but every value now points
+// at a chart-theme constant — no raw hexes here.
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
-  emeraldLight: '#d1fae5',
-  teal: '#14b8a6',
-  tealDark: '#0d9488',
-  purple: '#8b5cf6',
-  purpleLight: '#ede9fe',
-  amber: '#f59e0b',
-  red: '#ef4444',
-  slate: '#64748b',
-  cyan: '#06b6d4',
-  rose: '#f43f5e',
+  emerald: CHART_COLORS.primary,        // blue-600   (was '#2563EB' — already blue)
+  emeraldDark: CHART_COLORS.primary,    // blue-600   (was '#1D4ED8')
+  emeraldLight: 'rgba(37, 99, 235, 0.15)', // blue tint (was emerald)
+  teal: CHART_COLORS.primarySoft,       // blue-400   (was '#14b8a6' teal)
+  tealDark: CHART_COLORS.primary,       // blue-600   (was '#2563EB' — already blue)
+  purple: CHART_COLORS.secondary,       // violet-500 (was '#8b5cf6' — kept)
+  purpleLight: 'rgba(6, 182, 212, 0.15)', // cyan tint (was '#ede9fe')
+  amber: CHART_COLORS.warning,          // amber-500  (was '#f59e0b')
+  red: CHART_COLORS.danger,             // red-500    (was '#ef4444')
+  slate: CHART_COLORS.neutral,          // slate-500  (was '#64748b')
+  cyan: CHART_COLORS.primarySoft,       // blue-400   (was '#3B82F6')
+  rose: CHART_COLORS.danger,            // red-500    (was '#f43f5e')
 };
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -205,7 +211,7 @@ function InsightIcon({ icon, color }: { icon: string; color: string }) {
     emerald: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40',
     amber: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40',
     red: 'text-red-500 bg-red-50 dark:bg-red-950/40',
-    purple: 'text-purple-500 bg-purple-50 dark:bg-purple-950/40',
+    purple: 'text-cyan-500 bg-cyan-50 dark:bg-cyan-950/40',
   };
   const cls = colorMap[color] || colorMap.emerald;
 
@@ -486,8 +492,8 @@ export default function ExecutiveAnalyticsPage() {
             ) : (
               <>
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/50">
-                    <BarChart3 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-100 dark:border-cyan-900/50">
+                    <BarChart3 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
                   </div>
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -499,7 +505,7 @@ export default function ExecutiveAnalyticsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Activity className="h-3.5 w-3.5 text-purple-500" />
+                  <Activity className="h-3.5 w-3.5 text-cyan-500" />
                   <span className="text-[10px] text-muted-foreground">
                     This fiscal year
                   </span>
@@ -676,7 +682,7 @@ export default function ExecutiveAnalyticsPage() {
         <AnimatedCard delay={0.4}>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
-              <BarChart3 className="h-5 w-5 text-purple-500" />
+              <BarChart3 className="h-5 w-5 text-cyan-500" />
               GST Processed
             </CardTitle>
             <CardDescription>CGST, SGST & IGST breakdown</CardDescription>
@@ -794,7 +800,7 @@ export default function ExecutiveAnalyticsPage() {
         {/* ─── AI INSIGHTS PANEL ─── */}
         <AnimatedCard delay={0.5} className="relative overflow-hidden">
           {/* Gradient border effect */}
-          <div className="absolute inset-0 rounded-lg p-[1px] bg-gradient-to-br from-emerald-400 via-teal-400 to-purple-500 opacity-60" />
+          <div className="absolute inset-0 rounded-lg p-[1px] bg-gradient-to-br from-emerald-400 via-teal-400 to-cyan-500 opacity-60" />
           <div className="relative bg-card rounded-lg">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -804,7 +810,7 @@ export default function ExecutiveAnalyticsPage() {
                 </CardTitle>
                 <Badge
                   variant="outline"
-                  className="text-[10px] px-2 py-0.5 border-purple-200 text-purple-700 bg-purple-50/80 dark:border-purple-800 dark:text-purple-400 dark:bg-purple-950/40"
+                  className="text-[10px] px-2 py-0.5 border-cyan-200 text-cyan-700 bg-cyan-50/80 dark:border-cyan-800 dark:text-cyan-400 dark:bg-cyan-950/40"
                 >
                   <Zap className="h-2.5 w-2.5 mr-0.5" />
                   AI Generated
@@ -834,7 +840,7 @@ export default function ExecutiveAnalyticsPage() {
                         initial={{ opacity: 0, x: -15 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.3 + index * 0.08, duration: 0.4 }}
-                        whileHover={{ x: 4, backgroundColor: 'rgba(16, 185, 129, 0.03)' }}
+                        whileHover={{ x: 4, backgroundColor: 'rgba(37,99,235, 0.03)' }}
                         className="flex items-start gap-3 p-3 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-all cursor-pointer group"
                       >
                         <InsightIcon icon={insight.icon} color={insight.color} />
@@ -975,12 +981,12 @@ export default function ExecutiveAnalyticsPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.7 }}
-                  className="p-4 rounded-xl border border-border/30 hover:border-purple-200/50 dark:hover:border-purple-800/50 transition-colors"
+                  className="p-4 rounded-xl border border-border/30 hover:border-cyan-200/50 dark:hover:border-cyan-800/50 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-purple-50 dark:bg-purple-950/30">
-                        <Shield className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-cyan-50 dark:bg-cyan-950/30">
+                        <Shield className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                       </div>
                       <span className="text-sm font-medium text-foreground">Filing Efficiency</span>
                     </div>
@@ -999,7 +1005,7 @@ export default function ExecutiveAnalyticsPage() {
                     <motion.div
                       className={`h-full rounded-full ${
                         filingEfficiencyChange >= 0
-                          ? 'bg-gradient-to-r from-purple-400 to-purple-500'
+                          ? 'bg-gradient-to-r from-cyan-400 to-cyan-500'
                           : 'bg-gradient-to-r from-amber-400 to-amber-500'
                       }`}
                       initial={{ width: 0 }}

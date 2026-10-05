@@ -242,3 +242,17 @@ export const backdropVariants = {
   visible: { opacity: 1 },
   exit: { opacity: 0 },
 };
+
+// Re-export AnimatedNumber from the dedicated module
+export { AnimatedNumber } from './AnimatedNumber';
+
+// Re-export PremiumEmptyState from the dedicated module
+export { PremiumEmptyState } from './premium-empty-state';
+export type { PremiumEmptyStateProps } from './premium-empty-state';
+
+// Re-export premium form primitives (FormField / FormSection / FormActions)
+export * from './form-field';
+
+// Re-export DataTable + TableToolbar from the dedicated module
+export { DataTable, TableToolbar } from './data-table';
+export type { Column, DataTableProps } from './data-table';

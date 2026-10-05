@@ -52,3 +52,15 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Tool scratch output (not source code)
+/tool-results/
+# Environment files with secrets — never commit
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.setu.template
+
+# local restore scripts
+auto-restore.sh

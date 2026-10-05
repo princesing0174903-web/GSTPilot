@@ -241,3 +241,39 @@ export async function PATCH(request: Request) {
     )
   }
 }
+
+// DELETE /api/notices?id=... — Delete a notice
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Notice id is required (use ?id=)' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.notice.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Notice not found' },
+        { status: 404 }
+      )
+    }
+
+    await db.notice.delete({ where: { id } })
+
+    // Invalidate graph cache so deletions reflect instantly
+    invalidateGraph()
+
+    return NextResponse.json({ ok: true, id })
+  } catch (error) {
+    console.error('DELETE /api/notices error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete notice' },
+      { status: 500 }
+    )
+  }
+}

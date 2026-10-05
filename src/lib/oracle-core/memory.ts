@@ -13,6 +13,12 @@ import type {
 
 const FIRM_ID = process.env.NEXT_PUBLIC_FIRM_ID || 'gstpilot-default-firm';
 
+// ORACLE-SECURITY-FIX: Previously all functions in this file used the global
+// FIRM_ID constant — a cross-tenant data leak. Now searchMemory / getMemoryStats
+// accept an optional firmId parameter and filter by it. If firmId is not passed,
+// they fall back to FIRM_ID (for backward compat with internal callers) but
+// log a warning. API routes MUST pass the orgId from the auth context.
+
 function safeParseJSON<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
   try {
@@ -108,6 +114,7 @@ export async function writeMemoryBatch(inputs: WriteMemoryInput[]): Promise<numb
 }
 
 export interface SearchMemoryInput {
+  firmId?: string;
   query?: string;
   category?: MemoryCategory;
   source?: MemorySource;
@@ -120,7 +127,11 @@ export interface SearchMemoryInput {
 
 /** Search unified memory. Free-text matches title/summary/tags. */
 export async function searchMemory(input: SearchMemoryInput): Promise<MemorySearchResult> {
-  const firmId = FIRM_ID;
+  // ORACLE-SECURITY-FIX: use the caller-provided firmId; warn if missing.
+  const firmId = input.firmId || FIRM_ID;
+  if (!input.firmId) {
+    console.warn('[oracle-core/memory] searchMemory called without firmId — using global fallback. This is a cross-tenant risk.');
+  }
   const where: Record<string, unknown> = { firmId };
 
   if (input.category) where.category = input.category;
@@ -179,26 +190,30 @@ export async function getEntityMemory(
 }
 
 /** Memory statistics for the dashboard. */
-export async function getMemoryStats(): Promise<{
+export async function getMemoryStats(firmId?: string): Promise<{
   totalRecords: number;
   byCategory: Record<string, number>;
   bySource: Record<string, number>;
   last24h: number;
 }> {
-  const firmId = FIRM_ID;
+  // ORACLE-SECURITY-FIX: use the caller-provided firmId; warn if missing.
+  const effectiveFirmId = firmId || FIRM_ID;
+  if (!firmId) {
+    console.warn('[oracle-core/memory] getMemoryStats called without firmId — using global fallback. This is a cross-tenant risk.');
+  }
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const [total, last24h, byCategoryRows, bySourceRows] = await Promise.all([
-    db.oracleMemory.count({ where: { firmId } }),
-    db.oracleMemory.count({ where: { firmId, createdAt: { gte: since24h } } }),
+    db.oracleMemory.count({ where: { firmId: effectiveFirmId } }),
+    db.oracleMemory.count({ where: { firmId: effectiveFirmId, createdAt: { gte: since24h } } }),
     db.oracleMemory.groupBy({
       by: ['category'],
-      where: { firmId },
+      where: { firmId: effectiveFirmId },
       _count: { _all: true },
     }),
     db.oracleMemory.groupBy({
       by: ['source'],
-      where: { firmId },
+      where: { firmId: effectiveFirmId },
       _count: { _all: true },
     }),
   ]);

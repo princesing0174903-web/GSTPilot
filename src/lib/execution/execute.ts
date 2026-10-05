@@ -171,22 +171,25 @@ export const EXECUTION_RESULTS: Record<ExecutionTaskType, () => Record<string, u
   }),
 };
 
-// ─── executeTask — run one task and return its outcome ────────────────────────
-// Looks up the result-shape factory for the task type and returns it together
-// with an ISO completion timestamp. Real execution dispatch (GST portal, bank
-// API, payroll processor) is wired up by the caller; this function only
-// normalises the result envelope.
+// ─── executeTask — build the result envelope for a task ───────────────────────
+// IMPORTANT: This function does NOT execute any real integration (GST portal,
+// bank API, WhatsApp, payroll). It only builds an EMPTY result envelope of the
+// correct shape for the task type, with all counts at zero and timestamps null.
+// The status is 'pending' — callers must perform real execution and update the
+// status to 'completed' only after the integration actually succeeds.
+// Previously this returned status:'completed' with an empty result, which
+// misled callers into thinking work was done. Fixed: honest 'pending' status.
 export function executeTask(task: ExecutionTask): {
   status: ExecutionStatus;
   result: Record<string, unknown>;
-  completedAt: string;
+  completedAt: string | null;
 } {
   const factory = EXECUTION_RESULTS[task.type];
-  const result = factory ? factory() : { executed: true, taskType: task.type };
+  const result = factory ? factory() : { executed: false, taskType: task.type };
   return {
-    status: 'completed',
+    status: 'pending',
     result,
-    completedAt: new Date().toISOString(),
+    completedAt: null,
   };
 }
 

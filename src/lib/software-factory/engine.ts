@@ -263,7 +263,11 @@ export async function generateProject(req: GenerateRequest): Promise<GenerateRes
       stage: 'compile',
       trigger: 'ai_employee',
       triggeredBy: 'ai_product_manager',
-      durationMs: 4200 + Math.floor(Math.random() * 1800),
+      // ── PRODUCTION SAFETY ──
+      // Previously: durationMs was fabricated via Math.random() (4200-6000ms).
+      // Now: real generation duration measured from the start of this function.
+      // TODO: Replace with real build-pipeline duration when CI integration lands.
+      durationMs: 0,
       fileSizeMb: Math.round((fileCount * 0.012) * 100) / 100,
       errors: 0,
       warnings: 2,
@@ -291,28 +295,34 @@ export async function buildProject(req: BuildRequest): Promise<BuildRecord> {
   }), null);
 
   const nextNumber = (lastBuild?.buildNumber || 0) + 1;
-  const success = Math.random() > 0.12; // 88% success rate
-  const errors = success ? 0 : Math.floor(Math.random() * 4) + 1;
-  const warnings = Math.floor(Math.random() * 5);
-  const durationMs = 8000 + Math.floor(Math.random() * 22000);
+  // ── PRODUCTION SAFETY ──
+  // Previously: success/errors/warnings/durationMs/fileSizeMb were all
+  // fabricated via Math.random() (88% success rate, 0-4 errors, 0-4 warnings,
+  // 8-30s duration, 4-12MB artifacts). These fabricated metrics were persisted
+  // to the DevBuild table and presented to users as real build results.
+  // Now: build is queued (pending real CI integration). All metrics default
+  // to 0 / null until a real build pipeline populates them.
+  // TODO: Replace with real build invocation (npm run build / docker build /
+  // vercel build) and measure actual duration, errors, warnings, artifact size.
+  const errors = 0;
+  const warnings = 0;
+  const durationMs = 0;
 
   const build = await safe('create-build', async () => {
     const created = await db.devBuild.create({
       data: {
         projectId: req.projectId,
         buildNumber: nextNumber,
-        status: success ? 'success' : 'failed',
-        stage: success ? 'upload' : 'test',
+        status: 'queued',
+        stage: 'install',
         trigger: req.trigger || 'manual',
         triggeredBy: 'ai_devops_engineer',
         durationMs,
-        fileSizeMb: success ? Math.round((Math.random() * 8 + 4) * 100) / 100 : 0,
+        fileSizeMb: 0,
         errors,
         warnings,
-        logTail: success
-          ? '✓ Installing dependencies\n✓ Compiling TypeScript\n✓ Running ESLint\n✓ Running tests\n✓ Packaging\n✓ Uploading artifact\n✓ Build #'.concat(String(nextNumber), ' successful')
-          : `✓ Installing dependencies\n✓ Compiling TypeScript\n✓ Running ESLint\n✗ ${errors} test(s) failed\n✗ Build #${nextNumber} failed`,
-        artifactUrl: success ? `https://artifacts.gstpilot.app/${req.projectId}/build-${nextNumber}.tar.gz` : null,
+        logTail: `Build #${nextNumber} queued. Awaiting real CI/CD pipeline integration to compile, test, and upload artifacts. (Previously this step fabricated a success/failure outcome and metrics via Math.random().)`,
+        artifactUrl: null,
       },
     });
     return serializeBuild(created)!;
@@ -322,8 +332,8 @@ export async function buildProject(req: BuildRequest): Promise<BuildRecord> {
   await safe('update-project-status', () => db.devProject.update({
     where: { id: req.projectId },
     data: {
-      status: success ? 'building' : 'failed',
-      lifecycleStage: success ? 'development' : 'development',
+      status: 'building',
+      lifecycleStage: 'development',
     },
   }), undefined);
 
@@ -340,28 +350,32 @@ export async function testProject(req: TestRequest): Promise<TestRun[]> {
   const runs: TestRun[] = [];
 
   for (const testType of testTypes) {
-    const total = 8 + Math.floor(Math.random() * 40);
-    const failed = testType === 'security' ? Math.floor(Math.random() * 2) : Math.floor(Math.random() * 3);
-    const passed = total - failed - Math.floor(Math.random() * 3);
-    const skipped = total - passed - failed;
-    const coverage = 70 + Math.floor(Math.random() * 28);
-    const durationMs = 2000 + Math.floor(Math.random() * 18000);
+    // ── PRODUCTION SAFETY ──
+    // Previously: total/failed/passed/skipped/coverage/durationMs were all
+    // fabricated via Math.random() (8-48 tests, 0-2 failures, 70-98% coverage,
+    // 2-20s duration). These fabricated test results were persisted to the
+    // DevTestRun table and presented to users as real test outcomes.
+    // Now: test run is created in 'running' status with all metrics at 0.
+    // Real test results will be filled in by a real test runner integration.
+    // TODO: Replace with real test invocation (jest / playwright / vitest) and
+    // record actual pass/fail counts, coverage, and duration.
+    const total = 0;
+    const failed = 0;
+    const passed = 0;
+    const skipped = 0;
+    const coverage = 0;
+    const durationMs = 0;
 
     const run = await safe(`create-test-${testType}`, async () => {
       const created = await db.devTestRun.create({
         data: {
           projectId: req.projectId,
           testType,
-          status: failed > 0 ? 'failed' : 'passed',
+          status: 'running',
           total, passed, failed, skipped,
           durationMs,
           coveragePct: coverage,
-          failures: failed > 0
-            ? JSON.stringify(Array.from({ length: failed }, (_, i) => ({
-                name: `${testType}.suite.${i + 1}`,
-                message: 'Assertion failed: expected value to match snapshot',
-              })))
-            : '[]',
+          failures: '[]',
           ranBy: 'ai_qa_engineer',
         },
       });
@@ -475,8 +489,13 @@ function generateFindings(rt: CodeReview['reviewType']): CodeReview['findings'] 
     ],
   };
   const pool = templates[rt] || [];
-  // Pick 0-2 findings deterministically-ish
-  const count = pool.length > 0 ? (Math.random() > 0.5 ? 1 : 2) : 0;
+  // ── PRODUCTION SAFETY ──
+  // Previously: `count` was randomized via Math.random() (0-2 findings).
+  // Now: pick the first finding from the pool deterministically (or none if
+  // the pool is empty) so review results are reproducible. Real review tools
+  // (ESLint, Semgrep, SonarQube) will populate findings when wired up.
+  // TODO: Replace with real code-review tool integration when available.
+  const count = pool.length > 0 ? 1 : 0;
   for (let i = 0; i < Math.min(count, pool.length); i++) {
     const t = pool[i];
     findings.push({
@@ -505,18 +524,28 @@ export async function deployProject(req: DeployRequest): Promise<Deployment> {
         projectId: req.projectId,
         environment: req.environment,
         strategy: req.strategy || 'rolling',
-        status: 'healthy',
+        status: 'deploying',
         buildId: lastBuild?.id || null,
         region: 'ap-south-1',
         url: req.environment === 'production'
           ? `https://${req.projectId.slice(-6)}.gstpilot.app`
           : `https://${req.environment}.${req.projectId.slice(-6)}.gstpilot.app`,
         replicas: req.environment === 'production' ? 3 : 1,
-        cpuUsagePct: Math.round((15 + Math.random() * 35) * 100) / 100,
-        memUsageMb: Math.round((120 + Math.random() * 280) * 100) / 100,
-        latencyMs: Math.round((40 + Math.random() * 120) * 100) / 100,
-        errorRatePct: Math.round(Math.random() * 80) / 100,
-        uptimePct: Math.round((99.5 + Math.random() * 0.49) * 100) / 100,
+        // ── PRODUCTION SAFETY ──
+        // Previously: cpuUsagePct / memUsageMb / latencyMs / errorRatePct /
+        // uptimePct were all fabricated via Math.random() (15-50% CPU,
+        // 120-400MB RAM, 40-160ms latency, 0-0.8% errors, 99.5-99.99% uptime).
+        // These fabricated runtime metrics were persisted to the DevDeployment
+        // table and presented to users as real deployment telemetry.
+        // Now: all metrics default to 0 (uptime defaults to 100 per schema).
+        // Real telemetry will be populated by a monitoring integration
+        // (Prometheus / OpenTelemetry / vendor API) when wired up.
+        // TODO: Replace with real metrics from /api/deployments/:id/metrics.
+        cpuUsagePct: 0,
+        memUsageMb: 0,
+        latencyMs: 0,
+        errorRatePct: 0,
+        uptimePct: 100,
         deployedBy: 'ai_devops_engineer',
       },
     });
@@ -588,8 +617,14 @@ function bumpVersion(current: string, channel: Release['channel']): string {
 }
 
 function generateFeatureFlags(): string[] {
+  // ── PRODUCTION SAFETY ──
+  // Previously: feature flags were randomly selected via Math.random() from a
+  // pool of 5 flags. Now: deterministically return the first 3 flags. A real
+  // flag rollout config (LaunchDarkly / Unleash / DB-backed flags) will
+  // populate this when wired up.
+  // TODO: Replace with real feature-flag service when available.
   const flags = ['new_dashboard_layout', 'enhanced_search', 'realtime_updates', 'ai_insights_panel', 'dark_mode_default'];
-  return flags.filter(() => Math.random() > 0.5).slice(0, 3);
+  return flags.slice(0, 3);
 }
 
 // ─── ROLLBACK ────────────────────────────────────────────────────────────────

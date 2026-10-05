@@ -56,11 +56,16 @@ interface SampleCard {
   accent: 'emerald' | 'teal' | 'cyan' | 'violet';
 }
 
+// SAMPLE_CARDS — previously 4 cards with hardcoded mock KPI values
+// ('$5.68M' revenue, '91%' compliance, '10' countries). Removed during
+// mock-data audit (Task 7). Values now use neutral '—' placeholders so the
+// translation preview still renders translated labels without showing
+// fabricated KPIs. Replace with real KPIs from /api/business-snapshot.
 const SAMPLE_CARDS: SampleCard[] = [
   { icon: LayoutDashboard, key: 'dashboard', value: 'GSTPilot', accent: 'teal' },
-  { icon: DollarSign, key: 'revenue', value: '$5.68M', accent: 'emerald' },
-  { icon: ShieldCheck, key: 'compliance', value: '91%', accent: 'cyan' },
-  { icon: MapPin, key: 'countries', value: '10', accent: 'violet' },
+  { icon: DollarSign, key: 'revenue', value: '—', accent: 'emerald' },
+  { icon: ShieldCheck, key: 'compliance', value: '—', accent: 'cyan' },
+  { icon: MapPin, key: 'countries', value: '—', accent: 'violet' },
 ];
 
 const TRANSLATIONS: Record<string, Record<SampleCard['key'], string>> = {

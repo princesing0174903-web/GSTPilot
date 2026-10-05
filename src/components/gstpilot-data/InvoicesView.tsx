@@ -25,6 +25,7 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { PremiumEmptyState } from '@/components/ui/premium-empty-state';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -434,7 +435,7 @@ export default function InvoicesView() {
         <StatCard icon={<Receipt className="h-5 w-5 text-emerald-400" />} label="Total Invoiced" value={inr(stats.totalInvoiced)} tint="emerald" />
         <StatCard icon={<CheckCircle2 className="h-5 w-5 text-teal-400" />} label="Total Paid" value={inr(stats.totalPaid)} tint="teal" />
         <StatCard icon={<Wallet className="h-5 w-5 text-amber-400" />} label="Outstanding" value={inr(stats.totalOutstanding)} tint="amber" />
-        <StatCard icon={<TrendingUp className="h-5 w-5 text-violet-400" />} label="Tax Collected" value={inr(stats.totalTaxCollected)} tint="violet" />
+        <StatCard icon={<TrendingUp className="h-5 w-5 text-cyan-400" />} label="Tax Collected" value={inr(stats.totalTaxCollected)} tint="violet" />
       </div>
 
       {/* Search */}
@@ -1010,7 +1011,7 @@ function StatCard({
     emerald: 'bg-emerald-500/10 border-emerald-500/20',
     teal: 'bg-teal-500/10 border-teal-500/20',
     amber: 'bg-amber-500/10 border-amber-500/20',
-    violet: 'bg-violet-500/10 border-violet-500/20',
+    violet: 'bg-cyan-500/10 border-cyan-500/20',
   };
   return (
     <Card className="border-white/10 bg-white/[0.03]">
@@ -1037,28 +1038,33 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function EmptyState({ onCreate, hasSearch }: { onCreate: () => void; hasSearch: boolean }) {
+  if (hasSearch) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.03] border border-white/10">
+          <FileText className="h-7 w-7 text-white/40" />
+        </div>
+        <p className="text-base font-semibold text-white">No invoices match your search</p>
+        <p className="text-sm text-white/50">Try a different search term.</p>
+      </div>
+    );
+  }
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/[0.03] border border-white/10">
-        <FileText className="h-8 w-8 text-white/40" />
-      </div>
-      <div>
-        <p className="text-lg font-semibold text-white">
-          {hasSearch ? 'No invoices match your search' : 'No invoices yet'}
-        </p>
-        <p className="mt-1 text-sm text-white/50">
-          {hasSearch
-            ? 'Try a different search term.'
-            : 'Create your first GST invoice — it saves straight to Firestore.'}
-        </p>
-      </div>
-      {!hasSearch && (
-        <Button onClick={onCreate} className="bg-emerald-500 text-black hover:bg-emerald-400">
-          <Plus className="mr-2 h-4 w-4" />
-          Create Invoice
-        </Button>
-      )}
-    </div>
+    <PremiumEmptyState
+      icon={<FileText className="h-8 w-8" />}
+      title="No invoices yet"
+      description="Create your first GST invoice — it saves straight to Firestore."
+      primaryAction={{
+        label: 'Create Invoice',
+        onClick: onCreate,
+        icon: <Plus className="h-4 w-4" />,
+      }}
+      quickTips={[
+        'Invoices auto-calculate CGST/SGST/IGST based on place of supply',
+        'Send invoices via email or WhatsApp directly from the invoice view',
+        'Connect Zoho Books to import your existing invoice history',
+      ]}
+    />
   );
 }
 

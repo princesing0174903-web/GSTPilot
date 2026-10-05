@@ -248,6 +248,24 @@ export interface ConnectBankResult {
   accountNumberMasked: string;
   /** Initial account snapshot (balances known at connect time). */
   accountSnapshot: BankAccountSnapshot | null;
+  /**
+   * External consent approval URL (AA providers only).
+   *
+   * For Account Aggregator providers (Setu, Finvu, Sahamati), this is the
+   * Setu-hosted webview URL the user MUST visit in their browser to approve
+   * the data-sharing consent. The frontend should open this URL (new tab /
+   * redirect) immediately after receiving it from POST /api/banking/connect.
+   *
+   * When this field is present, the connection is NOT yet complete — the
+   * client must wait for the user to approve consent (either via the
+   * /api/webhooks/setu webhook OR by polling /api/banking/complete), then
+   * call /api/banking/complete to finalize.
+   *
+   * When this field is null/absent, the connection is complete immediately
+   * (Mock provider, or a direct-bank provider that validates credentials
+   * synchronously).
+   */
+  redirectUrl: string | null;
   message: string;
 }
 

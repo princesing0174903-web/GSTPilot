@@ -15,8 +15,11 @@ import {
 import {
   useFireInvoices, useFireReturns, useFireBankTransactions, useFireClients, useFirePayments,
 } from '@/hooks/use-firestore';
+import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
 import {
-  computeFinancialIntelligence, formatCurrency, type FinancialInsight,
+  computeFinancialIntelligence, formatCurrency,
+  type FinancialIntelligenceSnapshot,
+  type FinancialInsight,
 } from '@/lib/autonomous-finance/financial-intelligence';
 import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
 import { TrustBar } from '@/components/shared/TrustBar';
@@ -89,6 +92,11 @@ export function FinancialIntelligencePage() {
   const { data: bankTx } = useFireBankTransactions();
   const { data: clients } = useFireClients();
   const { data: payments } = useFirePayments();
+  // Canonical Business Snapshot — the single source of truth for revenue /
+  // cash / receivables / payables / GST / health score. The Firestore-hook
+  // records are still used for record-level detail (top customers, sparkline)
+  // that the snapshot doesn't expose. See AUDIT-DUP-1 + task DUP-CLEANUP.
+  const { snapshot } = useBusinessSnapshot();
   const [refreshKey, setRefreshKey] = useState(0);
 
   const report = useMemo(() => computeFinancialIntelligence({
@@ -97,7 +105,14 @@ export function FinancialIntelligencePage() {
     returns: returns as unknown as Array<Record<string, unknown>>,
     clients: clients as unknown as Array<Record<string, unknown>>,
     payments: payments as unknown as Array<Record<string, unknown>>,
-  }), [invoices, bankTx, returns, clients, payments, refreshKey]);
+    // Cast through `unknown` because useBusinessSnapshot's TS type is the
+    // legacy `BusinessSnapshot` from `@/lib/financial-engine` (nested shape)
+    // while the actual API response from `/api/business/snapshot` is the
+    // unified shape that ALSO includes the flat fields this engine consumes.
+    // The runtime values are correct; the TS type just hasn't been migrated.
+    // See AUDIT-DUP-1 + task DUP-CLEANUP in worklog.md.
+    snapshot: snapshot as unknown as FinancialIntelligenceSnapshot,
+  }), [invoices, bankTx, returns, clients, payments, snapshot, refreshKey]);
 
   const hasData = invoices.length > 0 || bankTx.length > 0 || returns.length > 0;
   const score = report.overallHealthScore;
@@ -162,7 +177,7 @@ export function FinancialIntelligencePage() {
                     { label: 'Revenue', value: report.summary.revenueTrend.value, unit: 'INR', trend: report.summary.revenueTrend.trend, accent: 'text-emerald-300' },
                     { label: 'Expenses', value: report.summary.expenseTrend.value, unit: 'INR', trend: report.summary.expenseTrend.trend, accent: 'text-rose-300' },
                     { label: 'Cash Flow 30d', value: report.summary.cashflowForecast.value, unit: 'INR', accent: 'text-cyan-300' },
-                    { label: 'Working Capital', value: report.summary.workingCapital.value, unit: 'INR', accent: 'text-violet-300' },
+                    { label: 'Working Capital', value: report.summary.workingCapital.value, unit: 'INR', accent: 'text-cyan-300' },
                     { label: 'Tax Exposure', value: report.summary.taxExposure.value, unit: 'INR', accent: 'text-amber-300' },
                     { label: 'Profit Margin', value: report.summary.profitabilityMargin.value, unit: '%', accent: 'text-teal-300' },
                   ].map((s) => (

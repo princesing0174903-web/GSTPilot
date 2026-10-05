@@ -13,6 +13,10 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+    // ORG-SCOPED: the client must send the active organizationId so we write
+    // to organizations/{organizationId}/expenses — not a hardcoded path.
+    const organizationId =
+      typeof body.organizationId === 'string' ? body.organizationId : null;
     const input: CreateExpenseInput = {
       description: String(body.description),
       amount: Number(body.amount),
@@ -27,7 +31,7 @@ export async function POST(req: Request) {
       referenceNo: body.referenceNo ?? null,
       notes: body.notes ?? null,
     };
-    const expense = await createExpense(input);
+    const expense = await createExpense(organizationId, input);
     return NextResponse.json({
       success: true,
       expense,

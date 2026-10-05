@@ -38,14 +38,15 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatNumber } from '@/lib/gst-utils';
+import { EmptyState } from '@/components/shared';
 
 // ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
-  tealDark: '#0d9488',
+  tealDark: '#2563EB',
   tealLight: '#ccfbf1',
   amber: '#f59e0b',
   amberLight: '#fef3c7',
@@ -81,45 +82,7 @@ interface TeamMember {
 
 type RoleFilter = 'all' | 'auditor' | 'manager' | 'data_entry';
 
-// ─── Mock fallback data ───────────────────────────────────────────────────
-const mockLeaderboard: TeamMember[] = [
-  {
-    id: '1', name: 'Priya Sharma', email: 'priya@firm.com', role: 'auditor', department: 'Audit', avatar: null, rank: 1,
-    performanceScore: 94.2,
-    aggregatedMetrics: { invoicesProcessed: 245, reviewsCompleted: 89, approvalsCompleted: 45, averageAccuracy: 97.8, averageTurnaround: 3.2 },
-    workload: { pending: 5, inProgress: 3, completed: 42 },
-  },
-  {
-    id: '2', name: 'Rahul Verma', email: 'rahul@firm.com', role: 'manager', department: 'Tax', avatar: null, rank: 2,
-    performanceScore: 91.5,
-    aggregatedMetrics: { invoicesProcessed: 198, reviewsCompleted: 112, approvalsCompleted: 78, averageAccuracy: 96.5, averageTurnaround: 4.1 },
-    workload: { pending: 8, inProgress: 4, completed: 38 },
-  },
-  {
-    id: '3', name: 'Anita Desai', email: 'anita@firm.com', role: 'auditor', department: 'Compliance', avatar: null, rank: 3,
-    performanceScore: 89.8,
-    aggregatedMetrics: { invoicesProcessed: 176, reviewsCompleted: 95, approvalsCompleted: 52, averageAccuracy: 95.2, averageTurnaround: 4.8 },
-    workload: { pending: 6, inProgress: 2, completed: 35 },
-  },
-  {
-    id: '4', name: 'Vikram Patel', email: 'vikram@firm.com', role: 'data_entry', department: 'Data Entry', avatar: null, rank: 4,
-    performanceScore: 86.3,
-    aggregatedMetrics: { invoicesProcessed: 312, reviewsCompleted: 23, approvalsCompleted: 10, averageAccuracy: 92.1, averageTurnaround: 2.8 },
-    workload: { pending: 12, inProgress: 5, completed: 48 },
-  },
-  {
-    id: '5', name: 'Meera Joshi', email: 'meera@firm.com', role: 'manager', department: 'Audit', avatar: null, rank: 5,
-    performanceScore: 83.7,
-    aggregatedMetrics: { invoicesProcessed: 145, reviewsCompleted: 87, approvalsCompleted: 65, averageAccuracy: 88.4, averageTurnaround: 5.6 },
-    workload: { pending: 7, inProgress: 3, completed: 30 },
-  },
-  {
-    id: '6', name: 'Arjun Kumar', email: 'arjun@firm.com', role: 'data_entry', department: 'Data Entry', avatar: null, rank: 6,
-    performanceScore: 80.1,
-    aggregatedMetrics: { invoicesProcessed: 278, reviewsCompleted: 15, approvalsCompleted: 5, averageAccuracy: 83.5, averageTurnaround: 3.5 },
-    workload: { pending: 15, inProgress: 6, completed: 40 },
-  },
-];
+// ─── Initial state: empty (real data fetched from /api/team-performance) ───
 
 // ─── Circular Performance Score ────────────────────────────────────────────
 function PerformanceCircle({
@@ -358,7 +321,7 @@ const rowVariants = {
 // ═══════════════════════════════════════════════════════════════════════════
 export default function TeamPerformancePage() {
   // ── State ────────────────────────────────────────────────────────────────
-  const [leaderboard, setLeaderboard] = useState<TeamMember[]>(mockLeaderboard);
+  const [leaderboard, setLeaderboard] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
@@ -813,13 +776,11 @@ export default function TeamPerformancePage() {
 
                 {/* Empty state */}
                 {filteredLeaderboard.length === 0 && !loading && (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 mb-3">
-                      <Users className="h-6 w-6 text-slate-400" />
-                    </div>
-                    <p className="text-sm font-medium text-foreground mb-1">No team members found</p>
-                    <p className="text-xs text-muted-foreground">Try adjusting your filter to see more results</p>
-                  </div>
+                  <EmptyState
+                    icon={Users}
+                    title="No team performance data yet"
+                    description="Team member performance will appear here once data is synced from the /api/team-performance endpoint."
+                  />
                 )}
               </ScrollArea>
             </CardContent>

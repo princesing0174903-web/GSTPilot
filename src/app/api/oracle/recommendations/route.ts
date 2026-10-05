@@ -9,16 +9,29 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { generateDynamicRecommendations } from '@/lib/oracle/real-data';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const userId = request.nextUrl.searchParams.get('userId') ?? undefined;
+  // AUDIT-DUP-1 fix: pass organizationId through so generateDynamicRecommendations
+  // can (a) org-scope every Prisma read, (b) source headline cash/revenue/
+  // expenses from the Business Snapshot instead of global Prisma aggregates.
+  const organizationId = request.nextUrl.searchParams.get('organizationId') ?? request.nextUrl.searchParams.get('orgId') ?? request.nextUrl.searchParams.get('firmId') ?? undefined;
+
+  const orgResult = await requireOrgMembership(uid, organizationId ?? '');
+  if (orgResult instanceof NextResponse) return orgResult;
 
   try {
-    const recommendations = await generateDynamicRecommendations(userId);
+    const recommendations = await generateDynamicRecommendations(organizationId, userId);
     return NextResponse.json(
       {
         success: true,
@@ -26,6 +39,7 @@ export async function GET(request: NextRequest) {
         recommendations,
         generatedAt: new Date().toISOString(),
         userId: userId ?? null,
+        organizationId: organizationId ?? null,
       },
       { headers: { 'Cache-Control': 'no-store, max-age=0' } },
     );

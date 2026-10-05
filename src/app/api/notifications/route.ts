@@ -2,14 +2,21 @@ import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { createNotification } from '@/lib/notifications'
 import { safeAudit } from '@/lib/audit/safe-write'
+import { requireAuth, friendlyApiError } from '@/lib/auth/session'
 
 // GET /api/notifications — Fetch notifications with filters
 // Query params: userId, clientId, isRead, category, limit(20), offset
 // Returns { notifications: [...], unreadCount: number }
 export async function GET(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
+    // SECURITY: Always use the authenticated uid — never trust a client-supplied userId.
+    const userId = uid
     const clientId = searchParams.get('clientId')
     const isRead = searchParams.get('isRead')
     const category = searchParams.get('category')
@@ -19,11 +26,9 @@ export async function GET(request: Request) {
     // Build where clause using Prisma
     const where: Record<string, unknown> = {
       dismissed: false,
+      userId, // always scope by authenticated uid
     }
 
-    if (userId) {
-      where.userId = userId
-    }
     if (clientId) {
       where.clientId = clientId
     }
@@ -55,9 +60,7 @@ export async function GET(request: Request) {
     const unreadWhere: Record<string, unknown> = {
       isRead: false,
       dismissed: false,
-    }
-    if (userId) {
-      unreadWhere.userId = userId
+      userId, // always scope by authenticated uid
     }
     if (clientId) {
       unreadWhere.clientId = clientId
@@ -70,10 +73,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ notifications, unreadCount })
   } catch (error) {
     console.error('GET /api/notifications error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch notifications' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not load your notifications right now. Please try again.')
   }
 }
 
@@ -82,6 +82,11 @@ export async function GET(request: Request) {
 // Returns { notification }
 export async function POST(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const {
       userId,
@@ -124,10 +129,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ notification }, { status: 201 })
   } catch (error) {
     console.error('POST /api/notifications error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create notification' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not create the notification right now. Please try again.')
   }
 }
 
@@ -137,6 +139,11 @@ export async function POST(request: Request) {
 // Returns { notification }
 export async function PATCH(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const { id, isRead, read, dismissed, readAt } = body
 
@@ -174,9 +181,17 @@ export async function PATCH(request: Request) {
       updateData.readAt = readAt ? new Date(readAt) : null
     }
 
-    const notification = await db.notification.update({
-      where: { id },
+    // SECURITY: scope update by both id AND authenticated uid — prevents
+    // any authenticated user from mutating another user's notifications.
+    const result = await db.notification.updateMany({
+      where: { id, userId: uid },
       data: updateData,
+    })
+    if (result.count === 0) {
+      return NextResponse.json({ error: 'Notification not found' }, { status: 404 })
+    }
+    const notification = await db.notification.findUnique({
+      where: { id },
       include: {
         client: {
           select: {
@@ -208,16 +223,18 @@ export async function PATCH(request: Request) {
     ) {
       return NextResponse.json({ error: 'Notification not found' }, { status: 404 })
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update notification' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not update the notification right now. Please try again.')
   }
 }
 
 // DELETE /api/notifications?id=xxx — Delete a notification
 export async function DELETE(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -228,9 +245,14 @@ export async function DELETE(request: Request) {
       )
     }
 
-    const notification = await db.notification.delete({
-      where: { id },
+    // SECURITY: scope delete by both id AND authenticated uid.
+    const result = await db.notification.deleteMany({
+      where: { id, userId: uid },
     })
+    if (result.count === 0) {
+      return NextResponse.json({ error: 'Notification not found' }, { status: 404 })
+    }
+    const notification = { id, title: '(deleted)' }
 
     // Best-effort audit log (safe-write: retries without userId on P2003).
     await safeAudit({
@@ -250,9 +272,6 @@ export async function DELETE(request: Request) {
     ) {
       return NextResponse.json({ error: 'Notification not found' }, { status: 404 })
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete notification' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not delete the notification right now. Please try again.')
   }
 }

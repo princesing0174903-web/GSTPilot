@@ -95,11 +95,11 @@ const SIMULATED_ACTIVITIES: { label: string; icon: LucideIcon }[] = [
   { label: 'Oracle checking payment status…', icon: CreditCard },
 ];
 
-// ─── Tone colors (NEVER red/orange/purple per V16 spec) ───────────────────────
+// ─── Tone colors (blue accent · amber for recover · NO green/cyan) ────────────
 const TONE = {
   amber: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-  cyan: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-  emerald: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+  cyan: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)',
+  emerald: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
 } as const;
 
 type Tone = keyof typeof TONE;
@@ -171,10 +171,10 @@ function LiveActivityItem({ icon: Icon, label, sublabel }: { icon: LucideIcon; l
         <div className="flex h-8 w-8 items-center justify-center rounded-xl accent-gradient-soft">
           <Icon className="h-3.5 w-3.5 accent-text" />
         </div>
-        {/* Pulsing emerald dot to show "live" */}
+        {/* Pulsing blue dot to show "live" */}
         <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3B82F6] opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#3B82F6]" />
         </span>
       </div>
       <span className="min-w-0 flex-1">
@@ -358,8 +358,8 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
           </div>
           <div className="flex items-center gap-1">
             <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3B82F6] opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
             </span>
             <span className="text-[10px] text-muted-foreground">Live · Tap to chat</span>
           </div>
@@ -419,8 +419,8 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
                     </div>
                     {/* Pulsing dot to show "live" */}
                     <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#3B82F6] opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-[#3B82F6]" />
                     </span>
                   </div>
                   <span className="text-xs text-zinc-200">{simLabel}</span>

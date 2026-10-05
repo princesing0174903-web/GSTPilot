@@ -81,8 +81,16 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Run on every route (pages + API + static assets we serve). Next.js ignores
-  // the matcher for _next/static chunks automatically; this matcher ensures we
-  // cover the app + api + the root document.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.svg|robots.txt).*)'],
+  // Run on page/document routes ONLY. We deliberately EXCLUDE /api/* because:
+  //   1. Security headers (CSP, X-Frame-Options) are pointless on JSON
+  //      responses — browsers don't frame or execute API responses.
+  //   2. The middleware adds 5-370ms of latency per request (dev.log shows
+  //      `proxy.ts: 6-374ms` on every API call). With 5+ dashboard APIs
+  //      firing in parallel on mount, that's 25-1850ms of event-loop time
+  //      that serializes behind header assignment + NextResponse construction.
+  //   3. API routes set their own headers via NextResponse where needed.
+  // Static assets (_next/static, images, icons) are also excluded.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|icon.svg|robots.txt|api/).*)',
+  ],
 };

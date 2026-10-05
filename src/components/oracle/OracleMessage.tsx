@@ -20,9 +20,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
 import {
   AlertTriangle,
   ArrowRight,
+  BadgeCheck,
   BookOpen,
   Building2,
   CheckCircle2,
@@ -55,7 +57,286 @@ import type {
 import { OracleActionCards } from './OracleActionCards';
 import { OracleAvatar } from './OracleAvatar';
 import { deriveAvatarState } from './oracle-human';
+import type { OracleTurn } from '@/lib/oracle-conversations';
 import { cn } from '@/lib/utils';
+
+// ─── OracleMessage (simple renderer for OracleTurn-shaped messages) ───────────
+// This is the renderer used by the /oracle route's `oracle/OracleChat.tsx`.
+// It accepts the simpler `OracleTurn` shape from the `useOracleConversations`
+// store (id / role / content / followUps / streaming / error / createdAt).
+//
+// Design — Executive Command Center (gold/amber Oracle branding):
+//   • User messages: right-aligned, subtle #181818 bg, no avatar.
+//   • Oracle messages: left-aligned, gold gradient avatar (Sparkles icon),
+//     NO bubble — just text on a transparent background, like ChatGPT.
+//   • "Oracle · CA-Verified" header with BadgeCheck icon.
+//   • Streaming: "Oracle is responding…" with a small pulsing amber dot +
+//     blinking cursor.
+//   • Markdown body: amber-tinted table headers, monospace amber inline code,
+//     blockquotes with amber accent.
+//   • Follow-ups: clickable chips beneath the answer.
+//   • Subtle right-aligned timestamps (text-[10px] text-white/30).
+
+export interface OracleMessageProps {
+  turn: OracleTurn;
+  onPickFollowUp?: (question: string) => void;
+  onRetry?: () => void;
+}
+
+export function OracleMessage({ turn, onPickFollowUp, onRetry }: OracleMessageProps) {
+  if (turn.role === 'user') {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        className="flex justify-end"
+      >
+        <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-[#181818] px-4 py-2.5 text-[14px] leading-relaxed text-white whitespace-pre-wrap break-words">
+          {turn.content}
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Oracle message — left-aligned, gold avatar + transparent text
+  const isStreaming = !!turn.streaming;
+  const isError = !!turn.error;
+  const followUps = turn.followUps ?? [];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      className="flex gap-3"
+    >
+      {/* Oracle gold gradient avatar with glow */}
+      <div className="shrink-0">
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-[0_0_18px_-4px_rgba(245,158,11,0.55)] ring-1 ring-amber-500/30"
+          aria-label="Oracle avatar"
+        >
+          <Sparkles className="h-4 w-4" strokeWidth={2.2} />
+        </div>
+      </div>
+
+      <div className="min-w-0 flex-1 space-y-3">
+        {/* Header row: name + CA-Verified badge */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] font-semibold tracking-tight text-white">
+            Oracle
+          </span>
+          <BadgeCheck className="h-3.5 w-3.5 text-amber-500" aria-hidden />
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-500">
+            CA-Verified
+          </span>
+        </div>
+
+        {/* Streaming indicator */}
+        {isStreaming && !turn.content && (
+          <div className="flex items-center gap-2 py-1">
+            <span className="relative flex h-2 w-2">
+              <motion.span
+                className="absolute inline-flex h-full w-full rounded-full bg-amber-500"
+                animate={{ opacity: [0.2, 0.6, 0.2], scale: [0.85, 1.1, 0.85] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' as const }}
+              />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+            </span>
+            <span className="text-[13px] font-medium text-white/60">
+              Oracle is responding
+            </span>
+            <motion.span
+              className="inline-block h-3.5 w-[2px] rounded-full bg-amber-500"
+              animate={{ opacity: [1, 0, 1] }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' as const }}
+              aria-hidden
+            />
+          </div>
+        )}
+
+        {/* Error state */}
+        {isError && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/[0.06] p-3 text-[13px] text-red-400">
+            <p className="font-medium">Oracle hit a snag.</p>
+            <p className="mt-1 text-xs opacity-80">
+              {turn.content || 'Something went wrong while streaming the response.'}
+            </p>
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-500 hover:text-amber-400"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Try again
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Body — markdown-rendered text on transparent bg (no bubble, ChatGPT-style) */}
+        {!isError && turn.content && (
+          <OracleMessageMarkdown
+            content={turn.content}
+            isStreaming={isStreaming}
+          />
+        )}
+
+        {/* Follow-up chips */}
+        {!isStreaming && !isError && followUps.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {followUps.map((q, i) => (
+              <button
+                key={i}
+                onClick={() => onPickFollowUp?.(q)}
+                className="rounded-full border border-[#1F1F1F] bg-[#111111] px-3 py-1.5 text-[12px] font-medium text-white/75 transition-colors hover:border-amber-500/30 hover:bg-amber-500/[0.06] hover:text-amber-300"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Right-aligned subtle timestamp */}
+        {!isStreaming && !isError && turn.content && (
+          <div className="flex items-center justify-end gap-3 pt-1 text-[10px] text-white/30">
+            <span>
+              {new Date(turn.createdAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </span>
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="inline-flex items-center gap-1 text-white/40 transition-colors hover:text-amber-500"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Regenerate
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── OracleMessageMarkdown — premium markdown renderer for Oracle responses ───
+// Renders text content with amber-themed tables (dark bg #111, border #1F1F1F,
+// amber-tinted header), inline code with amber text on white/5 bg, and standard
+// markdown lists/blockquotes/links.
+function OracleMessageMarkdown({
+  content,
+  isStreaming,
+}: {
+  content: string;
+  isStreaming: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'oracle-msg-md text-[14px] leading-relaxed text-white/90',
+        isStreaming && 'typing-cursor'
+      )}
+      style={{ fontFamily: 'var(--font-body, inherit)' }}
+    >
+      <ReactMarkdown
+        components={{
+          h1: ({ children }) => (
+            <h1 className="mb-2 mt-4 text-[18px] font-bold text-white first:mt-0">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="mb-2 mt-4 text-[16px] font-semibold text-white first:mt-0">{children}</h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="mb-1.5 mt-3 text-[14px] font-semibold text-white/95">{children}</h3>
+          ),
+          p: ({ children }) => <p className="my-2 leading-relaxed">{children}</p>,
+          ul: ({ children }) => <ul className="my-2 space-y-1 pl-1">{children}</ul>,
+          ol: ({ children }) => (
+            <ol className="my-2 list-decimal space-y-1 pl-5 marker:font-semibold marker:text-amber-400">
+              {children}
+            </ol>
+          ),
+          li: ({ children, ...props }) => {
+            const ordered = props.index !== undefined;
+            if (ordered) return <li className="pl-1 leading-relaxed">{children}</li>;
+            return (
+              <li className="flex gap-2.5 leading-relaxed">
+                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                <span className="flex-1">{children}</span>
+              </li>
+            );
+          },
+          strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+          em: ({ children }) => <em className="text-white/70">{children}</em>,
+          code: ({ className, children }) => {
+            const isBlock = !!className;
+            if (!isBlock) {
+              return (
+                <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[13px] text-amber-300 ring-1 ring-inset ring-white/10">
+                  {children}
+                </code>
+              );
+            }
+            return (
+              <code className={`block bg-[#111111] p-3 font-mono text-[12px] text-amber-200 ring-1 ring-inset ring-[#1F1F1F] ${className ?? ''}`}>
+                {children}
+              </code>
+            );
+          },
+          pre: ({ children }) => <pre className="my-3 overflow-x-auto">{children}</pre>,
+          blockquote: ({ children }) => (
+            <blockquote className="my-3 border-l-2 border-amber-500/50 bg-amber-500/[0.04] py-2 pl-4 pr-3 rounded-r-md text-white/70">
+              {children}
+            </blockquote>
+          ),
+          table: ({ children }) => (
+            <div className="my-3 overflow-x-auto rounded-xl ring-1 ring-inset ring-[#1F1F1F]">
+              <table className="w-full border-collapse text-[13px]">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="bg-amber-500/[0.08]">{children}</thead>
+          ),
+          th: ({ children }) => (
+            <th className="border-b border-amber-500/20 px-3 py-2 text-left font-semibold text-amber-300">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="border-b border-[#1F1F1F] px-3 py-2 text-white/80 align-top">
+              {children}
+            </td>
+          ),
+          hr: () => <hr className="my-4 border-[#1F1F1F]" />,
+          a: ({ children, href }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-amber-400 underline underline-offset-2 hover:text-amber-300"
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+      {isStreaming && (
+        <motion.span
+          className="ml-0.5 inline-block h-3.5 w-[2px] rounded-full bg-amber-500 align-middle"
+          animate={{ opacity: [1, 0, 1] }}
+          transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' as const }}
+          aria-hidden
+        />
+      )}
+    </div>
+  );
+}
 
 // ─── Source Card ─────────────────────────────────────────────────────────────
 
@@ -122,14 +403,14 @@ function PhaseIndicator({ phase }: { phase: OraclePhase }) {
       transition={{ duration: 0.2 }}
       className="flex items-center gap-2 py-1"
     >
-      {/* Small pulsing dot — emerald, like Claude/ChatGPT */}
+      {/* Small pulsing dot — amber, like Claude/ChatGPT */}
       <span className="relative flex h-2 w-2">
         <motion.span
-          className="absolute inline-flex h-full w-full rounded-full bg-emerald-400"
+          className="absolute inline-flex h-full w-full rounded-full bg-amber-500"
           animate={{ opacity: [0.2, 0.6, 0.2], scale: [0.85, 1.1, 0.85] }}
           transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' as const }}
         />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
       </span>
       <span className="text-sm font-medium text-muted-foreground">
         Oracle is responding
@@ -307,7 +588,7 @@ function AnalysisBody({ text, isStreaming }: { text: string; isStreaming: boolea
 
 // ─── Oracle Message (the strategic brief) ────────────────────────────────────
 
-export interface OracleMessageProps {
+export interface OracleMessageViewProps {
   message: OracleMessage;
   onFollowUp?: (question: string) => void;
   onAction?: (kind: string, label: string) => void;
@@ -335,7 +616,7 @@ export function OracleMessageView({
   onRegenerate,
   onSpeak,
   isSpeaking,
-}: OracleMessageProps) {
+}: OracleMessageViewProps) {
   if (message.role === 'user') {
     return (
       <UserMessage
@@ -412,8 +693,8 @@ export function OracleMessageView({
           {isStreaming && (
             <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
               <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
               </span>
               Oracle is responding
             </span>
@@ -513,9 +794,9 @@ export function OracleMessageView({
                       onAction?.('create-report', parts.nextBestStep);
                     }
                   }}
-                  className="group flex w-full items-center gap-3 rounded-2xl border border-[color-mix(in_srgb,var(--accent-start)_40%,transparent)] bg-gradient-to-r from-[color-mix(in_srgb,var(--accent-start)_12%,transparent)] to-[color-mix(in_srgb,var(--accent-end)_8%,transparent)] px-4 py-3 text-left transition-all hover:border-[color-mix(in_srgb,var(--accent-start)_60%,transparent)] hover:shadow-[0_4px_24px_-8px_rgba(0,229,255,0.2)]"
+                  className="group flex w-full items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] px-4 py-3 text-left transition-all hover:border-amber-500/50 hover:shadow-[0_4px_24px_-8px_rgba(245,158,11,0.25)]"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl accent-gradient text-white shadow-lg shadow-emerald-500/20">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-lg shadow-amber-500/25">
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                   </div>
                   <span className="flex-1 text-sm font-semibold text-foreground">
@@ -625,7 +906,7 @@ export function OracleMessageView({
             className="flex flex-wrap items-center gap-1.5"
           >
             <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+              <CheckCircle2 className="h-3 w-3 text-amber-500" />
               <span>Oracle · {new Date(message.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
             </span>
 

@@ -8,7 +8,7 @@
 //   • User approvals   — "approves filings only after ITC review"
 //   • User rejections  — "no reminder calls after 7pm"
 //   • Preferred times  — "morning 9am for daily reports"
-//   • Payment behaviour — "Sharma Enterprises pays on 47th day, not 30th"
+//   • Payment behaviour — observed client payment cadence vs contractual terms
 //   • Filing patterns   — "files GSTR-3B on 18th, not the 20th statutory date"
 //
 // Exports:
@@ -59,118 +59,11 @@ interface BehaviourRecipe {
 // natural English (not snake_case) so LEARNING_INSIGHTS can drop them verbatim
 // into human-readable insight strings. Indian context throughout: ITC, 26AS,
 // GSTR-3B, 194C, DSO, MSME, IBC, etc.
-const SEED_BEHAVIOUR_RECIPE: BehaviourRecipe[] = [
-  // ── approve_filing — 3 memories ────────────────────────────────────────────
-  {
-    action: 'approve_filing',
-    preference: 'only after ITC reconciliation review',
-    confidence: 0.92,
-    evidence: 14,
-    hoursAgoCreated: 720,
-    hoursAgoUpdated: 6,
-  },
-  {
-    action: 'approve_filing',
-    preference: 'only after cash ledger balance check',
-    confidence: 0.89,
-    evidence: 12,
-    hoursAgoCreated: 480,
-    hoursAgoUpdated: 18,
-  },
-  {
-    action: 'approve_filing',
-    preference: 'TDS only after 26AS reconciliation',
-    confidence: 0.86,
-    evidence: 9,
-    hoursAgoCreated: 360,
-    hoursAgoUpdated: 30,
-  },
-  // ── reject_reminder — 2 memories ───────────────────────────────────────────
-  {
-    action: 'reject_reminder',
-    preference: 'no calls after 7pm IST',
-    confidence: 0.85,
-    evidence: 8,
-    hoursAgoCreated: 240,
-    hoursAgoUpdated: 12,
-  },
-  {
-    action: 'reject_reminder',
-    preference: 'no WhatsApp on weekends (Sundays off)',
-    confidence: 0.79,
-    evidence: 6,
-    hoursAgoCreated: 200,
-    hoursAgoUpdated: 40,
-  },
-  // ── prefer_time — 2 memories ───────────────────────────────────────────────
-  {
-    action: 'prefer_time',
-    preference: 'morning 9am IST for daily reports',
-    confidence: 0.78,
-    evidence: 11,
-    hoursAgoCreated: 600,
-    hoursAgoUpdated: 4,
-  },
-  {
-    action: 'prefer_time',
-    preference: 'Sunday evening 6pm for weekly review',
-    confidence: 0.67,
-    evidence: 5,
-    hoursAgoCreated: 144,
-    hoursAgoUpdated: 36,
-  },
-  // ── payment_behaviour — 3 memories ─────────────────────────────────────────
-  {
-    action: 'payment_behaviour',
-    preference: 'Sharma Enterprises LLP pays on 47th day vs 30-day terms',
-    confidence: 0.92,
-    evidence: 12,
-    hoursAgoCreated: 720,
-    hoursAgoUpdated: 24,
-  },
-  {
-    action: 'payment_behaviour',
-    preference: 'Verma Industries pays on 7th day after invoice receipt',
-    confidence: 0.81,
-    evidence: 9,
-    hoursAgoCreated: 360,
-    hoursAgoUpdated: 48,
-  },
-  {
-    action: 'payment_behaviour',
-    preference: 'Patel & Sons captures 2% early-pay discount on Day 4',
-    confidence: 0.74,
-    evidence: 7,
-    hoursAgoCreated: 280,
-    hoursAgoUpdated: 60,
-  },
-  // ── filing_pattern — 2 memories ────────────────────────────────────────────
-  {
-    action: 'filing_pattern',
-    preference: 'files GSTR-3B on 18th not 20th of month',
-    confidence: 0.88,
-    evidence: 6,
-    hoursAgoCreated: 360,
-    hoursAgoUpdated: 8,
-  },
-  {
-    action: 'filing_pattern',
-    preference: 'GSTR-1 filed on 3rd of every month without fail',
-    confidence: 0.91,
-    evidence: 8,
-    hoursAgoCreated: 400,
-    hoursAgoUpdated: 14,
-  },
-  // ── delay_payment — 1 memory ───────────────────────────────────────────────
-  {
-    action: 'delay_payment',
-    preference: 'defers capex during cash crisis to preserve runway',
-    confidence: 0.83,
-    evidence: 4,
-    hoursAgoCreated: 96,
-    hoursAgoUpdated: 4,
-  },
-];
+//
+// Empty by default — real learned preferences are populated by `learnFromOutcome`
+// as the engine observes actual user behaviour. Seeding fake patterns would
+// misrepresent what the engine has actually learned.
+const SEED_BEHAVIOUR_RECIPE: BehaviourRecipe[] = [];
 
 // ─── seedUserBehaviours — materialise 13 demo behaviour memories ──────────────
 export function seedUserBehaviours(): UserBehaviour[] {

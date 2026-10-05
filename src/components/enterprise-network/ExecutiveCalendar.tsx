@@ -55,14 +55,14 @@ const TYPE_META: Record<
   },
   task: {
     label: 'Task',
-    color: '#10b981',
+    color: '#2563EB',
     bg: 'bg-emerald-500/15',
     ring: 'ring-emerald-500/30',
     icon: Banknote,
   },
   payment: {
     label: 'Payment',
-    color: '#06b6d4',
+    color: '#3B82F6',
     bg: 'bg-cyan-500/15',
     ring: 'ring-cyan-500/30',
     icon: CreditCard,
@@ -414,7 +414,7 @@ export default function ExecutiveCalendar() {
           label="Compliance Due"
           value={stats.compliance}
           icon={FileCheck2}
-          accent="#10b981"
+          accent="#2563EB"
         />
       </div>
 

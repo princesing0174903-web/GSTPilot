@@ -196,7 +196,7 @@ export function NotificationsSheet({ open, onOpenChange, userId }: Notifications
                           )}
                         </div>
                         <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{n.message}</p>
-                        <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground/70">
+                        <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground/70">
                           {n.category && (
                             <span className="rounded bg-white/[0.06] px-1.5 py-0.5 uppercase tracking-wide">
                               {n.category}
@@ -210,7 +210,7 @@ export function NotificationsSheet({ open, onOpenChange, userId }: Notifications
                         <button
                           onClick={() => markRead(n.id)}
                           disabled={markingId === n.id}
-                          className="shrink-0 rounded-lg px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground disabled:opacity-50"
+                          className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground disabled:opacity-50"
                           aria-label="Mark as read"
                         >
                           {markingId === n.id ? '…' : 'Mark read'}

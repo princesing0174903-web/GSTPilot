@@ -26,21 +26,36 @@ import { computeFinancialIntelligence } from '@/lib/cfo/phase1/orchestrator';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// In-memory cache (60s) — the bundle is expensive to compute and changes
-// only when underlying business data changes (which invalidates via graph
-// cache already). 60s keeps the dashboard snappy without staleness.
-let cachedBundle: { data: Awaited<ReturnType<typeof computeFinancialIntelligence>>; ts: number } | null = null;
+// In-memory cache (60s) — keyed by organizationId so different tenants never
+// see each other's cached bundle. The bundle is expensive to compute and
+// changes only when underlying business data changes (which invalidates via
+// graph cache already). 60s keeps the dashboard snappy without staleness.
+const cachedBundles = new Map<string, { data: Awaited<ReturnType<typeof computeFinancialIntelligence>>; ts: number }>();
 const CACHE_TTL_MS = 60_000;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Return cached bundle if fresh
-    if (cachedBundle && Date.now() - cachedBundle.ts < CACHE_TTL_MS) {
-      return NextResponse.json(cachedBundle.data);
+    // Extract organizationId from the request (query string or header), with
+    // the same fallback chain as /api/business-snapshot. When no orgId is
+    // provided, computeFinancialIntelligence returns an empty bundle (never
+    // leaks cross-tenant data). See AUDIT-DUP-1 + task DUP-CLEANUP.
+    const { searchParams } = new URL(request.url);
+    const organizationId =
+      searchParams.get('organizationId') ||
+      searchParams.get('firmId') ||
+      request.headers.get('x-gstpilot-orgid') ||
+      '';
+
+    // Return cached bundle if fresh (per-org cache key)
+    const cached = organizationId ? cachedBundles.get(organizationId) : null;
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+      return NextResponse.json(cached.data);
     }
 
-    const bundle = await computeFinancialIntelligence();
-    cachedBundle = { data: bundle, ts: Date.now() };
+    const bundle = await computeFinancialIntelligence(organizationId || undefined);
+    if (organizationId) {
+      cachedBundles.set(organizationId, { data: bundle, ts: Date.now() });
+    }
 
     return NextResponse.json(bundle, {
       headers: {

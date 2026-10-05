@@ -254,11 +254,29 @@ export async function extractOrgMetrics(firmId: string): Promise<OrgContribution
       : 0
     const vendorRiskScore = Math.min(100, topVendorShare * 100) // higher concentration = higher risk
 
-    // Health score (composite)
-    const healthScore = computeHealthScore({
-      revenue, revenuePrev, expensesTotal, payrollTotal, gstLiability, gstLiabilityPrev,
-      complianceScore, customerRetentionRate, vendorRiskScore, avgCollectionDays,
-    })
+    // Health score — DELEGATED to the canonical Business Snapshot engine
+    // (src/lib/business/snapshot.ts → computeHealthScore). The previous local
+    // computeHealthScore(input) is removed (see AUDIT-DUP-1 + task HEALTH-ENGINE).
+    // We fall back to a local estimate if the snapshot is unavailable, so the
+    // privacy-safe global benchmark contribution never breaks.
+    let healthScore: number
+    try {
+      const { getBusinessSnapshot } = await import('@/lib/business/snapshot')
+      const snapshot = await getBusinessSnapshot(firmId)
+      if (snapshot.healthScore > 0 || snapshot.revenue > 0 || snapshot.cash > 0) {
+        healthScore = snapshot.healthScore
+      } else {
+        healthScore = legacyHealthScore({
+          revenue, revenuePrev, expensesTotal, payrollTotal, gstLiability, gstLiabilityPrev,
+          complianceScore, customerRetentionRate, vendorRiskScore, avgCollectionDays,
+        })
+      }
+    } catch {
+      healthScore = legacyHealthScore({
+        revenue, revenuePrev, expensesTotal, payrollTotal, gstLiability, gstLiabilityPrev,
+        complianceScore, customerRetentionRate, vendorRiskScore, avgCollectionDays,
+      })
+    }
 
     // Pattern tags
     const growthPct = revenuePrev > 0 ? ((revenue - revenuePrev) / revenuePrev) * 100 : 0
@@ -491,9 +509,17 @@ export async function getGlobalRecordCount(): Promise<number> {
   return await db.intelligenceContribution.count()
 }
 
-// ─── Health Score Composite (Privacy-safe) ───────────────────────────────────
+// ─── Health Score Composite (Privacy-safe) — LEGACY FALLBACK ────────────────
+//
+// This function is kept ONLY as a fallback for when the canonical Business
+// Snapshot is unavailable (e.g. the firm has no Prisma data yet, or the
+// snapshot call fails). The CANONICAL Health Score lives in
+// `src/lib/business/snapshot.ts` → `computeHealthScore()` and is the value
+// returned by `getBusinessSnapshot(firmId).healthScore`. extractOrgMetrics
+// delegates to the snapshot and only falls back to this local estimate when
+// the snapshot is unavailable. See AUDIT-DUP-1 + task HEALTH-ENGINE.
 
-function computeHealthScore(input: {
+function legacyHealthScore(input: {
   revenue: number
   revenuePrev: number
   expensesTotal: number

@@ -1,37 +1,60 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Multi-tenant scoping — P3-AUTH-FIX
+//
+// The Activity model has a DIRECT `firmId` column (unlike Invoice/PurchaseBill
+// which scope through Client.firmId). All queries are scoped via
+// `where.firmId = tenantId`. Mirrors /api/returns GET/POST pattern.
+//
+// Before this fix, GET read `firmId` from a spoofable query param with NO auth,
+// and POST created activities with `firmId` from the body — anyone could read
+// or write any org's activity feed.
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // GET /api/activities — List activities with optional filters
 export async function GET(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
-    const firmId = searchParams.get('firmId')
+    // Accept either organizationId (modern) or firmId (legacy) — same tenant id.
+    const tenantId = searchParams.get('organizationId') || searchParams.get('firmId')
     const type = searchParams.get('type')
     const limit = parseInt(searchParams.get('limit') ?? '50', 10)
     const offset = parseInt(searchParams.get('offset') ?? '0', 10)
 
-    const where: Record<string, unknown> = {}
+    // ── Defensive empty-state: no tenant scope → no data ──
+    if (!tenantId) {
+      return NextResponse.json({
+        activities: [],
+        pagination: { total: 0, limit, offset, hasMore: false },
+      })
+    }
+
+    // ── 2. AUTHORIZATION — verify org membership ───────────────────────────
+    const memberResult = await requireOrgMembership(uid, tenantId)
+    if (memberResult instanceof NextResponse) return memberResult
+
+    // Scope via the Activity's direct firmId field.
+    const where: Record<string, unknown> = { firmId: tenantId }
     if (clientId) where.clientId = clientId
-    if (firmId) where.firmId = firmId
     if (type) where.type = type
 
     const [activities, total] = await Promise.all([
       db.activity.findMany({
-        where: Object.keys(where).length > 0 ? where : undefined,
+        where,
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
-        include: {
-          client: {
-            select: { id: true, businessName: true, gstin: true },
-          },
-          user: {
-            select: { id: true, name: true },
-          },
-        },
       }),
-      db.activity.count({ where: Object.keys(where).length > 0 ? where : undefined }),
+      db.activity.count({ where }),
     ])
 
     return NextResponse.json({
@@ -45,16 +68,18 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     console.error('GET /api/activities error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch activities' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not load your activity feed right now. Please try again.')
   }
 }
 
 // POST /api/activities — Create a new activity
 export async function POST(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const { firmId, clientId, userId, type, description, metadata } = body
 
@@ -65,6 +90,10 @@ export async function POST(request: Request) {
       )
     }
 
+    // ── 2. AUTHORIZATION — verify org membership before creating ──────────
+    const memberResult = await requireOrgMembership(uid, firmId)
+    if (memberResult instanceof NextResponse) return memberResult
+
     const activity = await db.activity.create({
       data: {
         firmId,
@@ -74,22 +103,11 @@ export async function POST(request: Request) {
         description,
         metadata: metadata ?? null,
       },
-      include: {
-        client: {
-          select: { id: true, businessName: true },
-        },
-        user: {
-          select: { id: true, name: true },
-        },
-      },
     })
 
     return NextResponse.json({ activity }, { status: 201 })
   } catch (error) {
     console.error('POST /api/activities error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create activity' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not create the activity right now. Please try again.')
   }
 }

@@ -27,12 +27,16 @@ import {
   ArrowLeft, Building2, MapPin, Mail, Phone, Clock, FileText, Upload,
   GitCompareArrows, Activity, CheckCircle2, AlertTriangle, XCircle,
   Plus, Trash2, Loader2, CloudUpload, FileSpreadsheet, FileJson,
-  File as FileIcon, Image as ImageIcon, Send, Download, Pencil, ShieldCheck,
-  Search, Users, Inbox, Play, ChevronRight, StickyNote, Bell,
+  File as FileIcon, Image as ImageIcon, Send, Pencil, ShieldCheck,
+  Search, Users, Inbox, Play, ChevronRight, StickyNote, Bell, Wallet,
 } from 'lucide-react';
 import type { ReturnType, DocumentType, FilingStatus, MatchStatus } from '@/types/gst';
 import { FILING_STATUS_CONFIG, MATCH_STATUS_CONFIG } from '@/types/gst';
 import { formatCurrency } from '@/lib/gst-utils';
+import {
+  displayGSTIN,
+  displayText,
+} from '@/lib/clients/display-utils';
 
 // React Query hooks
 import {
@@ -51,6 +55,8 @@ import {
   useDeleteDocument,
   useActivities,
   useNotifications,
+  useInvoices,
+  usePayments,
   queryKeys,
 } from '@/hooks/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -95,7 +101,7 @@ function getFileIcon(ft: string) {
     case 'pdf': return <FileText className="h-4 w-4 text-red-500" />;
     case 'excel': case 'xlsx': case 'xls': case 'csv': return <FileSpreadsheet className="h-4 w-4 text-emerald-600" />;
     case 'json': return <FileJson className="h-4 w-4 text-amber-500" />;
-    case 'image': case 'png': case 'jpg': case 'jpeg': return <ImageIcon className="h-4 w-4 text-purple-500" />;
+    case 'image': case 'png': case 'jpg': case 'jpeg': return <ImageIcon className="h-4 w-4 text-cyan-500" />;
     default: return <FileIcon className="h-4 w-4 text-slate-400" />;
   }
 }
@@ -113,13 +119,13 @@ function getActivityIcon(action: string) {
 function getActivityColor(action: string) {
   if (action.includes('add') || action.includes('creat') || action.includes('filed') || action.includes('resolved') || action.includes('processed')) return 'text-emerald-600 bg-emerald-50';
   if (action.includes('delete') || action.includes('fail')) return 'text-red-600 bg-red-50';
-  if (action.includes('update') || action.includes('upload')) return 'text-blue-600 bg-blue-50';
+  if (action.includes('update') || action.includes('upload')) return 'text-emerald-600 bg-emerald-50';
   return 'text-slate-600 bg-slate-50';
 }
 
 // ─── Document status config (for display) ──────────────────────────────────
 const DOC_STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
-  processing: { label: 'Processing', color: 'text-blue-700', bgColor: 'bg-blue-50' },
+  processing: { label: 'Processing', color: 'text-amber-700', bgColor: 'bg-amber-50' },
   extracted: { label: 'Validated', color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
   validated: { label: 'Validated', color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
   uploaded: { label: 'Uploaded', color: 'text-slate-700', bgColor: 'bg-slate-100' },
@@ -133,7 +139,7 @@ function CircularProgress({ value, size = 80, strokeWidth = 6 }: { value: number
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (value / 100) * circumference;
-  const color = value >= 80 ? '#10b981' : value >= 50 ? '#f59e0b' : '#ef4444';
+  const color = value >= 80 ? '#2563EB' : value >= 50 ? '#f59e0b' : '#ef4444';
   const textColor = value >= 80 ? 'text-emerald-600' : value >= 50 ? 'text-amber-600' : 'text-red-600';
 
   return (
@@ -165,6 +171,22 @@ export default function ClientDetailPage() {
   const { data: reconResultsData } = useReconResults(selectedClientId ? { clientId: selectedClientId } : undefined);
   const { data: activitiesData, isLoading: activitiesLoading } = useActivities(selectedClientId);
   const { data: notificationsData } = useNotifications();
+
+  // ─── Phase 2: Customer ↔ Invoice ↔ Payment bidirectional link ───────────
+  // Previously this page showed documents/filings/recon runs but NO invoices
+  // or payments — so a user opening a Customer's detail page had no way to
+  // see what invoices belonged to that customer, what their outstanding
+  // balance was, or what payment history they had. The link existed in the DB
+  // (Invoice.clientId FK) but no UI surfaced it.
+  const { data: invoicesData, isLoading: invoicesLoading } = useInvoices(selectedClientId ?? undefined);
+  const { data: paymentsData, isLoading: paymentsLoading } = usePayments(selectedClientId ?? undefined);
+  const clientInvoices = invoicesData?.invoices ?? [];
+  const clientPayments = paymentsData?.payments ?? [];
+  const outstandingBalance = clientInvoices.reduce((s, i) => s + (i.balanceAmount ?? 0), 0);
+  const totalInvoiced = clientInvoices.reduce((s, i) => s + (i.totalAmount ?? 0), 0);
+  const totalPaid = clientPayments
+    .filter((p) => p.partyType === 'customer' && p.status === 'completed')
+    .reduce((s, p) => s + p.amount, 0);
 
   // Mutations
   const updateClientMutation = useUpdateClient();
@@ -321,9 +343,15 @@ export default function ClientDetailPage() {
   // ─── Handlers ──────────────────────────────────────────────────────────
   const openEdit = () => {
     if (!client) return;
+    // PQA-3: Don't pre-fill the GSTIN input with a synthetic/internal ID
+    // (LOCAL-*, ZOHO-CONTACT-*, etc.). If the stored value is synthetic, leave
+    // the field blank so the user can enter a real GSTIN. The underlying db
+    // row keeps its synthetic key until the user saves a real one.
+    const rawGstin = client.gstin ?? '';
+    const gstinForForm = displayGSTIN(rawGstin, '') === '' ? '' : rawGstin;
     setEf({
       tradeName: client.tradeName,
-      gstin: client.gstin,
+      gstin: gstinForForm,
       state: client.state ?? '',
       returnPeriod: client.returnPeriod ?? 'monthly',
       contactEmail: client.contactEmail ?? '',
@@ -495,11 +523,16 @@ export default function ClientDetailPage() {
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
         {/* Breadcrumb + Back */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <button onClick={() => setCurrentView('clients')} className="hover:text-foreground transition-colors flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentView('clients')}
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
             <ArrowLeft className="h-3.5 w-3.5" /> Clients
-          </button>
+          </Button>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-foreground font-medium">{client.tradeName}</span>
+          <span className="text-foreground font-medium">{displayText(client.tradeName, 'Client')}</span>
         </div>
 
         {/* Client Header Card */}
@@ -514,18 +547,20 @@ export default function ClientDetailPage() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2.5">
-                    <h1 className="text-xl font-bold text-foreground">{client.tradeName}</h1>
-                    <Badge variant="outline" className={statusCls}>{client.status}</Badge>
+                    <h1 className="text-xl font-bold text-foreground">{displayText(client.tradeName, 'Unnamed Client')}</h1>
+                    <Badge variant="outline" className={statusCls}>{client.status || '—'}</Badge>
                   </div>
-                  <p className="text-xs font-mono text-muted-foreground tracking-wide">{client.gstin}</p>
+                  <p className={`text-xs font-mono tracking-wide ${displayGSTIN(client.gstin) === '—' ? 'italic text-muted-foreground/60' : 'text-muted-foreground'}`}>
+                    {displayGSTIN(client.gstin)}
+                  </p>
                   <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
-                    {client.state && <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{client.state}</span>}
-                    <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{client.returnPeriod === 'monthly' ? 'Monthly Filing' : client.returnPeriod === 'quarterly' ? 'Quarterly Filing' : `${client.returnPeriod || 'Monthly'} Filing`}</span>
-                    {client.contactEmail && <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" />{client.contactEmail}</span>}
+                    {client.state && <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{displayText(client.state)}</span>}
+                    <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{client.returnPeriod === 'monthly' ? 'Monthly Filing' : client.returnPeriod === 'quarterly' ? 'Quarterly Filing' : `${displayText(client.returnPeriod, 'Monthly')} Filing`}</span>
+                    {client.contactEmail && <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5" />{displayText(client.contactEmail)}</span>}
                   </div>
                   {client.contactPhone && (
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" />{client.contactPhone}</span>
+                      <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" />{displayText(client.contactPhone)}</span>
                     </div>
                   )}
                 </div>
@@ -543,6 +578,8 @@ export default function ClientDetailPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="bg-slate-50 border">
           <TabsTrigger value="overview" className="gap-1.5 text-xs"><ShieldCheck className="h-3.5 w-3.5" />Overview</TabsTrigger>
+          <TabsTrigger value="invoices" className="gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" />Invoices</TabsTrigger>
+          <TabsTrigger value="payments" className="gap-1.5 text-xs"><Wallet className="h-3.5 w-3.5" />Payments</TabsTrigger>
           <TabsTrigger value="documents" className="gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" />Documents</TabsTrigger>
           <TabsTrigger value="returns" className="gap-1.5 text-xs"><FileText className="h-3.5 w-3.5" />Returns</TabsTrigger>
           <TabsTrigger value="reconciliation" className="gap-1.5 text-xs"><GitCompareArrows className="h-3.5 w-3.5" />Reconciliation</TabsTrigger>
@@ -599,7 +636,7 @@ export default function ClientDetailPage() {
             <Card className="border-border/60">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-blue-50"><FileText className="h-4 w-4 text-blue-600" /></div>
+                  <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50"><FileText className="h-4 w-4 text-emerald-600" /></div>
                   <span className="text-xs text-muted-foreground">Documents</span>
                 </div>
                 <p className="text-2xl font-bold text-foreground">{docs.length > 0 ? docs.length : '—'}</p>
@@ -623,8 +660,8 @@ export default function ClientDetailPage() {
                       {getActivityIcon((lastActivity as any).action ?? '')}
                     </div>
                     <div>
-                      <p className="text-sm text-foreground">{(lastActivity as any).details ?? (lastActivity as any).action}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{formatRelativeTime((lastActivity as any).timestamp)}</p>
+                      <p className="text-sm text-foreground">{displayText((lastActivity as any).details, '') || displayText((lastActivity as any).action, 'Activity')}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{formatRelativeTime((lastActivity as any).timestamp)}</p>
                     </div>
                   </div>
                 ) : (
@@ -644,8 +681,8 @@ export default function ClientDetailPage() {
                   <div className="space-y-2 max-h-32 overflow-y-auto">
                     {clientNotifications.map((n: any) => (
                       <div key={n.id} className="flex items-center gap-2 text-xs">
-                        <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${n.type === 'success' ? 'bg-emerald-500' : n.type === 'error' ? 'bg-red-500' : n.type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'}`} />
-                        <span className={`text-foreground truncate ${n.isRead ? 'opacity-60' : 'font-medium'}`}>{n.title}{n.message ? `: ${n.message}` : ''}</span>
+                        <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${n.type === 'success' ? 'bg-emerald-500' : n.type === 'error' ? 'bg-red-500' : n.type === 'warning' ? 'bg-amber-500' : 'bg-cyan-500'}`} />
+                        <span className={`text-foreground truncate ${n.isRead ? 'opacity-60' : 'font-medium'}`}>{displayText(n.title, 'Notification')}{n.message ? `: ${displayText(n.message, '')}` : ''}</span>
                       </div>
                     ))}
                   </div>
@@ -674,6 +711,152 @@ export default function ClientDetailPage() {
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            INVOICES TAB (Phase 2 — Customer↔Invoice bidirectional link)
+        ═══════════════════════════════════════════════════════════════════ */}
+        <TabsContent value="invoices" className="space-y-4 mt-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-3">
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">Total Invoiced</div>
+                <div className="text-lg font-semibold mt-1">{formatCurrency(totalInvoiced)}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">Outstanding Balance</div>
+                <div className="text-lg font-semibold mt-1 text-amber-600">{formatCurrency(outstandingBalance)}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">Invoice Count</div>
+                <div className="text-lg font-semibold mt-1">{clientInvoices.length}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {invoicesLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : clientInvoices.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="No invoices for this customer yet."
+              description="Create an invoice for this customer from the Invoices page — it will appear here automatically."
+            />
+          ) : (
+            <Card className="border-border/60">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Invoice #</TableHead>
+                      <TableHead className="text-xs">Date</TableHead>
+                      <TableHead className="text-xs">Total</TableHead>
+                      <TableHead className="text-xs">Balance</TableHead>
+                      <TableHead className="text-xs">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clientInvoices.map((inv) => (
+                      <TableRow key={inv.id}>
+                        <TableCell className="text-xs font-medium">{inv.invoiceNumber}</TableCell>
+                        <TableCell className="text-xs">{inv.invoiceDate ?? '—'}</TableCell>
+                        <TableCell className="text-xs">{formatCurrency(inv.totalAmount)}</TableCell>
+                        <TableCell className="text-xs">{formatCurrency(inv.balanceAmount)}</TableCell>
+                        <TableCell className="text-xs">
+                          <Badge variant="outline" className={
+                            inv.paymentStatus === 'paid' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                            inv.paymentStatus === 'partial' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                            'border-slate-200 bg-slate-50 text-slate-700'
+                          }>
+                            {inv.paymentStatus}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            PAYMENTS TAB (Phase 2 — Customer payment history)
+        ═══════════════════════════════════════════════════════════════════ */}
+        <TabsContent value="payments" className="space-y-4 mt-4">
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">Total Collected (completed)</div>
+                <div className="text-lg font-semibold mt-1 text-emerald-600">{formatCurrency(totalPaid)}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/60">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">Payment Count</div>
+                <div className="text-lg font-semibold mt-1">{clientPayments.length}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {paymentsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : clientPayments.length === 0 ? (
+            <EmptyState
+              icon={Wallet}
+              title="No payment history for this customer yet."
+              description="When you mark an invoice as paid or record a payment, it will appear here automatically."
+            />
+          ) : (
+            <Card className="border-border/60">
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Date</TableHead>
+                      <TableHead className="text-xs">Amount</TableHead>
+                      <TableHead className="text-xs">Mode</TableHead>
+                      <TableHead className="text-xs">Reference</TableHead>
+                      <TableHead className="text-xs">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clientPayments.map((pmt) => (
+                      <TableRow key={pmt.id}>
+                        <TableCell className="text-xs">{pmt.paymentDate}</TableCell>
+                        <TableCell className="text-xs font-medium">{formatCurrency(pmt.amount)}</TableCell>
+                        <TableCell className="text-xs uppercase">{pmt.paymentMode}</TableCell>
+                        <TableCell className="text-xs">{pmt.referenceNo ?? '—'}</TableCell>
+                        <TableCell className="text-xs">
+                          <Badge variant="outline" className={
+                            pmt.status === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                            pmt.status === 'pending' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                            'border-slate-200 bg-slate-50 text-slate-700'
+                          }>
+                            {pmt.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ═══════════════════════════════════════════════════════════════════
@@ -723,13 +906,13 @@ export default function ClientDetailPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {getFileIcon(d.fileType ?? d.name?.split('.').pop() ?? '')}
-                            <span className="text-sm font-medium">{d.name ?? d.fileName}</span>
+                            <span className="text-sm font-medium">{displayText(d.name, '') || displayText(d.fileName, 'Untitled document')}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground uppercase">{d.fileType ?? 'other'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{formatRelativeTime(d.createdAt ?? d.uploadedAt ?? d.uploadTime)}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={`${cfg.bgColor ?? ''} ${cfg.color ?? ''} text-[10px]`}>
+                          <Badge variant="outline" className={`${cfg.bgColor ?? ''} ${cfg.color ?? ''} text-[11px]`}>
                             {d.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
                             {cfg.label ?? d.status}
                           </Badge>
@@ -750,7 +933,7 @@ export default function ClientDetailPage() {
             <DialogContent className="sm:max-w-md">
               <DialogHeader><DialogTitle>Upload Document</DialogTitle></DialogHeader>
               <div className="space-y-4 py-2">
-                <p className="text-sm text-muted-foreground">Upload files for {client.tradeName}</p>
+                <p className="text-sm text-muted-foreground">Upload files for {displayText(client.tradeName, 'this client')}</p>
                 <div className="border-2 border-dashed border-border/60 rounded-xl p-8 text-center hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors cursor-pointer relative">
                   <CloudUpload className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
                   <p className="text-sm font-medium">Click to browse files</p>
@@ -806,15 +989,14 @@ export default function ClientDetailPage() {
                     const cfg = FILING_STATUS_CONFIG[r.status as keyof typeof FILING_STATUS_CONFIG];
                     return (
                       <TableRow key={r.id}>
-                        <TableCell className="text-sm font-medium">{r.period}</TableCell>
-                        <TableCell><Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-xs">{r.returnType}</Badge></TableCell>
-                        <TableCell><Badge variant="outline" className={`${cfg?.bgColor ?? ''} ${cfg?.color ?? ''} text-[10px]`}>{cfg?.label ?? r.status}</Badge></TableCell>
+                        <TableCell className="text-sm font-medium">{r.period || '—'}</TableCell>
+                        <TableCell><Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-xs">{r.returnType || '—'}</Badge></TableCell>
+                        <TableCell><Badge variant="outline" className={`${cfg?.bgColor ?? ''} ${cfg?.color ?? ''} text-[11px]`}>{cfg?.label ?? r.status}</Badge></TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5">
-                            {r.status === 'draft' && <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => handleMarkReady(r.id)} disabled={updateFilingStatusMutation.isPending}><CheckCircle2 className="h-3 w-3" /> Mark Ready</Button>}
-                            {r.status === 'ready' && <Button size="sm" className="h-7 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleFileReturn(r.id)} disabled={fileReturnMutation.isPending}><Send className="h-3 w-3" /> File</Button>}
-                            {r.status === 'filed' && <span className="text-[10px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Filed</span>}
-                            <Button size="sm" variant="ghost" className="h-7 text-[10px] gap-1" onClick={() => toast.info('JSON download coming soon')}><Download className="h-3 w-3" /> JSON</Button>
+                            {r.status === 'draft' && <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1" onClick={() => handleMarkReady(r.id)} disabled={updateFilingStatusMutation.isPending}><CheckCircle2 className="h-3 w-3" /> Mark Ready</Button>}
+                            {r.status === 'ready' && <Button size="sm" className="h-7 text-[11px] gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleFileReturn(r.id)} disabled={fileReturnMutation.isPending}><Send className="h-3 w-3" /> File</Button>}
+                            {r.status === 'filed' && <span className="text-[11px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Filed</span>}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -885,9 +1067,9 @@ export default function ClientDetailPage() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Badge className="bg-emerald-50 text-emerald-700 text-xs">{run.sources ?? 'GSTR-1'}</Badge>
-                          <span className="text-sm font-medium">{run.period}</span>
+                          <span className="text-sm font-medium">{run.period || '—'}</span>
                         </div>
-                        <Badge variant="outline" className={run.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : run.status === 'running' ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'}>
+                        <Badge variant="outline" className={run.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : run.status === 'running' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}>
                           {run.status === 'running' && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
                           {run.status?.charAt(0).toUpperCase() + run.status?.slice(1) ?? 'Unknown'}
                         </Badge>
@@ -897,15 +1079,15 @@ export default function ClientDetailPage() {
                         <div className="grid grid-cols-3 gap-3 mb-3">
                           <div className="bg-emerald-50 rounded-lg p-3 text-center">
                             <p className="text-lg font-bold text-emerald-700">{run.matched}</p>
-                            <p className="text-[10px] text-emerald-600 uppercase font-medium">Matched</p>
+                            <p className="text-[11px] text-emerald-600 uppercase font-medium">Matched</p>
                           </div>
                           <div className="bg-red-50 rounded-lg p-3 text-center">
                             <p className="text-lg font-bold text-red-700">{run.unmatched ?? run.partialMatches ?? 0}</p>
-                            <p className="text-[10px] text-red-600 uppercase font-medium">Mismatched</p>
+                            <p className="text-[11px] text-red-600 uppercase font-medium">Mismatched</p>
                           </div>
                           <div className="bg-orange-50 rounded-lg p-3 text-center">
                             <p className="text-lg font-bold text-orange-700">{(run.unmatched ?? 0) - (run.partialMatches ?? 0) > 0 ? (run.unmatched ?? 0) - (run.partialMatches ?? 0) : run.highRisk ?? 0}</p>
-                            <p className="text-[10px] text-orange-600 uppercase font-medium">Missing</p>
+                            <p className="text-[11px] text-orange-600 uppercase font-medium">Missing</p>
                           </div>
                         </div>
                       )}
@@ -918,10 +1100,10 @@ export default function ClientDetailPage() {
                               <div key={mm.id} className="flex items-center justify-between text-xs">
                                 <div className="flex items-center gap-2">
                                   <AlertTriangle className="h-3 w-3 text-amber-500" />
-                                  <span className="font-mono">{mm.invoice?.invoiceNumber ?? mm.invoiceId ?? '—'}</span>
-                                  <Badge variant="outline" className="text-[10px]">{MATCH_STATUS_CONFIG[mm.matchStatus as keyof typeof MATCH_STATUS_CONFIG]?.label ?? mm.matchStatus}</Badge>
+                                  <span className="font-mono">{displayText(mm.invoice?.invoiceNumber, mm.invoiceId ? '' : '—') || (mm.invoiceId ? displayText(mm.invoiceId, '—') : '—')}</span>
+                                  <Badge variant="outline" className="text-[11px]">{MATCH_STATUS_CONFIG[mm.matchStatus as keyof typeof MATCH_STATUS_CONFIG]?.label ?? mm.matchStatus}</Badge>
                                 </div>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1" onClick={() => handleResolveMismatch(mm.id)} disabled={updateReconWorkflowMutation.isPending}>
+                                <Button size="sm" variant="ghost" className="h-6 text-[11px] gap-1" onClick={() => handleResolveMismatch(mm.id)} disabled={updateReconWorkflowMutation.isPending}>
                                   <CheckCircle2 className="h-3 w-3" /> Resolve
                                 </Button>
                               </div>
@@ -991,8 +1173,8 @@ export default function ClientDetailPage() {
                       {getActivityIcon(a.action ?? '')}
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
-                      <p className="text-sm text-foreground">{a.details ?? a.action}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{formatRelativeTime(a.timestamp)}</p>
+                      <p className="text-sm text-foreground">{displayText(a.details, '') || displayText(a.action, 'Activity')}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{formatRelativeTime(a.timestamp)}</p>
                     </div>
                   </motion.div>
                 ))}

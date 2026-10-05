@@ -183,7 +183,7 @@ export function IntelligentCollectionsPage() {
                             </div>
                             <div>
                               <p className="text-[10px] uppercase text-muted-foreground">Oldest</p>
-                              <p className="font-medium text-violet-300">{s.oldestOverdueDays}d</p>
+                              <p className="font-medium text-cyan-300">{s.oldestOverdueDays}d</p>
                             </div>
                           </div>
 
@@ -204,12 +204,12 @@ export function IntelligentCollectionsPage() {
               {/* Escalation ladder */}
               <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <TrendingDown className="h-4 w-4 text-violet-300" /> Escalation Ladder
+                  <TrendingDown className="h-4 w-4 text-cyan-300" /> Escalation Ladder
                 </h3>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
                   {ESCALATION_LADDER.map((step) => (
                     <div key={step.level} className="rounded-lg border border-white/[0.04] bg-white/[0.01] p-3">
-                      <Badge variant="outline" className="text-[10px] text-violet-300">Level {step.level}</Badge>
+                      <Badge variant="outline" className="text-[10px] text-cyan-300">Level {step.level}</Badge>
                       <p className="mt-1.5 text-xs font-medium text-foreground">{step.action}</p>
                       <p className="mt-0.5 text-[10px] text-muted-foreground">{step.triggerDays}d overdue · {step.channel}</p>
                     </div>

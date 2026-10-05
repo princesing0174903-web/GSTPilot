@@ -1,92 +1,176 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Badge } from '@/components/ui/badge';
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot — HOME (Financial Operating System)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// A premium command center inspired by Stripe, Linear, Notion, Vercel & Ramp.
+//
+// The dashboard tells the user exactly what to do next. Every section has a
+// purpose; every card answers "Why should this exist?". Six connected sections:
+//
+//   1. Hero — greeting, Business Health Score, Today's Revenue, Pending GST,
+//      and the 3 most important quick actions.
+//   2. Oracle AI — a single built-in assistant card. No "Activate" buttons,
+//      no duplicate Oracle CTAs.
+//   3. Business Snapshot — Revenue, Profit, Expenses, Cash Flow, Invoices,
+//      Clients, GST Returns. Real numbers + a real MoM indicator.
+//   4. Action Center — everything requiring action, each row clickable.
+//   5. AI Recommendations — Oracle's prioritized recommendations, each with
+//      View Details.
+//   6. Recent Activity — a single chronological feed of every business event
+//      (invoices, returns, payments, bank sync, Zoho sync, Google Drive).
+//
+// DATA CONTRACT
+//   Every number on this page comes from ONE of three real sources:
+//     • useBusinessSnapshot()  → /api/business/snapshot  (Prisma, single source
+//       of truth for revenue, profit, cash, GST, customers, invoices, returns,
+//       health score, forecast, runway).
+//     • useTimelineEvents()    → /api/timeline            (Prisma BusinessEvent).
+//     • useAIRecommendations() → /api/recommendations     (rules engine over
+//       the snapshot + targeted Prisma queries).
+//   No Math.random, no fake sparklines, no fabricated percentages, no mock
+//   widgets. When a value is 0, we show 0 with an honest subtitle.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Card, CardContent } from '@/components/ui/card';
-import { ProSkeleton } from '@/components/ui-pro';
+import { ProSkeleton, AnimatedNumber } from '@/components/ui-pro';
+import { boot } from '@/lib/perf/boot-tracer';
 import {
-  Upload,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  Sparkles,
   FileText,
-  ShieldCheck,
-  ClipboardCheck,
   Users,
+  ShieldCheck,
   IndianRupee,
-  Plus,
   ArrowRight,
-  Loader2,
-  Rocket,
-  Activity,
-  CheckSquare,
+  Sparkles,
   Brain,
-  Plug,
-  MessageSquare,
-  Zap,
   TrendingUp,
-  ShieldAlert,
+  TrendingDown,
+  Minus,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Activity,
+  Zap,
+  RefreshCw,
+  LifeBuoy,
+  Receipt,
+  Wallet,
+  Landmark,
+  Database,
+  Cloud,
+  BookOpen,
+  type LucideIcon,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useApp, type AppView } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
 import {
   useLiveDashboardMetrics,
-  useFireClients,
   useFireReturns,
-  useFireRecentActivities,
-  useFirmExecutiveScores,
-  useFireMemberships,
-  useFirePriorities,
 } from '@/hooks/use-firestore';
-import { useInvoices } from '@/hooks/useInvoices';
-import { useGSTTransactions } from '@/hooks/useGSTTransactions';
-import { useBanking } from '@/hooks/useBanking';
+import { useTimelineEvents } from '@/hooks/useTimelineEvents';
 import { useAIRecommendations } from '@/hooks/useAIRecommendations';
-import { useCommunications } from '@/hooks/useCommunications';
-import { useOrg } from '@/contexts/OrgContext';
-import type { Recommendation as AIRecommendation } from '@/lib/ai-provider';
-import type {
-  FirestoreClient,
-  LiveDashboardMetrics,
-} from '@/lib/firestore-schema';
-import { fileReturn } from '@/lib/firestore-service';
-import { periodToLabel, isOverdue, getFilingDueDate } from '@/lib/gst-utils';
+import { useWorkflowPipeline } from '@/hooks/useWorkflowPipeline';
+import { useOracleDailyBriefing } from '@/hooks/useOracleDailyBriefing';
+import { WorkflowPipeline } from '@/components/workflow/WorkflowPipeline';
+import { ProactiveOracleBriefing } from '@/components/oracle/ProactiveOracleBriefing';
+import { periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
 import { toast } from 'sonner';
+import type { Recommendation as AIRecommendation } from '@/lib/recommendations/engine';
+import type { TimelineEvent } from '@/lib/timeline/emit';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// HELPERS
+// LAZY BELOW-THE-FOLD — defers mounting of below-the-fold sections until the
+// user scrolls near them. Prevents expensive initial render of Action Center,
+// AI Recommendations, and Recent Activity when the user first lands on the
+// dashboard (they only see the Hero + Oracle + Snapshot above the fold).
+// ═══════════════════════════════════════════════════════════════════════════════
+function useInView(rootMargin = '400px 0px'): { ref: React.RefCallback<HTMLDivElement>; inView: boolean } {
+  const [inView, setInView] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    if (node && !inView) {
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) {
+            setInView(true);
+            observerRef.current?.disconnect();
+            observerRef.current = null;
+          }
+        },
+        { rootMargin },
+      );
+      observerRef.current.observe(node);
+      // Fallback: if the observer hasn't fired within 1.5s (e.g. in headless
+      // browsers or when the element is already in view on mount), force-show
+      // the section. This prevents content from being permanently hidden.
+      setTimeout(() => {
+        setInView((prev) => {
+          if (!prev) {
+            observerRef.current?.disconnect();
+            observerRef.current = null;
+          }
+          return true;
+        });
+      }, 1500);
+    }
+  }, [inView, rootMargin]);
+
+  useEffect(() => {
+    return () => {
+      observerRef.current?.disconnect();
+    };
+  }, []);
+
+  return { ref, inView };
+}
+
+function LazySection({ children, placeholderHeight = 320 }: { children: (inView: boolean) => React.ReactNode; placeholderHeight?: number }) {
+  const { ref, inView } = useInView();
+  return (
+    <div ref={ref} style={{ minHeight: inView ? undefined : placeholderHeight }}>
+      {children(inView)}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FORMATTERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function getDaysRemaining(dueDateStr: string): number {
-  const dueDate = new Date(dueDateStr);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  dueDate.setHours(0, 0, 0, 0);
-  return Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+/** Compact Indian-system currency abbreviation: ₹1.09L, ₹1.09Cr, ₹9.5K. */
+function abbreviateINR(value: number): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  if (abs >= 1_00_00_000) return `${sign}₹${(abs / 1_00_00_000).toFixed(2)}Cr`;
+  if (abs >= 1_00_000) return `${sign}₹${(abs / 1_00_000).toFixed(2)}L`;
+  if (abs >= 1_000) return `${sign}₹${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}₹${Math.round(abs).toLocaleString('en-IN')}`;
 }
 
-function formatDaysRemaining(days: number): string {
-  if (days < 0) return `${Math.abs(days)}d overdue`;
-  if (days === 0) return 'Due today';
-  if (days === 1) return 'Tomorrow';
-  return `${days}d left`;
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
-function formatINR(amount: number): string {
-  return amount.toLocaleString('en-IN');
-}
-
-function formatDateIN(dateStr: string): string {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return '—';
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
+function getFirstName(name: string | undefined | null): string {
+  if (!name) return 'there';
+  const first = name.trim().split(/\s+/)[0];
+  return first || 'there';
 }
 
 function timeAgo(dateStr: string): string {
@@ -103,428 +187,382 @@ function timeAgo(dateStr: string): string {
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good Morning';
-  if (h < 17) return 'Good Afternoon';
-  return 'Good Evening';
-}
-
-function getFirstName(name: string | undefined | null): string {
-  // Previously fell back to 'Prince' (developer name) — now uses a neutral
-  // greeting so production users don't see someone else's name.
-  if (!name) return 'there';
-  const first = name.trim().split(/\s+/)[0];
-  return first || 'there';
-}
-
-// One-sentence AI insight derived from live metrics.
-function buildInsightSentence(
-  metrics: LiveDashboardMetrics,
-  pendingCollection: number,
-): string {
-  const parts: string[] = [];
-  if (metrics.overdueReturns > 0) {
-    parts.push(
-      `${metrics.overdueReturns} overdue return${metrics.overdueReturns > 1 ? 's' : ''}`,
-    );
-  } else if (metrics.pendingReturns > 0) {
-    parts.push(
-      `${metrics.pendingReturns} return${metrics.pendingReturns > 1 ? 's' : ''} to file`,
-    );
-  }
-  if (pendingCollection > 0) {
-    parts.push(`₹${formatINR(pendingCollection)} pending collection`);
-  }
-  if (metrics.criticalIssues > 0) {
-    parts.push(
-      `${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''}`,
-    );
-  }
-  if (parts.length === 0) {
-    return `All clear — ${metrics.filedReturns} returns filed and ${metrics.totalClients} clients in good standing.`;
-  }
-  if (parts.length === 1) return `${parts[0]}.`;
-  const last = parts.pop();
-  return `${parts.join(', ')} and ${last}.`;
+function getDaysRemaining(dueDateStr: string): number {
+  const dueDate = new Date(dueDateStr);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  dueDate.setHours(0, 0, 0, 0);
+  return Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ACTIVITY ICON — returns just the icon shape; color is applied via accent-text
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function activityIcon(type: string): React.ReactNode {
-  if (type.includes('filed')) return <CheckCircle2 className="h-3.5 w-3.5 accent-text" />;
-  if (type.includes('upload') || type.includes('document'))
-    return <Upload className="h-3.5 w-3.5 accent-text" />;
-  if (type.includes('review')) return <ClipboardCheck className="h-3.5 w-3.5 accent-text" />;
-  if (type.includes('client')) return <Users className="h-3.5 w-3.5 accent-text" />;
-  if (type.includes('reconcil') || type.includes('mismatch'))
-    return <AlertTriangle className="h-3.5 w-3.5 accent-text" />;
-  if (type.includes('invoice') || type.includes('extract'))
-    return <FileText className="h-3.5 w-3.5 accent-text" />;
-  return <Activity className="h-3.5 w-3.5 accent-text" />;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// KPI CARD
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface KpiCardProps {
-  label: string;
-  value: string;
-  subtitle: string;
-  icon: React.ReactNode;
-  index: number;
-}
-
-function KpiCard({ label, value, subtitle, icon, index }: KpiCardProps) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
-      className="h-full"
-    >
-      <div className="glass-surface rounded-2xl p-6 h-full transition-shadow hover-lift hover:shadow-[0_0_32px_-8px_rgba(59,130,246,0.25)]">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1.5 min-w-0">
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-              {label}
-            </p>
-            <p className="text-3xl font-bold text-foreground tracking-tight truncate">
-              {value}
-            </p>
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
-          </div>
-          <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft shrink-0">
-            {icon}
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION CARD — glass wrapper with header (icon chip + title + optional action)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface SectionCardProps {
-  title: string;
-  icon: React.ReactNode;
-  index: number;
-  actionLabel?: string;
-  onAction?: () => void;
-  children: React.ReactNode;
-}
-
-function SectionCard({
-  title,
-  icon,
-  index,
-  actionLabel,
-  onAction,
-  children,
-}: SectionCardProps) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.24 + index * 0.08, ease: 'easeOut' as const }}
-      className="h-full"
-    >
-      <div className="glass-surface rounded-2xl h-full flex flex-col hover-lift">
-        <div className="flex items-center justify-between gap-3 p-6 pb-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0">
-              {icon}
-            </div>
-            <h3 className="text-sm font-semibold text-foreground tracking-tight truncate">
-              {title}
-            </h3>
-          </div>
-          {actionLabel && onAction && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onAction}
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-            >
-              {actionLabel}
-              <ArrowRight className="h-3 w-3 ml-1" />
-            </Button>
-          )}
-        </div>
-        <div className="px-6 pb-6 flex-1 min-h-0">{children}</div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// BUSINESS HEALTH SCORE — prominent SVG gauge (0-100)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function healthTier(score: number): { label: string; tone: string } {
-  if (score >= 85) return { label: 'Excellent', tone: 'text-emerald-400' };
-  if (score >= 70) return { label: 'Healthy', tone: 'text-emerald-400' };
-  if (score >= 50) return { label: 'At Risk', tone: 'text-amber-400' };
-  return { label: 'Critical', tone: 'text-amber-400' };
-}
-
-function BusinessHealthGauge({
-  score,
-  insight,
-}: {
-  score: number;
-  insight: string;
-}) {
-  const size = 180;
-  const stroke = 12;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const pct = Math.max(0, Math.min(100, score)) / 100;
-  const offset = c * (1 - pct);
-  const tier = healthTier(score);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.12, ease: 'easeOut' as const }}
-      className="h-full"
-    >
-      <div className="glass-surface rounded-2xl p-6 md:p-8 flex flex-col sm:flex-row items-center gap-6 md:gap-10 h-full">
-        <div className="relative shrink-0" style={{ width: size, height: size }}>
-          <svg width={size} height={size} className="-rotate-90">
-            <defs>
-              <linearGradient id="bhsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#10b981" />
-                <stop offset="60%" stopColor="#06b6d4" />
-                <stop offset="100%" stopColor="#f59e0b" />
-              </linearGradient>
-            </defs>
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke="rgba(255,255,255,0.06)"
-              strokeWidth={stroke}
-            />
-            <motion.circle
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke="url(#bhsGradient)"
-              strokeWidth={stroke}
-              strokeLinecap="round"
-              strokeDasharray={c}
-              initial={{ strokeDashoffset: c }}
-              animate={{ strokeDashoffset: offset }}
-              transition={{ duration: 1.2, ease: 'easeOut' as const, delay: 0.3 }}
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <motion.span
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, delay: 0.7 }}
-              className={`text-5xl font-bold tracking-tight ${tier.tone}`}
-            >
-              {Math.round(score)}
-            </motion.span>
-            <span className="text-[10px] text-muted-foreground tracking-wider uppercase mt-1">
-              / 100
-            </span>
-          </div>
-        </div>
-        <div className="flex-1 min-w-0 space-y-2 text-center sm:text-left">
-          <div className="flex items-center justify-center sm:justify-start gap-2">
-            <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft">
-              <Brain className="h-4 w-4 accent-text" />
-            </div>
-            <h3 className="text-sm font-semibold text-foreground tracking-tight">
-              Business Health Score
-            </h3>
-          </div>
-          <p className={`text-lg font-semibold ${tier.tone}`}>{tier.label}</p>
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-            {insight}
-          </p>
-          <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              Live · auto-refreshing
-            </span>
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SCORE CARD — small 0-100 score with progress bar
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface ScoreCardProps {
-  label: string;
-  score: number; // 0-100
-  subtitle: string;
-  icon: React.ReactNode;
-  index: number;
-  tone?: 'emerald' | 'amber' | 'cyan';
-}
-
-function ScoreCard({
-  label,
-  score,
-  subtitle,
-  icon,
-  index,
-  tone = 'emerald',
-}: ScoreCardProps) {
-  const clamped = Math.max(0, Math.min(100, score));
-  const barColor =
-    tone === 'amber'
-      ? 'from-amber-500 to-amber-400'
-      : tone === 'cyan'
-        ? 'from-cyan-500 to-cyan-400'
-        : 'from-emerald-500 to-emerald-400';
-  const textColor =
-    tone === 'amber'
-      ? 'text-amber-400'
-      : tone === 'cyan'
-        ? 'text-cyan-400'
-        : 'text-emerald-400';
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
-      className="h-full"
-    >
-      <div className="glass-surface rounded-2xl p-5 h-full hover-lift">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="space-y-1 min-w-0">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-              {label}
-            </p>
-            <p className={`text-2xl font-bold tracking-tight ${textColor}`}>
-              {Math.round(clamped)}
-              <span className="text-sm text-muted-foreground ml-0.5">/100</span>
-            </p>
-          </div>
-          <div className="flex items-center justify-center h-9 w-9 rounded-lg accent-gradient-soft shrink-0">
-            {icon}
-          </div>
-        </div>
-        <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${clamped}%` }}
-            transition={{ duration: 0.8, delay: 0.3 + index * 0.05, ease: 'easeOut' as const }}
-            className={`h-full rounded-full bg-gradient-to-r ${barColor}`}
-          />
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-2">{subtitle}</p>
-      </div>
-    </motion.div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// LOADING SKELETON — matches new layout (3 KPI + 3 sections)
+// LOADING SKELETON
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function DashboardSkeleton() {
   return (
-    <div className="max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10 space-y-8">
+    <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-10 space-y-8">
       <div className="space-y-3">
-        <ProSkeleton className="h-9 w-64" />
-        <ProSkeleton className="h-4 w-80" />
+        <ProSkeleton className="h-9 w-72" />
+        <ProSkeleton className="h-4 w-96" />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {Array.from({ length: 3 }).map((_, i) => (
           <ProSkeleton key={i} className="h-32 rounded-2xl" />
         ))}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <ProSkeleton key={i} className="h-72 rounded-2xl" />
+      <ProSkeleton className="h-28 rounded-2xl" />
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <ProSkeleton key={i} className="h-28 rounded-2xl" />
         ))}
       </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ProSkeleton className="h-80 rounded-2xl" />
+        <ProSkeleton className="h-80 rounded-2xl" />
+      </div>
+      <ProSkeleton className="h-72 rounded-2xl" />
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// EMPTY STATE — Fresh onboarding (re-styled with accent gradient logo)
+// HERO STAT TILE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function WelcomeEmptyState({
-  onAddClient,
-  onUploadDoc,
-}: {
-  onAddClient: () => void;
-  onUploadDoc: () => void;
-}) {
+interface HeroStatProps {
+  label: string;
+  /** Numeric value for count-up animation. */
+  numericValue?: number;
+  /** Format: 'currency' = ₹1,18,000, 'currencyCompact' = ₹1.18L, 'integer' = 42, 'decimal' = 68.5 */
+  numericFormat?: 'currency' | 'currencyCompact' | 'integer' | 'decimal';
+  /** Fallback string when numericValue is undefined. */
+  valueString?: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  /** Accent color for the left bar + icon chip. */
+  accent: 'emerald' | 'amber' | 'blue';
+  index: number;
+  /** Optional CTA link rendered below the subtitle. */
+  cta?: { label: string; onClick: () => void };
+  /** Optional inline badge (e.g. health tier). */
+  badge?: { label: string; tone: 'emerald' | 'amber' | 'rose' };
+  children?: React.ReactNode;
+}
+
+const HERO_ACCENT: Record<HeroStatProps['accent'], { bar: string; chip: string; glow: string }> = {
+  emerald: {
+    bar: 'bg-gradient-to-b from-blue-400 to-blue-600',
+    chip: 'bg-blue-500/10 border border-blue-500/20',
+    glow: 'hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.22)]',
+  },
+  amber: {
+    bar: 'bg-gradient-to-b from-amber-400 to-amber-600',
+    chip: 'bg-amber-500/10 border border-amber-500/20',
+    glow: 'hover:shadow-[0_0_32px_-8px_rgba(245,158,11,0.22)]',
+  },
+  blue: {
+    bar: 'bg-gradient-to-b from-sky-400 to-sky-600',
+    chip: 'bg-sky-500/10 border border-sky-500/20',
+    glow: 'hover:shadow-[0_0_32px_-8px_rgba(14,165,233,0.22)]',
+  },
+};
+
+const BADGE_TONE: Record<NonNullable<HeroStatProps['badge']>['tone'], string> = {
+  emerald: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
+  amber: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
+  rose: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+function HeroStat({
+  label,
+  numericValue,
+  numericFormat = 'integer',
+  valueString,
+  subtitle,
+  icon,
+  accent,
+  index,
+  cta,
+  badge,
+  children,
+}: HeroStatProps) {
+  const cfg = HERO_ACCENT[accent];
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: 'easeOut' as const }}
-      className="flex flex-col items-center justify-center text-center py-20 px-4"
+      transition={{ duration: 0.4, delay: index * 0.06, ease: 'easeOut' as const }}
+      className="h-full"
     >
-      <div className="relative mb-6">
-        <div className="flex items-center justify-center h-20 w-20 rounded-2xl accent-gradient accent-ring">
-          <Rocket className="h-10 w-10 text-white" />
-        </div>
-        <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full accent-gradient flex items-center justify-center">
-          <Sparkles className="h-3 w-3 text-white" />
-        </div>
-      </div>
-      <h2 className="text-2xl font-bold text-foreground tracking-tight">
-        Welcome to GSTPilot
-      </h2>
-      <p className="text-sm text-muted-foreground mt-2 max-w-md">
-        Start by adding your first client to unlock the full workflow —
-        from document upload to automated GST filing.
-      </p>
-      <div className="flex items-center gap-3 mt-6">
-        <Button
-          onClick={onAddClient}
-          className="accent-gradient text-white hover:opacity-90 gap-1.5"
-        >
-          <Plus className="h-4 w-4" />
-          Add Client
-        </Button>
-        <Button
-          variant="outline"
-          onClick={onUploadDoc}
-          className="gap-1.5 border-border"
-        >
-          <Upload className="h-4 w-4" />
-          Upload Document
-        </Button>
-      </div>
-      <div className="grid grid-cols-3 gap-6 mt-10 text-center max-w-sm">
-        {[
-          { icon: <Users className="h-5 w-5 accent-text" />, label: 'Add Clients' },
-          { icon: <FileText className="h-5 w-5 accent-text" />, label: 'Upload Docs' },
-          { icon: <CheckCircle2 className="h-5 w-5 accent-text" />, label: 'File Returns' },
-        ].map((step, i) => (
-          <div key={i} className="flex flex-col items-center gap-1.5">
-            <div className="flex items-center justify-center h-10 w-10 rounded-lg accent-gradient-soft">
-              {step.icon}
-            </div>
-            <span className="text-[11px] text-muted-foreground">{step.label}</span>
+      <div className={`relative glass-surface rounded-2xl p-5 h-full overflow-hidden transition-shadow hover-lift ${cfg.glow}`}>
+        <div aria-hidden className={`absolute left-0 top-0 h-full w-[3px] rounded-l-2xl ${cfg.bar}`} />
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em]">
+              {label}
+            </p>
           </div>
-        ))}
+          <div className={`flex items-center justify-center h-9 w-9 rounded-xl shrink-0 ${cfg.chip}`}>
+            {icon}
+          </div>
+        </div>
+        <div className="flex items-baseline gap-2 flex-wrap">
+          {numericValue !== undefined ? (
+            <AnimatedNumber value={numericValue} format={numericFormat} className="text-2xl md:text-3xl font-bold text-foreground tracking-tight tabular-nums" />
+          ) : (
+            <span className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">{valueString ?? '—'}</span>
+          )}
+          {badge && (
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${BADGE_TONE[badge.tone]}`}>
+              {badge.label}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed break-words">{subtitle}</p>
+        {children}
+        {cta && (
+          <button
+            type="button"
+            onClick={cta.onClick}
+            className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity"
+          >
+            {cta.label}
+            <ArrowRight className="h-3 w-3" />
+          </button>
+        )}
       </div>
     </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SNAPSHOT TILE (Section 3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface SnapshotTileProps {
+  label: string;
+  numericValue?: number;
+  numericFormat?: 'currency' | 'currencyCompact' | 'integer' | 'decimal';
+  valueString?: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  /** Real month-over-month delta: { pct: 12, direction: 'up'|'down'|'flat' }. Derived from real snapshot fields. */
+  mom?: { pct: number; direction: 'up' | 'down' | 'flat' };
+  index: number;
+  onClick?: () => void;
+}
+
+const MOM_STYLE: Record<'up' | 'down' | 'flat', { icon: LucideIcon; cls: string; verb: string }> = {
+  up: { icon: TrendingUp, cls: 'text-blue-400', verb: 'vs last month' },
+  down: { icon: TrendingDown, cls: 'text-rose-400', verb: 'vs last month' },
+  flat: { icon: Minus, cls: 'text-muted-foreground', verb: 'no change' },
+};
+
+function SnapshotTile({
+  label,
+  numericValue,
+  numericFormat = 'integer',
+  valueString,
+  subtitle,
+  icon,
+  mom,
+  index,
+  onClick,
+}: SnapshotTileProps) {
+  const MomIcon = mom ? MOM_STYLE[mom.direction].icon : null;
+  const interactive = Boolean(onClick);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.04, ease: 'easeOut' as const }}
+      className="h-full"
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!interactive}
+        aria-label={`${label}${valueString ? `: ${valueString}` : ''}${mom ? `, ${mom.direction === 'up' ? 'up' : mom.direction === 'down' ? 'down' : 'flat'} ${mom.pct}% vs last month` : ''}`}
+        className={`group relative w-full text-left glass-surface rounded-2xl p-4 h-full overflow-hidden transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60 ${interactive ? 'hover-lift cursor-pointer hover:border-white/10' : 'cursor-default'}`}
+      >
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em] truncate">
+            {label}
+          </p>
+          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/[0.04] border border-white/[0.06] shrink-0">
+            {icon}
+          </div>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          {numericValue !== undefined ? (
+            <AnimatedNumber value={numericValue} format={numericFormat} className="text-xl font-bold text-foreground tracking-tight tabular-nums" />
+          ) : (
+            <span className="text-xl font-bold text-foreground tracking-tight">{valueString ?? '—'}</span>
+          )}
+        </div>
+        {mom && MomIcon && (
+          <div className={`flex items-center gap-1 mt-1 ${MOM_STYLE[mom.direction].cls}`}>
+            <MomIcon className="h-3 w-3" />
+            <span className="text-[11px] font-semibold tabular-nums">
+              {mom.direction === 'flat' ? '—' : `${mom.pct > 0 ? '+' : ''}${mom.pct}%`}
+            </span>
+            <span className="text-[11px] text-muted-foreground">{MOM_STYLE[mom.direction].verb}</span>
+          </div>
+        )}
+        {!mom && (
+          <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed truncate">{subtitle}</p>
+        )}
+      </button>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REVENUE vs EXPENSES MINI BAR (real data, pure SVG)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function RevenueExpenseBar({ revenue, expenses }: { revenue: number; expenses: number }) {
+  const total = revenue + expenses;
+  const revPct = total > 0 ? (revenue / total) * 100 : 0;
+  const expPct = total > 0 ? (expenses / total) * 100 : 0;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <span className="h-2 w-2 rounded-full bg-blue-400" />
+          Revenue
+          <span className="font-semibold text-foreground gst-text-tabular">{abbreviateINR(revenue)}</span>
+        </span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <span className="font-semibold text-foreground gst-text-tabular">{abbreviateINR(expenses)}</span>
+          Expenses
+          <span className="h-2 w-2 rounded-full bg-rose-400" />
+        </span>
+      </div>
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.04]">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${revPct}%` }}
+          transition={{ duration: 0.8, ease: 'easeOut' as const }}
+          className="bg-gradient-to-r from-blue-400 to-blue-600"
+        />
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${expPct}%` }}
+          transition={{ duration: 0.8, delay: 0.1, ease: 'easeOut' as const }}
+          className="bg-gradient-to-r from-rose-400 to-rose-600"
+        />
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {total > 0
+          ? `${revPct.toFixed(0)}% revenue · ${expPct.toFixed(0)}% expenses (FY-to-date)`
+          : 'No revenue or expenses recorded yet for this financial year.'}
+      </p>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION HEADER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function SectionHeader({
+  title,
+  icon,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0">
+          {icon}
+        </div>
+        <h2 className="text-sm font-semibold text-foreground tracking-tight truncate">
+          {title}
+        </h2>
+      </div>
+      {actionLabel && onAction && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onAction}
+          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
+        >
+          {actionLabel}
+          <ArrowRight className="h-3 w-3 ml-1" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ACTIVITY SOURCE ICON (Section 6)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function activityIconFor(type: string, source: string): { icon: LucideIcon; tone: string } {
+  const t = type.toLowerCase();
+  const s = source.toLowerCase();
+  if (t.includes('oracle') || t.includes('brain')) return { icon: Sparkles, tone: 'text-amber-400' };
+  if (t.includes('zoho') || s.includes('zoho')) return { icon: BookOpen, tone: 'text-rose-400' };
+  if (t.includes('google') || s.includes('google') || t.includes('drive') || t.includes('gmail')) return { icon: Cloud, tone: 'text-blue-300' };
+  if (t.includes('bank') || s.includes('bank')) return { icon: Landmark, tone: 'text-blue-300' };
+  if (t.includes('payment') || t.includes('paid') || t.includes('collect')) return { icon: Wallet, tone: 'text-blue-400' };
+  if (t.includes('invoice') || t.includes('bill')) return { icon: FileText, tone: 'text-blue-400' };
+  if (t.includes('return') || t.includes('gst') || t.includes('filing')) return { icon: Receipt, tone: 'text-amber-400' };
+  if (t.includes('client') || t.includes('customer')) return { icon: Users, tone: 'text-blue-300' };
+  if (t.includes('reconcil')) return { icon: AlertTriangle, tone: 'text-amber-400' };
+  if (t.includes('filed') || t.includes('completed') || t.includes('success')) return { icon: CheckCircle2, tone: 'text-blue-400' };
+  return { icon: Activity, tone: 'text-muted-foreground' };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ACTION ITEM (Section 4)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface ActionItem {
+  id: string;
+  icon: LucideIcon;
+  tone: 'rose' | 'amber' | 'blue' | 'emerald';
+  title: string;
+  detail: string;
+  view: AppView;
+}
+
+const ACTION_TONE: Record<ActionItem['tone'], { chip: string; bar: string }> = {
+  rose: { chip: 'bg-rose-500/10 border-rose-500/20 text-rose-400', bar: 'bg-rose-400' },
+  amber: { chip: 'bg-amber-500/10 border-amber-500/20 text-amber-400', bar: 'bg-amber-400' },
+  blue: { chip: 'bg-sky-500/10 border-sky-500/20 text-sky-400', bar: 'bg-sky-400' },
+  emerald: { chip: 'bg-blue-500/10 border-blue-500/20 text-blue-400', bar: 'bg-blue-400' },
+};
+
+function ActionRow({ item, index }: { item: ActionItem; index: number }) {
+  const Icon = item.icon;
+  const tone = ACTION_TONE[item.tone];
+  return (
+    <motion.button
+      type="button"
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.04, ease: 'easeOut' as const }}
+      className="group w-full text-left flex items-center gap-3 p-3 rounded-xl hover:bg-white/[0.04] transition-colors"
+    >
+      <div className={`flex items-center justify-center h-9 w-9 rounded-lg border shrink-0 ${tone.chip}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-medium text-foreground truncate">{item.title}</p>
+        <p className="text-[11px] text-muted-foreground truncate">{item.detail}</p>
+      </div>
+      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+    </motion.button>
   );
 }
 
@@ -532,1190 +570,777 @@ function WelcomeEmptyState({
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-interface Recommendation {
-  id: string;
-  icon: React.ReactNode;
-  title: string;
-  actionLabel: string;
-  onAction: () => void;
-}
-
 export default function DashboardPage() {
-  const { setCurrentView, setSelectedClientId, setReturnPrepCtx } = useApp();
+  const router = useRouter();
+  const { setCurrentView } = useApp();
   const { user } = useAuth();
-  const { organization } = useOrg();
-  const orgId = organization?.id ?? null;
 
-  // ── Firebase Firestore hooks ──────────────────────────────────────────
-  const { metrics, loading, error } = useLiveDashboardMetrics();
-  const { data: clients } = useFireClients();
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REAL DATA HOOKS (single source of truth)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const { snapshot, loading: snapshotLoading, error: snapshotError, refresh: refreshSnapshot } = useBusinessSnapshot();
+  const { metrics, loading: metricsLoading } = useLiveDashboardMetrics();
   const { data: returns } = useFireReturns();
-  const { data: recentActivities } = useFireRecentActivities(10);
-  const { scores: execScores } = useFirmExecutiveScores();
-  const { data: memberships } = useFireMemberships(null);
-  const { data: priorityQueue } = useFirePriorities('pending');
+  const { events: timelineEvents, loading: timelineLoading } = useTimelineEvents(15);
+  const { recommendations: aiRecommendations, loading: aiRecsLoading } = useAIRecommendations();
 
-  // ── AI Oracle™ — real AI-generated recommendations (Phase 7) ──────────
-  // Replaces the locally-computed heuristic recommendations with real
-  // AI-sourced recommendations persisted in the ai_memory collection. The
-  // hook subscribes to ai_memory (type='recommendation') in real-time and
-  // exposes a refresh() to regenerate. Falls back to the local heuristic
-  // computation below when no AI recommendations are available yet (so the
-  // UI never breaks and looks identical either way).
-  const {
-    recommendations: aiRecommendations,
-    loading: aiRecsLoading,
-  } = useAIRecommendations();
+  // ── Workflow Pipeline + Proactive Oracle Briefing (Task 12 · Steps 1 & 3) ──
+  // The workflow pipeline is the CENTRAL visual element — it shows the live
+  // state of every business object as it flows through Invoice → Payment →
+  // Bank → Match → GST → Oracle → Approve → Done.
+  // The Oracle daily briefing makes Oracle proactive — it wakes up with
+  // knowledge instead of waiting for prompts.
+  const { pipeline, loading: pipelineLoading, refresh: refreshPipeline } = useWorkflowPipeline();
+  const { briefing, loading: briefingLoading, refresh: refreshBriefing } = useOracleDailyBriefing();
 
-  // ── Real Invoice Engine™ — org-scoped, real-time, server-calculated ──
-  // Replaces the old firmId-scoped useFireInvoices() for revenue / outstanding
-  // KPIs. The engine computes totals server-side (subtotal, taxes, grandTotal,
-  // paidAmount, balanceDue) and exposes a stats aggregate via computeInvoiceStats.
-  const {
-    invoices: engineInvoices,
-    stats: invoiceStats,
-    loading: invoicesLoading,
-  } = useInvoices();
-
-  // ── Real GST Return Engine™ — org-scoped, real-time, server-calculated ──
-  // Replaces fallback / heuristic GST values with real GSTSummary (output tax,
-  // input tax, net liability, health score, transaction counts) and ITCSummary
-  // (eligible / blocked / used / remaining ITC) computed from the
-  // gst_transactions collection via the GST Return Engine.
-  const currentPeriod = new Date().toISOString().slice(0, 7); // YYYY-MM
-  const {
-    summary: gstSummary,
-    itcSummary,
-    loading: gstLoading,
-  } = useGSTTransactions({ period: currentPeriod });
-
-  // GST-derived values (real data from the GST Return Engine).
-  // All gracefully fall back to 0 when there's no GST data yet (summary is
-  // null) — matching the same pattern the invoice KPIs use for missing data.
-  const gstLiability = gstSummary?.netLiability ?? 0;
-  const availableITC = itcSummary?.remainingITC ?? 0;
-  const outputTax = gstSummary?.totalOutputTax ?? 0;
-  const inputTax = gstSummary?.totalInputTax ?? 0;
-  const cgstCollected = gstSummary?.cgstCollected ?? 0;
-  const sgstCollected = gstSummary?.sgstCollected ?? 0;
-  const igstCollected = gstSummary?.igstCollected ?? 0;
-  const gstHealthScore = gstSummary?.healthScore ?? 0;
-  const gstTotalTransactions = gstSummary?.totalTransactions ?? 0;
-  const gstSalesCount = gstSummary?.salesCount ?? 0;
-  const gstPurchaseCount = gstSummary?.purchaseCount ?? 0;
-
-  // ── Real Banking Foundation™ — org-scoped, real-time, server-calculated ──
-  // Surfaces REAL bank-account data (total balance, available balance, incoming
-  // /outgoing payments, pending reconciliation, transaction counts) computed
-  // from the bank_connections + bank_transactions collections via the banking
-  // provider architecture. Used to AUGMENT the existing KPI / ScoreCard
-  // subtitles with real banking context — same pattern as the GST augmentation
-  // above. The Cash Position KPI still derives its primary value from invoice
-  // `balanceDue` (per the task constraint) — only the subtitle is enriched.
-  const {
-    summary: bankingSummary,
-    loading: bankingLoading,
-    isConnected: bankConnected,
-  } = useBanking();
-
-  // ── Phase 8 — Gmail & WhatsApp Business Automation ──────────────────────
-  // The communications hook provides real-time data on Gmail / WhatsApp
-  // connections + messages + scheduled reminders. The dashboard only USES the
-  // summary (counts) — no new UI components, no redesign. Counts are
-  // conditionally appended to existing subtitles when > 0 (mirrors the GST +
-  // banking augmentation pattern).
-  const {
-    summary: communicationSummary,
-    gmailConnected: gmailConnReal,
-    whatsappConnected: whatsappConnReal,
-  } = useCommunications();
-  const unreadGstNotices = communicationSummary?.unreadGstNotices ?? 0;
-  const unreadWhatsAppMessages = communicationSummary?.unreadWhatsAppMessages ?? 0;
-  const pendingReminders = communicationSummary?.pendingReminders ?? 0;
-  const pendingClientReplies = communicationSummary?.pendingClientReplies ?? 0;
-
-  // Banking-derived values (real data from the Banking Foundation).
-  // All gracefully fall back to 0 when there's no banking data yet (summary
-  // fields default to 0) — matching the same pattern the invoice / GST KPIs
-  // use for missing data. `bankConnected` is also tracked so future
-  // affordances (e.g. a "Bank not connected" hint) can gate on actual
-  // connectivity. `bankAvailable` and `outgoingPayments` are wired in and
-  // available for future subtitle expansion (mirrors the GST pattern where
-  // inputTax / CGST / SGST / IGST were pre-computed for the same reason).
-  const bankBalance = bankingSummary?.totalBalance ?? 0;
-  const bankAvailable = bankingSummary?.availableBalance ?? 0;
-  const incomingPayments = bankingSummary?.incomingPayments ?? 0;
-  const outgoingPayments = bankingSummary?.outgoingPayments ?? 0;
-  const pendingReconciliation = bankingSummary?.pendingReconciliation ?? 0;
-  const bankTxnCount =
-    (bankingSummary?.incomingCount ?? 0) + (bankingSummary?.outgoingCount ?? 0);
-
-  // ── Filing state ──────────────────────────────────────────────────────
-  const [filingInProgress, setFilingInProgress] = useState<Set<string>>(new Set());
-
-  // ── Client lookup map ─────────────────────────────────────────────────
-  const clientMap = useMemo(() => {
-    const map = new Map<string, FirestoreClient & { id: string }>();
-    for (const c of clients) map.set(c.clientId, c);
-    return map;
-  }, [clients]);
-
-  // ── KPI derivations ───────────────────────────────────────────────────
-  const pendingComplianceCount = useMemo(
-    () => returns.filter((r) => r.status !== 'filed').length,
-    [returns],
-  );
-
-  const pendingInvoices = useMemo(
-    () =>
-      engineInvoices.filter(
-        (i) =>
-          i.balanceDue > 0 && i.status !== 'cancelled' && i.status !== 'draft',
-      ),
-    [engineInvoices],
-  );
-
-  // Real outstanding from the invoice engine — Σ balanceDue of non-draft,
-  // non-cancelled invoices (server-calculated per invoice).
-  const pendingCollection = invoiceStats.totalOutstanding;
-
-  const insight = useMemo(
-    () => buildInsightSentence(metrics, pendingCollection),
-    [metrics, pendingCollection],
-  );
-
-  // ── Business Health Score (firmHealth from executive scores, fallback to metrics) ──
-  // Prefers the GST Return Engine's real `healthScore` (computed from actual
-  // gst_transactions: output tax vs input tax, ITC utilisation, liability
-  // status) when available — it is the most accurate GST-specific signal.
-  const businessHealthScore = useMemo<number>(() => {
-    if (gstHealthScore > 0) return gstHealthScore;
-    if (execScores && typeof execScores.firmHealth === 'number' && execScores.firmHealth > 0) {
-      return execScores.firmHealth;
+  // ── Loading safety timer (8s) — never let the skeleton hang forever ──
+  // The timer is armed while loading; if it fires before loading clears, we
+  // surface whatever data we have. We avoid calling setState synchronously in
+  // the effect body (which would trigger cascading renders) by only setting
+  // state from inside the async timeout callback.
+  // Reduced from 12s → 8s so the dashboard becomes interactive faster when
+  // the snapshot API is slow.
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
+  const allLoading = snapshotLoading || metricsLoading || timelineLoading;
+  useEffect(() => {
+    boot.mark('dashboard data started');
+    if (!allLoading) {
+      // Loading cleared naturally — reset the flag on the NEXT tick via a
+      // microtask so we never call setState synchronously inside the effect.
+      boot.mark('dashboard data complete');
+      boot.measure('interactive');
+      const id = setTimeout(() => setLoadingTimedOut(false), 0);
+      return () => clearTimeout(id);
     }
-    if (metrics.averageHealthScore > 0) return metrics.averageHealthScore;
-    // Fallback computation — start at 100, subtract weighted penalties
-    let score = 100;
-    score -= metrics.criticalIssues * 6;
-    score -= metrics.warnings * 2;
-    score -= metrics.overdueReturns * 8;
-    score -= metrics.pendingReturns * 2;
-    return Math.max(0, Math.min(100, Math.round(score)));
-  }, [execScores, metrics, gstHealthScore]);
+    const t = setTimeout(() => {
+      setLoadingTimedOut(true);
+      boot.mark('dashboard data complete (timeout)');
+      boot.measure('interactive (after timeout)');
+    }, 8_000);
+    return () => clearTimeout(t);
+  }, [allLoading]);
 
-  // ── Compliance Score (0-100): filed vs total returns, blended with exec score ──
-  const complianceScore = useMemo<number>(() => {
-    if (execScores && typeof execScores.compliance === 'number' && execScores.compliance > 0) {
-      return execScores.compliance;
-    }
-    const totalReturns = returns.length;
-    if (totalReturns === 0) return 100;
-    const filed = returns.filter((r) => r.status === 'filed').length;
-    return Math.round((filed / totalReturns) * 100);
-  }, [execScores, returns]);
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DERIVED HOOKS — all useMemo calls MUST run before any early return.
+  // React Rules of Hooks: hooks cannot be called conditionally or after a
+  // conditional return. We compute every derived value up-front here so the
+  // loading / error early-returns below are safe.
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Collection Score (0-100): match percentage from reconciliation ──
-  const collectionScore = useMemo<number>(() => {
-    if (execScores && typeof execScores.cashFlow === 'number' && execScores.cashFlow > 0) {
-      // Use a blend: cashFlow score and match percentage
-      return Math.round((execScores.cashFlow + metrics.matchPercentage) / 2);
-    }
-    return Math.round(metrics.matchPercentage);
-  }, [execScores, metrics.matchPercentage]);
+  // ── Health score tier (CANONICAL — uses snapshot.healthScoreLabel) ──
+  // The rich snapshot engine (`src/lib/business/snapshot.ts::computeHealthScore`)
+  // is the SINGLE source of truth for the business health score + its label.
+  // We do NOT re-compute a label locally — we just look up the tone for the
+  // canonical label. This is the ONLY place on the dashboard where the health
+  // score number or label is displayed. (AI Recommendations used to duplicate
+  // it via a "Low Health Score" rule; that rule has been removed from
+  // `src/lib/recommendations/engine.ts`.)
+  const hasHealthScore = snapshot.healthScore > 0 && snapshot.hasLiveData;
+  const healthLabel = snapshot.healthScoreLabel;
+  const healthTier = useMemo<{ label: string; tone: 'emerald' | 'amber' | 'rose' } | null>(() => {
+    if (!hasHealthScore || !healthLabel) return null;
+    const tone: 'emerald' | 'amber' | 'rose' =
+      healthLabel === 'Excellent' || healthLabel === 'Good'
+        ? 'emerald'
+        : healthLabel === 'Fair'
+          ? 'amber'
+          : 'rose'; // Poor | Critical
+    return { label: healthLabel, tone };
+  }, [hasHealthScore, healthLabel]);
 
-  // ── Risk Score (0-100): inverse of risk percentage, with critical issues penalty ──
-  const riskScore = useMemo<number>(() => {
-    // riskScore represents risk POSTURE (higher = safer), not raw risk
-    const baseRisk = Math.max(0, Math.min(100, 100 - metrics.riskPercentage));
-    const criticalPenalty = Math.min(50, metrics.criticalIssues * 8);
-    const overduePenalty = Math.min(30, metrics.overdueReturns * 6);
-    return Math.max(0, Math.min(100, Math.round(baseRisk - criticalPenalty - overduePenalty)));
-  }, [metrics]);
+  // ── Pending GST = net GST liability (output tax − input tax) ──
+  const pendingGst = snapshot.gst?.netLiability ?? 0;
 
-  // ── Today's Priorities: from priority queue hook, fallback to derived priorities ──
-  const todaysPriorities = useMemo<
-    Array<{ id: string; label: string; category: string; urgency: number; view: AppView }>
-  >(() => {
-    // 1. Use real priority queue data if available
-    if (priorityQueue && priorityQueue.length > 0) {
-      return priorityQueue.slice(0, 5).map((p) => ({
-        id: p.priorityId || p.id,
-        label: p.title || 'Untitled priority',
-        category: p.category || 'general',
-        urgency: p.urgency || 5,
-        view: 'tasks' as AppView,
-      }));
-    }
-    // 2. Fallback: derive from live metrics
-    const list: Array<{ id: string; label: string; category: string; urgency: number; view: AppView }> = [];
-    if (metrics.overdueReturns > 0) {
-      list.push({
-        id: 'fb-overdue',
-        label: `File ${metrics.overdueReturns} overdue return${metrics.overdueReturns > 1 ? 's' : ''}`,
-        category: 'filing',
-        urgency: 10,
+  // ── Real month-over-month revenue delta ──
+  const revenueMom = useMemo(() => {
+    const cur = snapshot.revenueThisMonth ?? 0;
+    const prev = snapshot.revenueLastMonth ?? 0;
+    if (prev === 0 && cur === 0) return { pct: 0, direction: 'flat' as const };
+    if (prev === 0) return { pct: 100, direction: 'up' as const };
+    const pct = Math.round(((cur - prev) / prev) * 100);
+    if (Math.abs(pct) < 1) return { pct: 0, direction: 'flat' as const };
+    return { pct: Math.abs(pct), direction: pct > 0 ? 'up' as const : 'down' as const };
+  }, [snapshot.revenueThisMonth, snapshot.revenueLastMonth]);
+
+  // ── Action Center items (real, derived from snapshot + returns + metrics) ──
+  const actionItems = useMemo<ActionItem[]>(() => {
+    const items: ActionItem[] = [];
+
+    // 1. Overdue GST returns (from real returns with due dates)
+    const overdueReturnsList = returns
+      .filter((r) => r.status !== 'filed')
+      .map((r) => ({ r, days: getDaysRemaining(getFilingDueDate(r.returnType, r.period)) }))
+      .filter((x) => x.days < 0)
+      .sort((a, b) => a.days - b.days);
+    if (overdueReturnsList.length > 0) {
+      const top = overdueReturnsList[0];
+      items.push({
+        id: 'overdue-return',
+        icon: AlertCircle,
+        tone: 'rose',
+        title: `${overdueReturnsList.length} GST return${overdueReturnsList.length > 1 ? 's' : ''} overdue`,
+        detail: `Most urgent: ${top.r.returnType} · ${periodToLabel(top.r.period)} · ${Math.abs(top.days)}d past due`,
         view: 'returns',
       });
+    } else {
+      // Nearest upcoming filing (due soon)
+      const upcoming = returns
+        .filter((r) => r.status !== 'filed')
+        .map((r) => ({ r, days: getDaysRemaining(getFilingDueDate(r.returnType, r.period)) }))
+        .filter((x) => x.days >= 0)
+        .sort((a, b) => a.days - b.days);
+      if (upcoming.length > 0) {
+        const top = upcoming[0];
+        const dueLabel = top.days === 0 ? 'due today' : top.days === 1 ? 'due tomorrow' : `due in ${top.days}d`;
+        items.push({
+          id: 'upcoming-return',
+          icon: Clock,
+          tone: top.days <= 2 ? 'amber' : 'blue',
+          title: `${top.r.returnType} ${dueLabel}`,
+          detail: `${periodToLabel(top.r.period)} · ${returns.filter((r) => r.status !== 'filed').length} return${returns.filter((r) => r.status !== 'filed').length > 1 ? 's' : ''} pending`,
+          view: 'returns',
+        });
+      }
     }
+
+    // 2. Overdue invoices (real snapshot.overdueInvoiceCount)
+    if (snapshot.overdueInvoiceCount > 0) {
+      items.push({
+        id: 'overdue-invoices',
+        icon: FileText,
+        tone: 'rose',
+        title: `${snapshot.overdueInvoiceCount} overdue invoice${snapshot.overdueInvoiceCount > 1 ? 's' : ''}`,
+        detail: `${abbreviateINR(snapshot.overdueReceivables ?? 0)} past due · click to follow up`,
+        view: 'invoices',
+      });
+    }
+
+    // 3. Pending collections (real snapshot.collections.totalOutstanding)
+    // Shown ONLY when there are no overdue invoices (the overdue-invoices item
+    // above already covers that case). `snapshot.invoices.count` is the TOTAL
+    // invoice count (paid + unpaid), NOT the unpaid count — so we deliberately
+    // do NOT echo it here as "N invoices outstanding". The unpaid-count
+    // contradiction (₹89.5K pending collection reported alongside a "0
+    // invoices unpaid" widget elsewhere) came from mislabeling `invoices.count`
+    // as the unpaid count. The outstanding ₹ amount is the truthful metric.
+    const outstanding = snapshot.collections?.totalOutstanding ?? 0;
+    if (outstanding > 0 && snapshot.overdueInvoiceCount === 0) {
+      items.push({
+        id: 'pending-collection',
+        icon: Wallet,
+        tone: 'amber',
+        title: `${abbreviateINR(outstanding)} pending collection`,
+        detail: 'Awaiting customer payment · click to chase',
+        view: 'invoices',
+      });
+    }
+
+    // 4. Critical compliance issues (real metrics.criticalIssues)
     if (metrics.criticalIssues > 0) {
-      list.push({
-        id: 'fb-critical',
-        label: `Resolve ${metrics.criticalIssues} critical issue${metrics.criticalIssues > 1 ? 's' : ''}`,
-        category: 'reconciliation',
-        urgency: 9,
+      items.push({
+        id: 'critical-issues',
+        icon: AlertTriangle,
+        tone: 'amber',
+        title: `${metrics.criticalIssues} reconciliation issue${metrics.criticalIssues > 1 ? 's' : ''}`,
+        detail: 'Bank reconciliation needs review — resolve before next filing',
         view: 'reconcile',
       });
     }
-    if (pendingCollection > 0) {
-      list.push({
-        id: 'fb-collections',
-        label: `Collect ₹${formatINR(pendingCollection)} pending`,
-        category: 'payment',
-        urgency: 7,
-        view: 'invoices',
-      });
-    }
-    if (metrics.extractionsPending > 0) {
-      list.push({
-        id: 'fb-extractions',
-        label: `Review ${metrics.extractionsPending} pending extraction${metrics.extractionsPending > 1 ? 's' : ''}`,
-        category: 'upload',
-        urgency: 5,
-        view: 'invoices',
-      });
-    }
-    return list.slice(0, 5);
-  }, [priorityQueue, metrics, pendingCollection]);
 
-  // ── Connected services (catalog — reflect real Gmail/WhatsApp/Bank state) ──
-  // Phase 8: Gmail + WhatsApp reflect real connection state from
-  // useCommunications(). Bank APIs reflects real state from useBanking().
-  // GSTN connection state is derived from the organization's gstin field
-  // (previously faked as `metrics.totalClients > 0` which incorrectly showed
-  // GSTN as "Connected" whenever any client existed).
-  // The other entries (E-Invoice, GSTR-2B) remain "not connected" by default
-  // until their Phase 9 ERP integrations ship.
-  const orgGstin = organization?.gstin;
-  const connectedServices = useMemo(
-    () => [
-      { id: 'gstn', name: 'GSTN', initial: 'G', connected: Boolean(orgGstin) },
-      { id: 'einvoice', name: 'E-Invoice', initial: 'E', connected: false },
-      { id: 'gstr2b', name: 'GSTR-2B', initial: '2', connected: false },
-      { id: 'bank', name: 'Bank APIs', initial: 'B', connected: bankConnected },
-      { id: 'whatsapp', name: 'WhatsApp', initial: 'W', connected: whatsappConnReal },
-      { id: 'gmail', name: 'Gmail', initial: 'M', connected: gmailConnReal },
-    ],
-    [orgGstin, bankConnected, whatsappConnReal, gmailConnReal],
-  );
-
-  // ── Team members from memberships hook ──
-  // Use userDisplayName / userEmail (previously parsed userId as an email
-  // and displayed raw UIDs as names).
-  const teamMembers = useMemo(
-    () => memberships.slice(0, 6).map((m) => ({
-      id: m.id,
-      name: m.userDisplayName || (m.userEmail ? m.userEmail.split('@')[0] : 'Team member'),
-      role: m.role || 'staff',
-      status: m.status || 'invited',
-    })),
-    [memberships],
-  );
-
-  // ── Upcoming filings (non-filed, sorted by urgency) ───────────────────
-  const upcomingFilings = useMemo(() => {
-    return returns
-      .filter((r) => r.status !== 'filed')
-      .sort((a, b) => {
-        const aOverdue = isOverdue(a.period) ? 0 : 1;
-        const bOverdue = isOverdue(b.period) ? 0 : 1;
-        if (aOverdue !== bOverdue) return aOverdue - bOverdue;
-        return a.period.localeCompare(b.period);
-      })
-      .slice(0, 5);
-  }, [returns]);
-
-  // ── AI Recommendations (local heuristic fallback) ────────────────────────
-  // These locally-computed recommendations are used as a FALLBACK when the
-  // real AI Oracle (ai_memory) has no recommendations yet. The primary source
-  // is the useAIRecommendations() hook above (Phase 7). See the merged
-  // `recommendations` memo below for the priority logic.
-  const localRecommendations = useMemo<Recommendation[]>(() => {
-    const recs: Recommendation[] = [];
-
-    // Overdue returns → file now
-    for (const r of returns) {
-      if (recs.length >= 5) break;
-      if (r.status === 'filed' || !isOverdue(r.period)) continue;
-      const client = clientMap.get(r.clientId);
-      const name = client?.tradeName ?? 'Unknown client';
-      recs.push({
-        id: `rec-overdue-${r.id}`,
-        icon: <AlertTriangle className="h-3.5 w-3.5 accent-text" />,
-        title: `File ${r.returnType} for ${name} — overdue`,
-        actionLabel: 'File now',
-        onAction: () => handleFileReturn(r.clientId, r.returnType, r.period),
+    // 5. Pending GST liability (real snapshot.gst.netLiability)
+    if (pendingGst > 0) {
+      items.push({
+        id: 'gst-liability',
+        icon: Receipt,
+        tone: 'amber',
+        title: `${abbreviateINR(pendingGst)} GST liability pending`,
+        detail: 'Net output tax − input tax credit · file to settle',
+        view: 'returns',
       });
     }
 
-    // Returns due soon (≤ 7 days)
-    for (const r of returns) {
-      if (recs.length >= 5) break;
-      if (r.status === 'filed' || isOverdue(r.period)) continue;
-      const dueDate = getFilingDueDate(r.returnType, r.period);
-      const days = getDaysRemaining(dueDate);
-      if (days > 7) continue;
-      const client = clientMap.get(r.clientId);
-      const name = client?.tradeName ?? 'Unknown client';
-      recs.push({
-        id: `rec-soon-${r.id}`,
-        icon: <Clock className="h-3.5 w-3.5 accent-text" />,
-        title: `File ${r.returnType} for ${name} — due in ${days} day${days === 1 ? '' : 's'}`,
-        actionLabel: 'Prepare',
-        onAction: () => handleFileReturn(r.clientId, r.returnType, r.period),
-      });
-    }
+    // NOTE: "Bank reconciliation up to date" was previously shown here as a
+    // pseudo-action. Removed — it was a status, not an action, and added
+    // noise to the Action Center. Real actions only now.
 
-    // Low health score clients
-    for (const c of clients) {
-      if (recs.length >= 5) break;
-      if (c.healthScore >= 60) continue;
-      recs.push({
-        id: `rec-health-${c.clientId}`,
-        icon: <ShieldCheck className="h-3.5 w-3.5 accent-text" />,
-        title: `${c.tradeName} — health score ${Math.round(c.healthScore)}% needs attention`,
-        actionLabel: 'Open',
-        onAction: () => handleOpenClient(c.clientId),
-      });
-    }
+    return items;
+  }, [returns, snapshot, metrics, pendingGst]);
 
-    // Pending collection
-    if (recs.length < 5 && pendingCollection > 0) {
-      recs.push({
-        id: 'rec-collection',
-        icon: <IndianRupee className="h-3.5 w-3.5 accent-text" />,
-        title: `₹${formatINR(pendingCollection)} pending collection across ${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'}`,
-        actionLabel: 'Review',
-        onAction: () => setCurrentView('invoices'),
-      });
-    }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EARLY RETURNS — safe now because every hook above ran unconditionally.
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (allLoading && !loadingTimedOut) {
+    return <DashboardSkeleton />;
+  }
 
-    // Critical issues
-    if (recs.length < 5 && metrics.criticalIssues > 0) {
-      recs.push({
-        id: 'rec-critical',
-        icon: <AlertTriangle className="h-3.5 w-3.5 accent-text" />,
-        title: `${metrics.criticalIssues} critical compliance issue${metrics.criticalIssues === 1 ? '' : 's'} need${metrics.criticalIssues === 1 ? 's' : ''} review`,
-        actionLabel: 'Review',
-        onAction: () => setCurrentView('reconcile'),
-      });
-    }
-
-    return recs;
-  }, [returns, clients, clientMap, pendingCollection, pendingInvoices.length, metrics.criticalIssues]);
-
-  // ── Handlers ──────────────────────────────────────────────────────────
-  const handleOpenClient = (clientId: string) => {
-    setSelectedClientId(clientId);
-    setCurrentView('client-workspace');
+  // ── Hard error state (only for non-permission, non-network failures) ──
+  const isPermissionOrNetworkError = (msg: string | null): boolean => {
+    if (!msg) return false;
+    return /permission|insufficient|unauthenticated|not authorized|missing or|network|fetch|failed to fetch|load failed/i.test(msg);
   };
+  if (snapshotError && !isPermissionOrNetworkError(snapshotError)) {
+    return (
+      <div className="relative max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-10">
+        <div className="glass-surface rounded-2xl p-8 text-center border border-rose-500/20">
+          <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 mx-auto mb-4">
+            <AlertTriangle className="h-6 w-6 text-rose-400" />
+          </div>
+          <h3 className="font-semibold text-foreground text-lg">
+            We couldn&apos;t load your dashboard
+          </h3>
+          <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
+            Something went wrong while fetching your business data. Please try again.
+          </p>
+          <div className="flex items-center justify-center gap-2 mt-5">
+            <Button onClick={refreshSnapshot} className="accent-gradient text-white hover:opacity-90 gap-1.5">
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </Button>
+            <Button variant="outline" onClick={() => window.location.reload()} className="gap-1.5">
+              Reload page
+            </Button>
+            <Button variant="ghost" onClick={() => setCurrentView('settings')} className="text-muted-foreground gap-1.5">
+              <LifeBuoy className="h-4 w-4" />
+              Support
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  const handleFileReturn = (clientId: string, returnType: string, period: string) => {
-    setSelectedClientId(clientId);
-    setReturnPrepCtx({
-      clientId,
-      returnType: (returnType === 'GSTR-3B' ? 'GSTR-3B' : 'GSTR-1') as 'GSTR-1' | 'GSTR-3B',
-      period,
-    });
-    setCurrentView('return-prep');
-  };
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NON-HOOK DERIVED VALUES (safe to compute after the early returns above)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const firstName = getFirstName(user?.name);
+  const todaysRevenue = snapshot.revenueThisMonth ?? 0;
 
-  const handleQuickFile = async (returnId: string, clientName: string, returnType: string) => {
-    if (filingInProgress.has(returnId)) return;
-    setFilingInProgress((prev) => new Set(prev).add(returnId));
-    try {
-      const arn = await fileReturn(returnId);
-      toast.success(`${returnType} Filed Successfully`, {
-        description: `${clientName} — ARN: ${arn}`,
-      });
-    } catch (err) {
-      toast.error('Filing Failed', {
-        description: err instanceof Error ? err.message : 'Unknown error',
-      });
-    } finally {
-      setFilingInProgress((prev) => {
-        const next = new Set(prev);
-        next.delete(returnId);
-        return next;
-      });
-    }
-  };
-
-  // ── AI Oracle™ — map real AI recommendations to the card shape ─────────
-  // Each AI recommendation (from ai_memory via useAIRecommendations) is mapped
-  // to the local Recommendation shape with an icon + navigation handler derived
-  // from its actionType. This keeps the rendered card IDENTICAL to before —
-  // only the data source changed (heuristic → real AI).
-  const iconForAIRec = (type: AIRecommendation['type']): React.ReactNode => {
+  // ── AI recommendation icon mapping ──
+  const iconForAIRec = (type: AIRecommendation['type']): LucideIcon => {
     switch (type) {
-      case 'file_gstr3b':
-      case 'file_gstr1':
-      case 'pay_gst':
-        return <FileText className="h-3.5 w-3.5 accent-text" />;
-      case 'follow_up_customer':
-      case 'send_invoice_reminder':
-        return <Users className="h-3.5 w-3.5 accent-text" />;
-      case 'connect_bank':
-        return <IndianRupee className="h-3.5 w-3.5 accent-text" />;
-      case 'connect_gstn':
-        return <ShieldCheck className="h-3.5 w-3.5 accent-text" />;
-      case 'reconcile_bank':
-      case 'review_overdue':
-        return <AlertTriangle className="h-3.5 w-3.5 accent-text" />;
-      case 'reduce_expenses':
-        return <TrendingUp className="h-3.5 w-3.5 accent-text" />;
-      case 'improve_cash_flow':
-        return <Activity className="h-3.5 w-3.5 accent-text" />;
-      default:
-        return <Sparkles className="h-3.5 w-3.5 accent-text" />;
+      case 'cash': return IndianRupee;
+      case 'receivables': return Clock;
+      case 'compliance': return FileText;
+      case 'growth': return TrendingUp;
+      case 'risk': return AlertTriangle;
+      case 'customer': return Users;
+      default: return Sparkles;
     }
   };
 
-  const handleAIRecAction = (rec: AIRecommendation) => {
-    switch (rec.actionType) {
-      case 'client-workspace':
-        if (rec.relatedEntityId) {
-          handleOpenClient(rec.relatedEntityId);
-        } else {
-          setCurrentView('clients');
-        }
-        break;
-      case 'return-prep':
-        if (rec.relatedEntityId && rec.relatedEntityType === 'period') {
-          // Navigate to return-prep with the period context if available.
-          setReturnPrepCtx({
-            clientId: rec.relatedEntityId,
-            returnType: rec.type === 'file_gstr3b' ? 'GSTR-3B' : 'GSTR-1',
-            period: rec.relatedEntityId,
-          });
-        }
-        setCurrentView('return-prep');
-        break;
-      case 'invoices':
-        setCurrentView('invoices');
-        break;
-      case 'expenses':
-        setCurrentView('invoices');
-        break;
-      case 'reconcile':
-        setCurrentView('reconcile');
-        break;
-      case 'banking':
-        setCurrentView('banking');
-        break;
-      case 'gstn':
-        setCurrentView('returns');
-        break;
-      case 'reports':
-        setCurrentView('reports');
-        break;
-      case 'tasks':
-        setCurrentView('tasks');
-        break;
-      default:
-        setCurrentView('dashboard');
-        break;
-    }
+  const priorityTone: Record<string, ActionItem['tone']> = {
+    critical: 'rose',
+    high: 'amber',
+    medium: 'blue',
+    low: 'emerald',
   };
-
-  const mappedAIRecommendations = useMemo<Recommendation[]>(() => {
-    return aiRecommendations.slice(0, 5).map((rec) => ({
-      id: rec.id,
-      icon: iconForAIRec(rec.type),
-      title: rec.title,
-      actionLabel: rec.actionLabel,
-      onAction: () => handleAIRecAction(rec),
-    }));
-  }, [aiRecommendations]);
-
-  // ── Merged recommendations — prefer real AI, fall back to local ────────
-  // When the AI Oracle has generated recommendations (ai_memory populated),
-  // those take priority. Otherwise the local heuristic recommendations keep
-  // the card populated so the UI is never empty. The card renders identically
-  // in both cases — same icon, title, action label, and click behavior.
-  const recommendations = useMemo<Recommendation[]>(() => {
-    if (mappedAIRecommendations.length > 0) return mappedAIRecommendations;
-    return localRecommendations;
-  }, [mappedAIRecommendations, localRecommendations]);
-
-  // ── Background AI analysis trigger (Phase 7) ───────────────────────────
-  // On mount, if the AI Oracle has no recommendations yet (ai_memory empty),
-  // trigger a background analysis run to populate it. This is the "auto
-  // analyse every invoice / payment / GST sync / bank sync" behavior — it
-  // runs once per mount, guarded by a ref, and is non-blocking (fire-and-
-  // forget). The real-time subscription in useAIRecommendations will surface
-  // the generated recommendations as soon as they're persisted.
-  const bgAnalysisTriggered = useRef(false);
-  useEffect(() => {
-    if (bgAnalysisTriggered.current) return;
-    if (!orgId) return;
-    if (aiRecsLoading) return;
-    if (aiRecommendations.length > 0) {
-      bgAnalysisTriggered.current = true;
-      return;
-    }
-    bgAnalysisTriggered.current = true;
-    void fetch('/api/ai/analyze/background', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ organizationId: orgId }),
-    }).catch(() => {
-      // Non-fatal — the local heuristic recommendations still render.
-    });
-  }, [orgId, aiRecsLoading, aiRecommendations.length]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
-
-  // ── Loading ───────────────────────────────────────────────────────────
-  // Wait for the live dashboard metrics, the real invoice engine, the
-  // GST Return Engine, AND the Banking Foundation initial subscriptions to
-  // settle before rendering — otherwise the Revenue / Cash Position KPIs
-  // would briefly show "—" (invoice engine), the Business Health Score /
-  // subtitles would miss the real GST signals before the gst_transactions
-  // snapshot arrives, and the Cash Position / Risk subtitles would miss
-  // the real bank balance before the bank_transactions snapshot arrives.
-  if (loading || invoicesLoading || gstLoading || bankingLoading)
-    return <DashboardSkeleton />;
-
-  // ── Error ─────────────────────────────────────────────────────────────
-  if (error) {
-    return (
-      <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
-        <Card className="glass-surface border-red-500/20">
-          <CardContent className="p-6 text-center">
-            <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-            <h3 className="font-semibold text-foreground">Failed to load dashboard</h3>
-            <p className="text-sm text-muted-foreground mt-1">{error}</p>
-            <Button
-              variant="outline"
-              className="mt-4 border-border"
-              onClick={() => window.location.reload()}
-            >
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // ── Empty state — no clients at all ───────────────────────────────────
-  if (metrics.totalClients === 0) {
-    return (
-      <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
-        <WelcomeEmptyState
-          onAddClient={() => setCurrentView('clients')}
-          onUploadDoc={() => setCurrentView('invoices')}
-        />
-      </div>
-    );
-  }
-
-  // ── KPI values ────────────────────────────────────────────────────────
-  // Revenue KPI: REAL revenue from the invoice engine — Σ grandTotal of
-  // non-draft, non-cancelled invoices (server-calculated per invoice).
-  const revenueValue =
-    invoiceStats.totalRevenue > 0 ? `₹${formatINR(invoiceStats.totalRevenue)}` : '—';
-  const complianceValue = String(pendingComplianceCount);
-  // Cash Position KPI: REAL outstanding from the invoice engine — Σ balanceDue
-  // of non-draft, non-cancelled invoices.
-  const cashValue =
-    invoiceStats.totalOutstanding > 0 ? `₹${formatINR(invoiceStats.totalOutstanding)}` : '—';
-
-  // ── KPI subtitles — augmented with REAL GST + Banking data ────────────
-  // The 3 KPI cards (Revenue / Pending Compliance / Cash Position) keep
-  // their original layout, colors, and structure — only the subtitle text
-  // is enriched with real GST-derived and bank-derived values when the
-  // respective engines have data for the current period. All banking
-  // augmentations are conditional on the value being > 0 so the original
-  // subtitle text is preserved verbatim when there's no banking data yet
-  // (mirrors the GST augmentation pattern).
-  const revenueSubtitle = `Total revenue · ${invoiceStats.count} invoice${invoiceStats.count === 1 ? '' : 's'}${gstSalesCount > 0 || gstPurchaseCount > 0 ? ` · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'}/${gstPurchaseCount} purch.` : ''}${incomingPayments > 0 ? ` · ₹${formatINR(incomingPayments)} incoming` : ''}`;
-  const complianceSubtitle = `${pendingComplianceCount === 1 ? 'Return to file' : 'Returns to file'}${gstTotalTransactions > 0 ? ` · ${gstTotalTransactions} GST txn${gstTotalTransactions === 1 ? '' : 's'}` : ''}${bankTxnCount > 0 ? ` · ${bankTxnCount} bank txn${bankTxnCount === 1 ? '' : 's'}` : ''}${unreadGstNotices > 0 ? ` · ${unreadGstNotices} unread notice${unreadGstNotices === 1 ? '' : 's'}` : ''}`;
-  const cashSubtitle =
-    pendingInvoices.length > 0
-      ? `${pendingInvoices.length} invoice${pendingInvoices.length === 1 ? '' : 's'} · Pending collection${gstLiability > 0 ? ` · ₹${formatINR(gstLiability)} GST due` : ''}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}${pendingReminders > 0 ? ` · ${pendingReminders} reminder${pendingReminders === 1 ? '' : 's'} queued` : ''}`
-      : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST due` : 'Pending collection'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank balance` : ''}${pendingReminders > 0 ? ` · ${pendingReminders} reminder${pendingReminders === 1 ? '' : 's'} queued` : ''}`;
-
-  // ── Score card subtitles — augmented with REAL GST + Banking data ─────
-  // Compliance / Collection / Risk score cards keep their original layout
-  // and tone — only the subtitle text is enriched with real GST context
-  // (output tax + CGST/SGST/IGST breakdown, available ITC + input tax,
-  // GST liability) and real banking context (pending reconciliation count,
-  // real bank balance for liquidity) when available.
-  const complianceScoreSubtitle = metrics.filedReturns > 0
-    ? `${metrics.filedReturns} filed · ${metrics.pendingReturns + metrics.overdueReturns} pending${outputTax > 0 ? ` · ₹${formatINR(outputTax)} output tax` : ''}`
-    : `${outputTax > 0 ? `₹${formatINR(outputTax)} output tax · ${gstSalesCount} sale${gstSalesCount === 1 ? '' : 's'} (C ₹${formatINR(cgstCollected)}/S ₹${formatINR(sgstCollected)}/I ₹${formatINR(igstCollected)})` : 'Based on filed vs pending returns'}`;
-  const collectionScoreSubtitle = pendingCollection > 0
-    ? `₹${formatINR(pendingCollection)} pending collection${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}${pendingClientReplies > 0 ? ` · ${pendingClientReplies} client repl${pendingClientReplies === 1 ? 'y' : 'ies'} pending` : ''}`
-    : `${metrics.matchPercentage.toFixed(0)}% invoice match rate${availableITC > 0 || inputTax > 0 ? ` · ₹${formatINR(availableITC)} ITC avail` : ''}${inputTax > 0 ? ` · ₹${formatINR(inputTax)} input tax` : ''}${pendingReconciliation > 0 ? ` · ${pendingReconciliation} pending reconcile` : ''}${pendingClientReplies > 0 ? ` · ${pendingClientReplies} client repl${pendingClientReplies === 1 ? 'y' : 'ies'} pending` : ''}`;
-  const riskScoreSubtitle = metrics.criticalIssues > 0
-    ? `${metrics.criticalIssues} critical · ${metrics.overdueReturns} overdue${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}${unreadWhatsAppMessages > 0 ? ` · ${unreadWhatsAppMessages} WA msg${unreadWhatsAppMessages === 1 ? '' : 's'}` : ''}`
-    : `${gstLiability > 0 ? `₹${formatINR(gstLiability)} GST liability` : 'Risk posture — higher is safer'}${bankBalance > 0 ? ` · ₹${formatINR(bankBalance)} bank` : ''}${unreadWhatsAppMessages > 0 ? ` · ${unreadWhatsAppMessages} WA msg${unreadWhatsAppMessages === 1 ? '' : 's'}` : ''}`;
-
-  const firstName = getFirstName(user?.name);
-
   return (
-    <div className="relative max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
-      {/* ── Ambient radial glow at top ── */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.08),_transparent_60%)]"
-      />
-
-      {/* ── Content ── */}
-      <div className="relative space-y-8">
-        {/* ═══ GREETING + AI INSIGHT ═══ */}
-        <motion.div
+    <div className="relative z-10 max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
+      <div className="relative z-10 space-y-6 md:space-y-8">
+        {/* ════════════════════════════════════════════════════════════════════
+            SECTION 1 — HERO
+            Greeting + 3 hero stats (Health Score, Today's Revenue, Pending GST)
+            + 3 quick actions.
+        ════════════════════════════════════════════════════════════════════ */}
+        <motion.section
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' as const }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          className="space-y-6"
         >
-          <div className="space-y-2 min-w-0">
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
-              {getGreeting()}, {firstName} <span className="inline-block">👋</span>
-            </h1>
-            <div className="flex items-start gap-2 text-sm text-muted-foreground">
-              <Sparkles className="h-4 w-4 mt-0.5 shrink-0 accent-text" />
-              <span className="leading-relaxed">{insight}</span>
+          {/* Greeting — single line, no redundant summary (tiles below show the numbers) */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div className="space-y-1.5">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                {getGreeting()},{' '}
+                <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                  {firstName}
+                </span>
+              </h1>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {snapshot.hasLiveData
+                  ? `${actionItems.length > 0 ? `${actionItems.length} action${actionItems.length === 1 ? '' : 's'} pending` : 'You\'re all caught up'} · ${abbreviateINR(snapshot.bankBalance)} cash on hand`
+                  : 'Your workspace is ready — create your first invoice to see live business data here.'}
+              </p>
             </div>
+            {/* Health Score badge — the SINGLE canonical health display on the
+                dashboard. The number + label both come from the business
+                snapshot API (`/api/business/snapshot` → rich engine). No other
+                widget renders a health score (AI Recs no longer emits a
+                "Business health is X/100" rule; the WorkflowPipeline header
+                shows a *pipeline* status badge, not a business health score). */}
+            {hasHealthScore && healthTier && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass-surface shrink-0">
+                <Brain className={`h-3.5 w-3.5 ${healthTier.tone === 'emerald' ? 'text-blue-400' : healthTier.tone === 'amber' ? 'text-amber-400' : 'text-rose-400'}`} />
+                <span className="text-xs font-medium text-muted-foreground">Health</span>
+                <span className="text-sm font-bold text-foreground gst-text-tabular">{snapshot.healthScore}</span>
+                <span className={`text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0 rounded-full ${BADGE_TONE[healthTier.tone]}`}>
+                  {healthTier.label}
+                </span>
+              </div>
+            )}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setCurrentView('clients')}
-            className="shrink-0 gap-1.5 text-muted-foreground hover:text-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Client
-          </Button>
-        </motion.div>
 
-        {/* ═══ BUSINESS HEALTH SCORE — prominent gauge ═══ */}
-        <BusinessHealthGauge
-          score={businessHealthScore}
-          insight={insight}
+          {/* 3 Hero Stats — EXECUTIVE PRIORITY ORDER:
+              1. Cash Position  → "How much money do I have?"
+              2. This Month's Revenue → revenue performance
+              3. Pending GST → compliance status
+              No per-stat CTAs (they duplicated the quick-action buttons below). */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* 1. Cash Position — bank balance + net cash flow */}
+            <HeroStat
+              index={0}
+              label="Cash Position"
+              numericValue={snapshot.bankBalance}
+              numericFormat="currencyCompact"
+              subtitle={
+                snapshot.bankBalance > 0
+                  ? `Bank balance · ${snapshot.netCashFlow >= 0 ? '+' : ''}${abbreviateINR(snapshot.netCashFlow)} net flow this FY`
+                  : 'Connect your bank account to see live cash position'
+              }
+              icon={<Wallet className="h-4 w-4 text-blue-400" />}
+              accent="emerald"
+            />
+
+            {/* 2. This Month's Revenue */}
+            <HeroStat
+              index={1}
+              label="This Month's Revenue"
+              numericValue={todaysRevenue}
+              numericFormat="currencyCompact"
+              subtitle={
+                todaysRevenue > 0
+                  ? `${snapshot.invoices.count} invoice${snapshot.invoices.count === 1 ? '' : 's'} issued · FY total ${abbreviateINR(snapshot.revenue)}`
+                  : 'No invoices issued this month yet'
+              }
+              icon={<IndianRupee className="h-4 w-4 text-blue-400" />}
+              accent="blue"
+            >
+              {todaysRevenue > 0 && revenueMom.direction !== 'flat' && (
+                <div className={`flex items-center gap-1 mt-1.5 text-[11px] font-medium ${revenueMom.direction === 'up' ? 'text-blue-400' : 'text-rose-400'}`}>
+                  {revenueMom.direction === 'up' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                  {revenueMom.pct}% vs last month
+                </div>
+              )}
+            </HeroStat>
+
+            {/* 3. Pending GST */}
+            <HeroStat
+              index={2}
+              label="Pending GST"
+              numericValue={pendingGst}
+              numericFormat="currencyCompact"
+              subtitle={
+                pendingGst > 0
+                  ? `Output ${abbreviateINR(snapshot.gst?.outputTax ?? 0)} − ITC ${abbreviateINR(snapshot.gst?.inputTax ?? 0)} · file to settle`
+                  : 'No net GST liability · all output tax offset by input tax credit'
+              }
+              icon={<Receipt className="h-4 w-4 text-amber-400" />}
+              accent="amber"
+            />
+          </div>
+
+          {/* Primary Quick Actions — ONE entry point per feature, no duplication */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button
+              size="sm"
+              onClick={() => setCurrentView('invoices')}
+              className="gap-2 accent-gradient text-white px-4 py-2 shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-white/20">
+                <FileText className="h-3.5 w-3.5 text-white" />
+              </span>
+              Create Invoice
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCurrentView('returns')}
+              className="gap-2 border border-border bg-transparent px-4 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
+                <ShieldCheck className="h-3.5 w-3.5 accent-text" />
+              </span>
+              File GST Return
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCurrentView('clients')}
+              className="gap-2 border border-border bg-transparent px-4 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
+                <Users className="h-3.5 w-3.5 accent-text" />
+              </span>
+              Add Client
+            </Button>
+          </div>
+        </motion.section>
+
+        {/* ════════════════════════════════════════════════════════════════════
+            SECTION 2 — WORKFLOW PIPELINE (Task 12 · Step 1)
+            The CENTRAL visual element. Shows the live state of every business
+            object as it flows through the canonical workflow:
+              Invoice → Payment → Bank → Match → GST → Oracle → Approve → Done
+            Every stage count comes from real Prisma data. Clicking a stage
+            navigates to the relevant module. The "User Approves" stage pulses
+            when it has items waiting — it's the action bottleneck.
+        ════════════════════════════════════════════════════════════════════ */}
+        <WorkflowPipeline
+          pipeline={pipeline}
+          loading={pipelineLoading}
+          onNavigate={(view) => setCurrentView(view as AppView)}
+          onRefresh={refreshPipeline}
         />
 
-        {/* ═══ KPI CARDS — exactly 3 ═══ */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <KpiCard
-            index={0}
-            label="Revenue"
-            value={revenueValue}
-            subtitle={revenueSubtitle}
-            icon={<IndianRupee className="h-4 w-4 accent-text" />}
-          />
-          <KpiCard
-            index={1}
-            label="Pending Compliance"
-            value={complianceValue}
-            subtitle={complianceSubtitle}
-            icon={<ShieldCheck className="h-4 w-4 accent-text" />}
-          />
-          <KpiCard
-            index={2}
-            label="Cash Position"
-            value={cashValue}
-            subtitle={cashSubtitle}
-            icon={<IndianRupee className="h-4 w-4 accent-text" />}
-          />
-        </div>
+        {/* ════════════════════════════════════════════════════════════════════
+            SECTION 3 — PROACTIVE ORACLE BRIEFING (Task 12 · Step 3)
+            Oracle does NOT wait for prompts. Oracle wakes up with knowledge.
+            This renders the daily briefing as a CFO would speak — what Oracle
+            already done, what needs the user's sign-off, and what Oracle is
+            watching. One-click approve/review actions on every attention item.
+        ════════════════════════════════════════════════════════════════════ */}
+        <ProactiveOracleBriefing
+          briefing={briefing}
+          loading={briefingLoading}
+          onNavigate={(view) => setCurrentView(view as AppView)}
+          onRefresh={refreshBriefing}
+          onOpenOracle={() => router.push('/oracle')}
+        />
 
-        {/* ═══ SCORE CARDS — Compliance / Collection / Risk (0-100) ═══ */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <ScoreCard
-            index={0}
-            label="Compliance Score"
-            score={complianceScore}
-            subtitle={complianceScoreSubtitle}
-            icon={<ShieldCheck className="h-4 w-4 accent-text" />}
-            tone="emerald"
+        {/* ════════════════════════════════════════════════════════════════════
+            SECTION 3 — BUSINESS SNAPSHOT
+            7 tiles: Revenue, Profit, Expenses, Cash Flow, Invoices, Clients,
+            GST Returns. Real numbers + real MoM indicator + a real revenue vs
+            expenses bar.
+        ════════════════════════════════════════════════════════════════════ */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.16, ease: 'easeOut' as const }}
+          className="glass-surface rounded-2xl p-5 md:p-6"
+        >
+          <SectionHeader
+            title="Business Snapshot"
+            icon={<Database className="h-4 w-4 accent-text" />}
+            actionLabel="View analytics"
+            onAction={() => setCurrentView('analytics')}
           />
-          <ScoreCard
-            index={1}
-            label="Collection Score"
-            score={collectionScore}
-            subtitle={collectionScoreSubtitle}
-            icon={<TrendingUp className="h-4 w-4 accent-text" />}
-            tone="cyan"
-          />
-          <ScoreCard
-            index={2}
-            label="Risk Score"
-            score={riskScore}
-            subtitle={riskScoreSubtitle}
-            icon={<ShieldAlert className="h-4 w-4 accent-text" />}
-            tone="amber"
-          />
-        </div>
 
-        {/* ═══ BOTTOM SECTIONS — 3 in a row ═══ */}
-        <div className="section-gap grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ── AI Recommendations ─────────────────────────────────────── */}
-          <SectionCard
-            index={0}
-            title="AI Recommendations"
-            icon={<Sparkles className="h-4 w-4 accent-text" />}
+          {/* 7-tile responsive grid: 2 cols mobile, 4 cols tablet, 7 cols desktop */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <SnapshotTile
+              index={0}
+              label="Revenue"
+              numericValue={snapshot.revenue}
+              numericFormat="currencyCompact"
+              subtitle="FY-to-date invoiced sales"
+              icon={<IndianRupee className="h-3.5 w-3.5 text-blue-400" />}
+              mom={revenueMom}
+              onClick={() => setCurrentView('invoices')}
+            />
+            <SnapshotTile
+              index={1}
+              label="Profit"
+              numericValue={snapshot.profit}
+              numericFormat="currencyCompact"
+              subtitle={`${snapshot.profitMargin > 0 ? `${(snapshot.profitMargin * 100).toFixed(0)}% margin` : 'revenue − expenses'}`}
+              icon={<TrendingUp className="h-3.5 w-3.5 text-blue-400" />}
+              onClick={() => setCurrentView('analytics')}
+            />
+            <SnapshotTile
+              index={2}
+              label="Expenses"
+              numericValue={snapshot.expenses}
+              numericFormat="currencyCompact"
+              subtitle="Purchases + operating costs"
+              icon={<TrendingDown className="h-3.5 w-3.5 text-rose-400" />}
+              onClick={() => setCurrentView('expenses')}
+            />
+            <SnapshotTile
+              index={3}
+              label="Cash Flow"
+              numericValue={snapshot.netCashFlow}
+              numericFormat="currencyCompact"
+              subtitle={`Collected − paid · bank ${abbreviateINR(snapshot.bankBalance)}`}
+              icon={<Wallet className="h-3.5 w-3.5 text-blue-300" />}
+              onClick={() => setCurrentView('banking')}
+            />
+            <SnapshotTile
+              index={4}
+              label="Invoices"
+              numericValue={snapshot.invoices.count}
+              numericFormat="integer"
+              subtitle={`${snapshot.invoices.overdue > 0 ? `${snapshot.invoices.overdue} overdue` : 'none overdue'}`}
+              icon={<FileText className="h-3.5 w-3.5 text-blue-400" />}
+              onClick={() => setCurrentView('invoices')}
+            />
+            <SnapshotTile
+              index={5}
+              label="Clients"
+              numericValue={snapshot.customers}
+              numericFormat="integer"
+              subtitle={`${snapshot.customers === 1 ? '1 active client' : `${snapshot.customers} active clients`}`}
+              icon={<Users className="h-3.5 w-3.5 text-blue-300" />}
+              onClick={() => setCurrentView('clients')}
+            />
+            <SnapshotTile
+              index={6}
+              label="GST Returns"
+              numericValue={snapshot.filedReturns + snapshot.pendingReturns}
+              numericFormat="integer"
+              subtitle={`${snapshot.filedReturns} filed · ${snapshot.pendingReturns} pending`}
+              icon={<Receipt className="h-3.5 w-3.5 text-amber-400" />}
+              onClick={() => setCurrentView('returns')}
+            />
+          </div>
+
+          {/* Revenue vs Expenses real bar */}
+          <div className="mt-5 pt-5 border-t border-white/[0.06]">
+            <RevenueExpenseBar revenue={snapshot.revenue} expenses={snapshot.expenses} />
+          </div>
+        </motion.section>
+
+        {/* ════════════════════════════════════════════════════════════════════
+            SECTION 4 — ACTION CENTER + SECTION 5 — AI RECOMMENDATIONS
+            (side by side on desktop, lazy-loaded when scrolled into view)
+        ════════════════════════════════════════════════════════════════════ */}
+        <LazySection placeholderHeight={380}>
+          {(inView) => inView ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* SECTION 4 — ACTION CENTER */}
+          <motion.section
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.22, ease: 'easeOut' as const }}
+            className="glass-surface rounded-2xl p-5 md:p-6 flex flex-col"
           >
-            {recommendations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  You&apos;re all caught up. Nothing needs your attention right now.
+            <SectionHeader
+              title="Action Center"
+              icon={<Zap className="h-4 w-4 accent-text" />}
+            />
+            {actionItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center py-10 flex-1">
+                <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 mb-3">
+                  <CheckCircle2 className="h-6 w-6 text-blue-400" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">You&apos;re all caught up</h3>
+                <p className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed">
+                  Nothing requires your attention right now. New actions will appear here as invoices come due, returns need filing, or syncs complete.
                 </p>
               </div>
             ) : (
-              <ul className="space-y-1">
-                {recommendations.map((rec) => (
-                  <li key={rec.id}>
-                    <div className="group flex items-start gap-3 py-2.5">
-                      <div className="flex items-center justify-center h-6 w-6 rounded-md accent-gradient-soft shrink-0 mt-0.5">
-                        {rec.icon}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] text-foreground leading-snug">
-                          {rec.title}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={rec.onAction}
-                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium accent-text hover:opacity-80 transition-opacity"
-                        >
-                          {rec.actionLabel}
-                          <ArrowRight className="h-3 w-3" />
-                        </button>
-                      </div>
+              <ScrollArea className="max-h-[420px] -mx-1 px-1 flex-1">
+                <div className="space-y-1">
+                  {actionItems.map((item, i) => (
+                    <div key={item.id} onClick={() => setCurrentView(item.view)}>
+                      <ActionRow item={item} index={i} />
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SectionCard>
-
-          {/* ── Today's Priorities ───────────────────────────────────── */}
-          <SectionCard
-            index={1}
-            title="Today's Priorities"
-            icon={<Zap className="h-4 w-4 accent-text" />}
-            actionLabel="View all"
-            onAction={() => setCurrentView('tasks')}
-          >
-            {todaysPriorities.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  No priorities today — you&apos;re ahead of schedule!
-                </p>
-              </div>
-            ) : (
-              <ScrollArea className="max-h-[280px] -mx-1 px-1">
-                <ul className="space-y-1">
-                  {todaysPriorities.map((p) => {
-                    const urgencyHigh = p.urgency >= 8;
-                    const urgencyMed = p.urgency >= 5 && p.urgency < 8;
-                    return (
-                      <li key={p.id}>
-                        <button
-                          type="button"
-                          onClick={() => setCurrentView(p.view)}
-                          className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition-colors group"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[13px] font-medium text-foreground truncate">
-                                {p.label}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
-                                {p.category} · urgency {p.urgency}/10
-                              </p>
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] px-1.5 py-0 h-5 shrink-0 ${
-                                urgencyHigh
-                                  ? 'border-amber-500/30 text-amber-400'
-                                  : urgencyMed
-                                    ? 'border-cyan-500/30 text-cyan-400'
-                                    : 'border-border text-muted-foreground'
-                              }`}
-                            >
-                              {urgencyHigh ? 'High' : urgencyMed ? 'Med' : 'Low'}
-                            </Badge>
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </ScrollArea>
-            )}
-          </SectionCard>
-
-          {/* ── Tasks (upcoming filings) ─────────────────────────────── */}
-          <SectionCard
-            index={2}
-            title="Tasks"
-            icon={<CheckSquare className="h-4 w-4 accent-text" />}
-            actionLabel="View all"
-            onAction={() => setCurrentView('returns')}
-          >
-            {upcomingFilings.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <CheckCircle2 className="h-7 w-7 text-emerald-500/70 mb-2" />
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  All returns filed — you&apos;re all caught up!
-                </p>
-              </div>
-            ) : (
-              <ScrollArea className="max-h-[280px] -mx-1 px-1">
-                <ul className="space-y-1">
-                  {upcomingFilings.map((r) => {
-                    const client = clientMap.get(r.clientId);
-                    const name = client?.tradeName ?? 'Unknown client';
-                    const dueDateStr = getFilingDueDate(r.returnType, r.period);
-                    const days = getDaysRemaining(dueDateStr);
-                    const overdue = days < 0;
-                    const dueSoon = days >= 0 && days <= 5;
-                    return (
-                      <li key={r.id}>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleFileReturn(r.clientId, r.returnType, r.period)
-                          }
-                          className="w-full text-left p-2.5 rounded-lg hover:bg-white/5 transition-colors group"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[13px] font-medium text-foreground truncate">
-                                {name}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">
-                                {r.returnType} · {periodToLabel(r.period)} ·{' '}
-                                {formatDateIN(dueDateStr)}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span
-                                className={`text-[11px] font-medium ${
-                                  overdue
-                                    ? 'text-red-400'
-                                    : dueSoon
-                                      ? 'text-amber-400'
-                                      : 'text-muted-foreground'
-                                }`}
-                              >
-                                {formatDaysRemaining(days)}
-                              </span>
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] px-1.5 py-0 h-5 ${
-                                  overdue
-                                    ? 'border-red-500/30 text-red-400'
-                                    : dueSoon
-                                      ? 'border-amber-500/30 text-amber-400'
-                                      : 'border-border text-muted-foreground'
-                                }`}
-                              >
-                                {r.status}
-                              </Badge>
-                            </div>
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </ScrollArea>
-            )}
-          </SectionCard>
-        </div>
-
-        {/* ═══ ADDITIONAL WIDGETS — Activity / Services / Team ═══ */}
-        <div className="section-gap grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ── Business Timeline (Recent Activity) ──────────────────── */}
-          <SectionCard
-            index={0}
-            title="Business Timeline"
-            icon={<Clock className="h-4 w-4 accent-text" />}
-            actionLabel="View all"
-            onAction={() => setCurrentView('timeline')}
-          >
-            {recentActivities.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <Activity className="h-7 w-7 text-muted-foreground/60 mb-2" />
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  No activity yet — actions you take will appear here.
-                </p>
-              </div>
-            ) : (
-              <ScrollArea className="max-h-[280px] -mx-1 px-1">
-                <div className="relative">
-                  <ul className="space-y-0">
-                    {recentActivities.slice(0, 6).map((a, i) => {
-                      const isLast = i === Math.min(recentActivities.length, 6) - 1;
-                      return (
-                        <li key={a.id} className="relative flex gap-3 pb-3 last:pb-0">
-                          {!isLast && (
-                            <span
-                              className="absolute left-[9px] top-7 bottom-0 w-px bg-white/[0.08]"
-                              aria-hidden
-                            />
-                          )}
-                          <span className="relative z-10 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-emerald-400/30 bg-[#050505] shrink-0 mt-1">
-                            <span className="h-1.5 w-1.5 rounded-full accent-gradient" />
-                          </span>
-                          <div className="min-w-0 flex-1 pt-0.5">
-                            <p className="text-[13px] font-medium text-foreground leading-snug">
-                              {a.title}
-                            </p>
-                            {a.description && (
-                              <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
-                                {a.description}
-                              </p>
-                            )}
-                            <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                              {a.createdAt ? timeAgo(a.createdAt as string) : ''}
-                            </p>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  ))}
                 </div>
               </ScrollArea>
             )}
-          </SectionCard>
+          </motion.section>
 
-          {/* ── Connected Services ───────────────────────────────────── */}
-          <SectionCard
-            index={1}
-            title="Connected Services"
-            icon={<Plug className="h-4 w-4 accent-text" />}
-            actionLabel="Manage"
-            onAction={() => setCurrentView('connections')}
+          {/* SECTION 5 — AI RECOMMENDATIONS */}
+          <motion.section
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.28, ease: 'easeOut' as const }}
+            className="glass-surface rounded-2xl p-5 md:p-6 flex flex-col"
           >
-            <div className="grid grid-cols-2 gap-2">
-              {connectedServices.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex flex-col gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-3"
+            <SectionHeader
+              title="AI Recommendations"
+              icon={<Sparkles className="h-4 w-4 accent-text" />}
+              actionLabel={aiRecommendations.length > 0 ? `View all (${aiRecommendations.length})` : undefined}
+              onAction={aiRecommendations.length > 0 ? () => router.push('/oracle') : undefined}
+            />
+            {aiRecsLoading ? (
+              <div className="space-y-2 flex-1">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-16 rounded-xl bg-white/[0.04] animate-pulse" />
+                ))}
+              </div>
+            ) : aiRecommendations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center py-10 flex-1">
+                <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 mb-3">
+                  <Brain className="h-6 w-6 text-amber-400" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">No recommendations yet</h3>
+                <p className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed">
+                  Oracle generates recommendations from your live business data. Connect Zoho Books or create invoices to unlock AI-driven insights on GST liability, cash flow, and risk.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => router.push('/oracle')}
+                  className="mt-3 gap-1.5 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.04] text-[11px] font-bold text-muted-foreground shrink-0">
-                      {s.initial}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">
-                        {s.name}
-                      </p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            s.connected ? 'bg-emerald-400' : 'bg-muted-foreground/40'
-                          }`}
-                        />
-                        <span className="text-[10px] text-muted-foreground">
-                          {s.connected ? 'Connected' : 'Not connected'}
-                        </span>
-                      </div>
-                    </div>
+                  <Brain className="h-3.5 w-3.5" />
+                  Open Oracle
+                </Button>
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[420px] -mx-1 px-1 flex-1">
+                <div className="space-y-2">
+                  {aiRecommendations.slice(0, 6).map((rec, i) => {
+                    const Icon = iconForAIRec(rec.type);
+                    const tone = priorityTone[rec.priority] ?? 'blue';
+                    const actionCfg = ACTION_TONE[tone];
+                    return (
+                      <motion.div
+                        key={rec.id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.3, delay: i * 0.04, ease: 'easeOut' as const }}
+                        className="group flex items-start gap-3 p-3 rounded-xl hover:bg-white/[0.04] transition-colors"
+                      >
+                        <div className={`flex items-center justify-center h-9 w-9 rounded-lg border shrink-0 ${actionCfg.chip}`}>
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                            <p className="text-[13px] font-medium text-foreground leading-snug">{rec.title}</p>
+                            <Badge variant="outline" className={`text-[11px] px-1.5 py-0 h-4 ${actionCfg.chip} capitalize`}>
+                              {rec.priority}
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">{rec.description}</p>
+                          <button
+                            type="button"
+                            onClick={() => rec.actionView ? setCurrentView(rec.actionView as AppView) : router.push('/oracle')}
+                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity"
+                          >
+                            View Details
+                            <ArrowRight className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            )}
+          </motion.section>
+        </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="glass-surface rounded-2xl p-5 md:p-6 h-[380px] flex items-center justify-center">
+                <ProSkeleton className="h-8 w-32" />
+              </div>
+              <div className="glass-surface rounded-2xl p-5 md:p-6 h-[380px] flex items-center justify-center">
+                <ProSkeleton className="h-8 w-32" />
+              </div>
+            </div>
+          )}
+        </LazySection>
+
+        {/* ════════════════════════════════════════════════════════════════════
+            SECTION 6 — RECENT ACTIVITY (lazy-loaded when scrolled into view)
+            A single chronological feed of every business event: invoices,
+            returns, payments, bank sync, Zoho sync, Google Drive.
+        ════════════════════════════════════════════════════════════════════ */}
+        <LazySection placeholderHeight={360}>
+          {(inView) => inView ? (
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.34, ease: 'easeOut' as const }}
+          className="glass-surface rounded-2xl p-5 md:p-6"
+        >
+          <SectionHeader
+            title="Recent Activity"
+            icon={<Activity className="h-4 w-4 accent-text" />}
+            actionLabel="View timeline"
+            onAction={() => setCurrentView('timeline')}
+          />
+          {timelineLoading && timelineEvents.length === 0 ? (
+            <div className="space-y-3">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-white/[0.04] animate-pulse shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 w-1/2 rounded bg-white/[0.04] animate-pulse" />
+                    <div className="h-2.5 w-1/4 rounded bg-white/[0.04] animate-pulse" />
                   </div>
                 </div>
               ))}
             </div>
-            <p className="text-[11px] text-muted-foreground text-center pt-3">
-              Connect services to sync automatically.
-            </p>
-          </SectionCard>
-
-          {/* ── Team Status ──────────────────────────────────────────── */}
-          <SectionCard
-            index={2}
-            title="Team Status"
-            icon={<Users className="h-4 w-4 accent-text" />}
-            actionLabel="Manage"
-            onAction={() => setCurrentView('team')}
-          >
-            {teamMembers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-6 text-center">
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient-soft mb-2">
-                  <Users className="h-4 w-4 accent-text" />
-                </div>
-                <p className="text-xs text-muted-foreground max-w-[220px]">
-                  No team members yet — invite your team to collaborate.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setCurrentView('team')}
-                  className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium accent-text hover:opacity-80 transition-opacity"
-                >
-                  [ Invite your team ]
-                  <ArrowRight className="h-3 w-3" />
-                </button>
+          ) : timelineEvents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center text-center py-10">
+              <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] mb-3">
+                <Activity className="h-6 w-6 text-muted-foreground" />
               </div>
-            ) : (
-              <ScrollArea className="max-h-[280px] -mx-1 px-1">
-                <ul className="space-y-1">
-                  {teamMembers.map((m) => {
-                    const initials = m.name.slice(0, 2).toUpperCase();
-                    const isActive = m.status === 'active';
+              <h3 className="text-sm font-semibold text-foreground">No activity yet</h3>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
+                Actions you take — invoices created, returns filed, payments received, bank/Zoho/Google syncs — will appear here chronologically.
+              </p>
+            </div>
+          ) : (
+            <ScrollArea className="max-h-[440px] -mx-1 px-1">
+              <div className="relative">
+                <ul className="space-y-0">
+                  {timelineEvents.slice(0, 12).map((ev: TimelineEvent, i: number) => {
+                    const isLast = i === Math.min(timelineEvents.length, 12) - 1;
+                    const { icon: Icon, tone } = activityIconFor(ev.type, ev.source);
                     return (
-                      <li key={m.id}>
-                        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full accent-gradient text-[11px] font-bold text-white shrink-0">
-                            {initials}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[13px] font-medium text-foreground truncate capitalize">
-                              {m.name}
+                      <li key={ev.id} className="relative flex gap-3 pb-4 last:pb-0">
+                        {!isLast && (
+                          <span
+                            className="absolute left-[15px] top-8 bottom-0 w-px bg-white/[0.06]"
+                            aria-hidden
+                          />
+                        )}
+                        <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.02] shrink-0 mt-0.5">
+                          <Icon className={`h-4 w-4 ${tone}`} />
+                        </span>
+                        <div className="min-w-0 flex-1 pt-0.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-[13px] font-medium text-foreground leading-snug">
+                              {ev.title}
                             </p>
-                            <p className="text-[11px] text-muted-foreground capitalize">
-                              {m.role}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                isActive ? 'bg-emerald-400' : 'bg-amber-400'
-                              }`}
-                            />
-                            <span
-                              className={`text-[10px] capitalize ${
-                                isActive ? 'text-emerald-400' : 'text-amber-400'
-                              }`}
-                            >
-                              {m.status}
+                            <span className="text-[11px] text-muted-foreground/70 shrink-0 tabular-nums">
+                              {ev.createdAt ? timeAgo(ev.createdAt) : ''}
                             </span>
+                          </div>
+                          {ev.description && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
+                              {ev.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                              {ev.source}
+                            </span>
+                            {ev.severity && ev.severity !== 'info' && (
+                              <span className={`text-[11px] font-semibold uppercase tracking-wider ${
+                                ev.severity === 'critical' ? 'text-rose-400'
+                                : ev.severity === 'warning' ? 'text-amber-400'
+                                : 'text-blue-400'
+                              }`}>
+                                · {ev.severity}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </li>
                     );
                   })}
                 </ul>
-              </ScrollArea>
-            )}
-          </SectionCard>
-        </div>
-
-        {/* ═══ ORACLE QUICK-ASK — AI assistant entry ═══ */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' as const }}
-          className="h-full"
-        >
-          <div className="glass-surface rounded-2xl p-6 hover-lift">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl accent-gradient shrink-0">
-                  <Brain className="h-5 w-5 text-white" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-foreground tracking-tight">
-                      Ask Oracle
-                    </h3>
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] px-1.5 py-0 h-5 border-emerald-500/30 text-emerald-400"
-                    >
-                      AI
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Ask any question about your clients, returns, or compliance — Oracle turns live firm data into instant answers and actions.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                    {[
-                      'What should I prioritize today?',
-                      'Show overdue returns',
-                      'Which clients are at risk?',
-                    ].map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => setCurrentView('ai-business-copilot')}
-                        className="text-[11px] rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-1 text-muted-foreground hover:border-emerald-400/30 hover:text-foreground transition-colors"
-                      >
-                        {q}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
-              <Button
-                size="sm"
-                className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
-                onClick={() => setCurrentView('ai-business-copilot')}
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-                Ask Oracle
-                <ArrowRight className="h-3 w-3" />
-              </Button>
+            </ScrollArea>
+          )}
+        </motion.section>
+          ) : (
+            <div className="glass-surface rounded-2xl p-5 md:p-6 h-[360px] flex items-center justify-center">
+              <ProSkeleton className="h-8 w-32" />
             </div>
-          </div>
-        </motion.div>
-
-        {/* ── Ready-to-file quick action footer (subtle, optional) ── */}
-        {(() => {
-          const ready = returns.filter((r) =>
-            ['validated', 'reviewed', 'generated'].includes(r.status),
-          );
-          if (ready.length === 0) return null;
-          const first = ready[0];
-          const client = clientMap.get(first.clientId);
-          const name = client?.tradeName ?? 'Unknown client';
-          return (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.56, ease: 'easeOut' as const }}
-            >
-              <div className="glass-surface rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex items-center justify-center h-9 w-9 rounded-lg accent-gradient-soft shrink-0">
-                    <CheckCircle2 className="h-4 w-4 accent-text" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {ready.length} return{ready.length === 1 ? '' : 's'} ready to file
-                    </p>
-                    <p className="text-[11px] text-muted-foreground truncate">
-                      Next up: {first.returnType} · {name} · {periodToLabel(first.period)}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  className="accent-gradient text-white hover:opacity-90 gap-1.5 shrink-0"
-                  onClick={() => handleQuickFile(first.id, name, first.returnType)}
-                  disabled={filingInProgress.has(first.id)}
-                >
-                  {filingInProgress.has(first.id) ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                  )}
-                  Quick File
-                </Button>
-              </div>
-            </motion.div>
-          );
-        })()}
+          )}
+        </LazySection>
       </div>
     </div>
   );

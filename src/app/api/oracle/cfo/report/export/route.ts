@@ -18,6 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { loadGSTReport } from '@/lib/oracle-cfo/gst-report-engine';
 import {
   generateGSTReportPDF,
@@ -45,8 +46,18 @@ const FILE_EXTENSIONS: Record<ExportFormat, string> = {
 };
 
 export async function GET(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
   const startedAt = Date.now();
   const url = new URL(request.url);
+  const orgId0 = url.searchParams.get('orgId') || url.searchParams.get('organizationId') || url.searchParams.get('firmId') || '';
+  if (orgId0) {
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
+  }
+
   const reportId = url.searchParams.get('reportId');
   const formatParam = (url.searchParams.get('format') ?? 'pdf').toLowerCase() as ExportFormat;
 
@@ -90,6 +101,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+  const url = new URL(request.url);
+  const orgId0 = url.searchParams.get('orgId') || url.searchParams.get('organizationId') || url.searchParams.get('firmId') || '';
+  if (orgId0) {
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
+  }
+
   const startedAt = Date.now();
   let body: any = {};
   try {

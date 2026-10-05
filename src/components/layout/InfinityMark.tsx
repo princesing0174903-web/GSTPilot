@@ -62,21 +62,21 @@ export function InfinitySymbol({ size = 32, className }: { size?: number; classN
       <defs>
         {/* Emerald → Cyan → Blue gradient for nodes + connecting lines */}
         <linearGradient id="infinity-grad-emerald" x1="0" y1="0" x2="48" y2="48">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="100%" stopColor="#06b6d4" />
+          <stop offset="0%" stopColor="#2563EB" />
+          <stop offset="100%" stopColor="#3B82F6" />
         </linearGradient>
         <linearGradient id="infinity-grad-cyan" x1="48" y1="0" x2="0" y2="48">
-          <stop offset="0%" stopColor="#06b6d4" />
+          <stop offset="0%" stopColor="#3B82F6" />
           <stop offset="100%" stopColor="#3b82f6" />
         </linearGradient>
         <linearGradient id="infinity-grad-blue" x1="0" y1="48" x2="48" y2="0">
           <stop offset="0%" stopColor="#3b82f6" />
-          <stop offset="100%" stopColor="#10b981" />
+          <stop offset="100%" stopColor="#2563EB" />
         </linearGradient>
         {/* Connecting line gradient: full spectrum */}
         <linearGradient id="infinity-line" x1="0" y1="0" x2="48" y2="48">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
-          <stop offset="50%" stopColor="#06b6d4" stopOpacity="0.6" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.6" />
+          <stop offset="50%" stopColor="#3B82F6" stopOpacity="0.6" />
           <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.6" />
         </linearGradient>
       </defs>

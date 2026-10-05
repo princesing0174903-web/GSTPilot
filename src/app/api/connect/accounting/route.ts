@@ -99,23 +99,36 @@ export async function POST(request: NextRequest) {
     }
 
     // Store invoices
+    // (Was N+1: sequential create per invoice. Now batched via createMany
+    // with chunking to stay under SQLite parameter limits.)
     const invoices = body.invoices ?? [];
-    for (const inv of invoices) {
-      const record = accountingInvoiceToRecord(inv, connectionId, userId);
-      await db.syncedRecord.create({
-        data: {
-          connectionId: record.connectionId,
-          userId: record.userId,
-          sourceType: record.sourceType,
-          externalId: record.externalId,
-          title: record.title,
-          amount: record.amount,
-          date: record.date,
-          rawData: JSON.stringify(record.rawData),
-          category: record.category,
-          processed: record.processed,
-        },
-      }).catch(() => {});
+    if (invoices.length > 0) {
+      const records = invoices.map((inv) => {
+        const r = accountingInvoiceToRecord(inv, connectionId, userId);
+        return {
+          connectionId: r.connectionId,
+          userId: r.userId,
+          sourceType: r.sourceType,
+          externalId: r.externalId,
+          title: r.title,
+          amount: r.amount,
+          date: r.date,
+          rawData: JSON.stringify(r.rawData),
+          category: r.category,
+          processed: r.processed,
+        };
+      });
+      // Chunk into batches of 100 to avoid SQLite parameter limits.
+      for (let i = 0; i < records.length; i += 100) {
+        try {
+          await db.syncedRecord.createMany({
+            data: records.slice(i, i + 100),
+            skipDuplicates: true,
+          });
+        } catch {
+          /* non-fatal per-row errors swallowed (matches old behaviour) */
+        }
+      }
     }
 
     const salesCount = invoices.filter((i) => i.invoiceType === 'sales').length;

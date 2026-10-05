@@ -84,9 +84,9 @@ const staggerChild = {
 const glowPulse = {
   animate: {
     boxShadow: [
-      '0 0 0px rgba(16, 185, 129, 0)',
-      '0 0 20px rgba(16, 185, 129, 0.15)',
-      '0 0 0px rgba(16, 185, 129, 0)',
+      '0 0 0px rgba(37,99,235, 0)',
+      '0 0 20px rgba(37,99,235, 0.15)',
+      '0 0 0px rgba(37,99,235, 0)',
     ],
   },
   transition: { duration: 3, repeat: Infinity, ease: 'easeInOut' as const },
@@ -132,7 +132,7 @@ function useCountUp(target: number, duration = 1500) {
 // SVG CHART COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function Sparkline({ data, color = '#10b981', w = 100, h = 28 }: {
+function Sparkline({ data, color = '#10B981', w = 100, h = 28 }: {
   data: number[]; color?: string; w?: number; h?: number
 }) {
   if (data.length < 2) return null
@@ -168,7 +168,7 @@ function Sparkline({ data, color = '#10b981', w = 100, h = 28 }: {
   )
 }
 
-function AreaChart({ data, labels, color = '#10b981', h = 180 }: {
+function AreaChart({ data, labels, color = '#10B981', h = 180 }: {
   data: number[]; labels?: string[]; color?: string; h?: number
 }) {
   const w = 340
@@ -275,17 +275,17 @@ function PredictionChart({ actual, predicted, upper, lower, h = 120 }: {
     <svg width={w} height={h} className="overflow-visible">
       <defs>
         <linearGradient id="pred-band" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#10B981" stopOpacity="0.15" />
+          <stop offset="100%" stopColor="#10B981" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {/* Confidence band */}
       <path d={bandPath} fill="url(#pred-band)" />
       {/* Actual */}
-      <motion.path d={actualLine} fill="none" stroke="#10b981" strokeWidth="2"
+      <motion.path d={actualLine} fill="none" stroke="#10B981" strokeWidth="2"
         strokeLinecap="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1 }} />
       {/* Predicted */}
-      <motion.path d={predLine} fill="none" stroke="#10b981" strokeWidth="2"
+      <motion.path d={predLine} fill="none" stroke="#10B981" strokeWidth="2"
         strokeDasharray="6,4" strokeLinecap="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1, delay: 0.5 }} />
       {/* Divide line */}
@@ -339,13 +339,13 @@ function RadarChart({ values, labels, size = 180 }: {
           const p = getPoint(i, v / 100)
           return `${p.x},${p.y}`
         }).join(' ')}
-        fill="rgba(16, 185, 129, 0.15)" stroke="#10b981" strokeWidth="2"
+        fill="rgba(16,185,129, 0.15)" stroke="#10B981" strokeWidth="2"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1 }}
       />
       {/* Data dots */}
       {values.map((v, i) => {
         const p = getPoint(i, v / 100)
-        return <motion.circle key={i} cx={p.x} cy={p.y} r="3.5" fill="#10b981" stroke="#0f172a" strokeWidth="2"
+        return <motion.circle key={i} cx={p.x} cy={p.y} r="3.5" fill="#10B981" stroke="#0f172a" strokeWidth="2"
           initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.5 + i * 0.08 }} />
       })}
       {/* Labels */}
@@ -439,10 +439,10 @@ function HorizontalBars({ items }: {
 
 function MiniNetworkGraph({ nodeCount }: { nodeCount: { orgs: number; clients: number; invoices: number; returns: number } }) {
   const nodes = [
-    { x: 170, y: 60, r: 22, label: 'Firm', color: '#10b981', count: nodeCount.orgs },
-    { x: 70, y: 140, r: 16, label: 'Clients', color: '#3b82f6', count: nodeCount.clients },
+    { x: 170, y: 60, r: 22, label: 'Firm', color: '#10B981', count: nodeCount.orgs },
+    { x: 70, y: 140, r: 16, label: 'Clients', color: '#06b6d4', count: nodeCount.clients },
     { x: 270, y: 130, r: 14, label: 'Invoices', color: '#f59e0b', count: nodeCount.invoices },
-    { x: 120, y: 220, r: 12, label: 'Returns', color: '#8b5cf6', count: nodeCount.returns },
+    { x: 120, y: 220, r: 12, label: 'Returns', color: '#10b981', count: nodeCount.returns },
     { x: 230, y: 230, r: 11, label: 'Docs', color: '#ec4899', count: 0 },
   ]
 
@@ -472,7 +472,7 @@ function MiniNetworkGraph({ nodeCount }: { nodeCount: { orgs: number; clients: n
             transition={{ delay: i * 0.15, duration: 0.6 }}
           />
           {/* Pulse dot */}
-          <motion.circle r="2.5" fill="#10b981" filter="url(#glow)"
+          <motion.circle r="2.5" fill="#10B981" filter="url(#glow)"
             initial={false}
             animate={{
               cx: [nodes[from].x, nodes[to].x],
@@ -861,8 +861,8 @@ export default function ExecutiveWarRoomPage() {
     // No demo fallback — return only real revenue. Empty array renders
     // nothing inside the HorizontalBars component.
     return [
-      { label: 'GST Filing', value: gstRevenue, color: '#10b981' },
-      { label: 'TDS', value: tdsRevenue, color: '#3b82f6' },
+      { label: 'GST Filing', value: gstRevenue, color: '#10B981' },
+      { label: 'TDS', value: tdsRevenue, color: '#06b6d4' },
     ]
   }, [invoices])
 
@@ -1015,7 +1015,7 @@ export default function ExecutiveWarRoomPage() {
         <div className="flex items-center gap-3">
           <motion.div
             className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/20"
-            animate={{ boxShadow: ['0 0 0px rgba(16,185,129,0)', '0 0 20px rgba(16,185,129,0.3)', '0 0 0px rgba(16,185,129,0)'] }}
+            animate={{ boxShadow: ['0 0 0px rgba(37,99,235,0)', '0 0 20px rgba(37,99,235,0.3)', '0 0 0px rgba(37,99,235,0)'] }}
             transition={{ duration: 3, repeat: Infinity }}
           >
             <Shield className="h-5 w-5 text-white" />
@@ -1051,17 +1051,17 @@ export default function ExecutiveWarRoomPage() {
           <KPICard
             title="Revenue" value={kpis.revenue} formatted={fmtINR(kpis.revenue)}
             trend="up" trendLabel="+12.3%" sparkData={generateSparkline()}
-            icon={IndianRupee} color="#10b981" index={0}
+            icon={IndianRupee} color="#10B981" index={0}
           />
           <KPICard
             title="Cash Flow" value={kpis.cashFlow} formatted={fmtINR(kpis.cashFlow)}
             trend="up" trendLabel="Healthy" sparkData={generateSparkline()}
-            icon={Wallet} color="#3b82f6" index={1}
+            icon={Wallet} color="#06b6d4" index={1}
           />
           <KPICard
             title="Compliance" value={Math.round(kpis.compliance)} formatted={pct(kpis.compliance)}
             trend="up" trendLabel="↑ 2.1%" sparkData={generateSparkline()}
-            icon={Shield} color="#8b5cf6" index={2}
+            icon={Shield} color="#10b981" index={2}
           />
           <KPICard
             title="Active Clients" value={kpis.activeClients} formatted={String(kpis.activeClients)}
@@ -1076,7 +1076,7 @@ export default function ExecutiveWarRoomPage() {
           <KPICard
             title="Collection Rate" value={Math.round(kpis.collectionRate * 10)} formatted={pct(kpis.collectionRate)}
             trend="up" trendLabel="↑ 4.2%" sparkData={generateSparkline()}
-            icon={Target} color="#06b6d4" index={5}
+            icon={Target} color="#34D399" index={5}
           />
           <KPICard
             title="Risk Score" value={kpis.riskScore} formatted={`${kpis.riskScore}/100`}
@@ -1108,7 +1108,7 @@ export default function ExecutiveWarRoomPage() {
             {/* Revenue Chart */}
             <div>
               <p className="text-[11px] text-slate-500 mb-2">Revenue Trend (12 months)</p>
-              <AreaChart data={revenueChartData.data} labels={revenueChartData.labels} color="#10b981" h={160} />
+              <AreaChart data={revenueChartData.data} labels={revenueChartData.labels} color="#10B981" h={160} />
             </div>
 
             {/* Cash Flow Prediction */}
@@ -1178,7 +1178,7 @@ export default function ExecutiveWarRoomPage() {
           <GlassPanel delay={0.5} className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-blue-400" />
+                <Globe className="h-4 w-4 text-cyan-400" />
                 <h3 className="text-sm font-semibold text-white">Business Graph</h3>
               </div>
               <Button variant="ghost" size="sm"
@@ -1197,9 +1197,9 @@ export default function ExecutiveWarRoomPage() {
             <div className="grid grid-cols-4 gap-2">
               {[
                 { label: 'Orgs', count: nodeCount.orgs, color: 'text-emerald-400' },
-                { label: 'Clients', count: nodeCount.clients, color: 'text-blue-400' },
+                { label: 'Clients', count: nodeCount.clients, color: 'text-cyan-400' },
                 { label: 'Invoices', count: nodeCount.invoices, color: 'text-amber-400' },
-                { label: 'Returns', count: nodeCount.returns, color: 'text-purple-400' },
+                { label: 'Returns', count: nodeCount.returns, color: 'text-emerald-400' },
               ].map((item, i) => (
                 <div key={i} className="text-center p-2 rounded-lg bg-slate-800/30 border border-slate-700/20">
                   <p className={`text-sm font-bold ${item.color}`}>{item.count}</p>
@@ -1257,10 +1257,10 @@ export default function ExecutiveWarRoomPage() {
           <GlassPanel delay={0.7} className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Brain className="h-4 w-4 text-purple-400" />
+                <Brain className="h-4 w-4 text-emerald-400" />
                 <h3 className="text-sm font-semibold text-white">AI Intelligence</h3>
               </div>
-              <Sparkles className="h-3.5 w-3.5 text-purple-400 animate-pulse" />
+              <Sparkles className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
             </div>
 
             {/* AI Recommendations */}
@@ -1287,7 +1287,7 @@ export default function ExecutiveWarRoomPage() {
                         <Badge className={`text-[8px] px-1 py-0 h-4 ${
                           rec.priority === 'critical' ? 'bg-red-500/20 text-red-400 border-red-500/30'
                           : rec.priority === 'high' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                          : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                          : 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
                         }`}>
                           {rec.priority.toUpperCase()}
                         </Badge>
@@ -1365,7 +1365,7 @@ export default function ExecutiveWarRoomPage() {
                       className="flex items-start gap-2 p-2 rounded-lg bg-red-500/5 border border-red-500/10"
                     >
                       <AlertTriangle className={`h-3 w-3 mt-0.5 ${
-                        anomaly.severity === 'high' ? 'text-red-400' : anomaly.severity === 'medium' ? 'text-amber-400' : 'text-blue-400'
+                        anomaly.severity === 'high' ? 'text-red-400' : anomaly.severity === 'medium' ? 'text-amber-400' : 'text-cyan-400'
                       }`} />
                       <p className="text-[10px] text-slate-400 leading-tight">{anomaly.text}</p>
                     </motion.div>
@@ -1408,7 +1408,7 @@ export default function ExecutiveWarRoomPage() {
               <p className="text-[10px] text-slate-500 mb-2 font-medium uppercase tracking-wider">Collection Funnel</p>
               <div className="space-y-2">
                 {[
-                  { label: 'Invoiced', value: collectionFunnel.totalInvoiced, pct: 100, color: 'bg-blue-500' },
+                  { label: 'Invoiced', value: collectionFunnel.totalInvoiced, pct: 100, color: 'bg-cyan-500' },
                   { label: 'Collected', value: collectionFunnel.collected, pct: 87.3, color: 'bg-emerald-500' },
                   { label: 'Overdue', value: collectionFunnel.overdue, pct: 8.0, color: 'bg-amber-500' },
                   { label: 'Written Off', value: collectionFunnel.writtenOff, pct: 1.2, color: 'bg-red-500' },
@@ -1481,7 +1481,7 @@ export default function ExecutiveWarRoomPage() {
           <GlassPanel delay={1.1} className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Gauge className="h-4 w-4 text-purple-400" />
+                <Gauge className="h-4 w-4 text-emerald-400" />
                 <h3 className="text-sm font-semibold text-white">Compliance Radar</h3>
               </div>
               <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">—</Badge>
@@ -1507,7 +1507,7 @@ export default function ExecutiveWarRoomPage() {
                     key={i}
                     className="flex-1 rounded-sm"
                     style={{
-                      backgroundColor: v >= 90 ? '#10b981' : v >= 80 ? '#f59e0b' : '#ef4444',
+                      backgroundColor: v >= 90 ? '#10B981' : v >= 80 ? '#f59e0b' : '#ef4444',
                       opacity: 0.7 + (v / 100) * 0.3,
                     }}
                     initial={{ height: 0 }}
@@ -1542,7 +1542,7 @@ export default function ExecutiveWarRoomPage() {
                   upcomingDeadlines.map((dl, i) => (
                     <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-slate-800/30">
                       <div className="flex items-center gap-2">
-                        <Badge className="text-[8px] px-1 py-0 h-4 bg-purple-500/20 text-purple-400 border-purple-500/30">
+                        <Badge className="text-[8px] px-1 py-0 h-4 bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
                           {dl.type}
                         </Badge>
                         <span className="text-[10px] text-slate-400 truncate max-w-[100px]">{dl.client}</span>
@@ -1551,7 +1551,7 @@ export default function ExecutiveWarRoomPage() {
                         <span className="text-[10px] text-amber-400">{dl.dueDate}</span>
                         <Badge className={`text-[8px] px-1 py-0 h-4 ${
                           dl.status === 'draft' ? 'bg-slate-500/20 text-slate-400 border-slate-500/30'
-                          : dl.status === 'generated' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                          : dl.status === 'generated' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
                           : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                         }`}>
                           {dl.status}
@@ -1629,7 +1629,7 @@ export default function ExecutiveWarRoomPage() {
             {/* AI Agent Performance */}
             <div>
               <p className="text-[10px] text-slate-500 mb-2 font-medium uppercase tracking-wider flex items-center gap-1.5">
-                <Brain className="h-3 w-3 text-purple-400" />
+                <Brain className="h-3 w-3 text-emerald-400" />
                 AI Agent Fleet
               </p>
               <div className="space-y-2">

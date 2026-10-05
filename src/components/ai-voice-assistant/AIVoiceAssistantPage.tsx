@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -21,7 +21,6 @@ import {
   Radio,
   CheckCircle2,
   Clock,
-  Loader2,
   Volume2,
   MessageSquare,
   Zap,
@@ -30,8 +29,6 @@ import {
   AlertTriangle,
   BarChart3,
   Users,
-  Search,
-  TrendingUp,
   Settings,
   Command,
   Activity,
@@ -39,7 +36,6 @@ import {
   Shield,
   FileCheck,
   FileWarning,
-  Hash,
   Timer,
   Target,
   ArrowRight,
@@ -50,8 +46,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Color Palette ──────────────────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
   amber: '#f59e0b',
@@ -164,45 +160,23 @@ function WaveformVisualizer({ isActive }: { isActive: boolean }) {
   );
 }
 
-// ─── Sample Data ────────────────────────────────────────────────────────────
-const commandHistory: VoiceCommand[] = [
-  { id: 'c1', transcription: 'Show pending GSTR-1', action: 'Navigate Returns', actionDescription: 'Opened GSTR-1 pending returns with 12 clients', timestamp: '04/03/2026 10:32 AM', status: 'success', responseTime: 1.2 },
-  { id: 'c2', transcription: 'File ABC Traders', action: 'Start Return Filing', actionDescription: 'Initiated GSTR-3B filing for ABC Traders, Mar 2026', timestamp: '04/03/2026 10:28 AM', status: 'success', responseTime: 2.1 },
-  { id: 'c3', transcription: 'Which clients are at risk?', action: 'Show Risk Analysis', actionDescription: 'Displayed 5 at-risk clients with compliance scores', timestamp: '04/03/2026 10:22 AM', status: 'success', responseTime: 1.8 },
-  { id: 'c4', transcription: 'Generate monthly report', action: 'Create Report', actionDescription: 'Generated March 2026 monthly compliance report', timestamp: '04/03/2026 10:15 AM', status: 'success', responseTime: 3.4 },
-  { id: 'c5', transcription: 'Run reconciliation', action: 'Start Reconciliation', actionDescription: 'Launched 2A/2B reconciliation for all active clients', timestamp: '04/03/2026 10:08 AM', status: 'success', responseTime: 2.7 },
-  { id: 'c6', transcription: 'Prepare all returns', action: 'Batch Return Prep', actionDescription: 'Queued GSTR-1 preparation for 18 clients', timestamp: '04/03/2026 09:55 AM', status: 'success', responseTime: 4.1 },
-  { id: 'c7', transcription: 'Show overdue notices', action: 'Display Notices', actionDescription: 'Found 3 overdue notices from GST department', timestamp: '04/03/2026 09:48 AM', status: 'success', responseTime: 1.5 },
-  { id: 'c8', transcription: "What's my revenue?", action: 'Show Revenue', actionDescription: 'Total revenue: \u20B94,52,00,000 for FY 2025-26', timestamp: '04/03/2026 09:40 AM', status: 'success', responseTime: 1.1 },
-  { id: 'c9', transcription: 'Run payroll', action: 'Start Payroll', actionDescription: 'Payroll processing requires additional confirmation', timestamp: '04/03/2026 09:35 AM', status: 'failed', responseTime: 0.8 },
-  { id: 'c10', transcription: 'Check compliance', action: 'Compliance Status', actionDescription: 'Overall compliance: 94.5% across 24 clients', timestamp: '04/03/2026 09:28 AM', status: 'success', responseTime: 2.3 },
-  { id: 'c11', transcription: 'File ABC Traders GSTR-1', action: 'Start Return Filing', actionDescription: 'Initiated GSTR-1 filing for ABC Traders', timestamp: '03/03/2026 16:45 PM', status: 'success', responseTime: 2.5 },
-  { id: 'c12', transcription: 'Show Patel & Sons invoices', action: 'Navigate Invoices', actionDescription: 'Opened invoice workspace for Patel & Sons', timestamp: '03/03/2026 16:30 PM', status: 'success', responseTime: 1.4 },
-  { id: 'c13', transcription: 'Run reconciliation for March', action: 'Start Reconciliation', actionDescription: 'Started 2A/2B reconciliation for Mar 2026 period', timestamp: '03/03/2026 15:20 PM', status: 'success', responseTime: 3.2 },
-  { id: 'c14', transcription: 'Generate compliance report', action: 'Create Report', actionDescription: 'Generated compliance summary report', timestamp: '03/03/2026 14:10 PM', status: 'success', responseTime: 2.9 },
-  { id: 'c15', transcription: 'Show client list', action: 'Navigate Clients', actionDescription: 'Opened client registry with 24 active clients', timestamp: '03/03/2026 13:45 PM', status: 'success', responseTime: 0.9 },
-];
+// ─── Sample Data (empty — populated by real voice interactions) ──────────────
+const commandHistory: VoiceCommand[] = [];
 
 const quickCommands: QuickCommand[] = [
-  { id: 'q1', label: 'Pending GSTR-1', voiceCommand: 'Show pending GSTR-1', icon: FileText, color: '#10b981', action: 'Navigate Returns' },
-  { id: 'q2', label: 'File Return', voiceCommand: 'File ABC Traders', icon: FileCheck, color: '#3b82f6', action: 'Start Filing' },
+  { id: 'q1', label: 'Pending GSTR-1', voiceCommand: 'Show pending GSTR-1', icon: FileText, color: '#2563EB', action: 'Navigate Returns' },
+  { id: 'q2', label: 'File Return', voiceCommand: 'File a return', icon: FileCheck, color: '#3b82f6', action: 'Start Filing' },
   { id: 'q3', label: 'At-Risk Clients', voiceCommand: 'Which clients are at risk?', icon: AlertTriangle, color: '#f59e0b', action: 'Show Risks' },
   { id: 'q4', label: 'Monthly Report', voiceCommand: 'Generate monthly report', icon: BarChart3, color: '#8b5cf6', action: 'Create Report' },
-  { id: 'q5', label: 'Reconcile', voiceCommand: 'Run reconciliation', icon: RefreshCw, color: '#06b6d4', action: 'Reconcile' },
+  { id: 'q5', label: 'Reconcile', voiceCommand: 'Run reconciliation', icon: RefreshCw, color: '#3B82F6', action: 'Reconcile' },
   { id: 'q6', label: 'Prepare Returns', voiceCommand: 'Prepare all returns', icon: Play, color: '#ec4899', action: 'Batch Prep' },
   { id: 'q7', label: 'Overdue Notices', voiceCommand: 'Show overdue notices', icon: FileWarning, color: '#ef4444', action: 'Show Notices' },
-  { id: 'q8', label: 'Revenue', voiceCommand: "What's my revenue?", icon: DollarSign, color: '#10b981', action: 'Show Revenue' },
+  { id: 'q8', label: 'Revenue', voiceCommand: "What's my revenue?", icon: DollarSign, color: '#2563EB', action: 'Show Revenue' },
   { id: 'q9', label: 'Run Payroll', voiceCommand: 'Run payroll', icon: Users, color: '#f97316', action: 'Payroll' },
   { id: 'q10', label: 'Compliance', voiceCommand: 'Check compliance', icon: Shield, color: '#14b8a6', action: 'Compliance' },
 ];
 
-const recentSessions: VoiceSession[] = [
-  { id: 's1', startedAt: '04/03/2026 10:30 AM', commandsCount: 4, lastCommand: 'Show pending GSTR-1', status: 'active' },
-  { id: 's2', startedAt: '04/03/2026 09:25 AM', commandsCount: 3, lastCommand: 'Check compliance', status: 'completed' },
-  { id: 's3', startedAt: '03/03/2026 16:40 PM', commandsCount: 5, lastCommand: 'Show Patel & Sons invoices', status: 'completed' },
-  { id: 's4', startedAt: '03/03/2026 14:05 PM', commandsCount: 2, lastCommand: 'Generate compliance report', status: 'completed' },
-  { id: 's5', startedAt: '03/03/2026 11:00 AM', commandsCount: 6, lastCommand: 'Run reconciliation for March', status: 'completed' },
-];
+const recentSessions: VoiceSession[] = [];
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 export default function AIVoiceAssistantPage() {
@@ -217,7 +191,7 @@ export default function AIVoiceAssistantPage() {
     confirmationRequired: false,
   });
 
-  // Simulate voice command detection
+  // Simulate voice command detection (interactive UI demo only — does not persist)
   const simulateVoiceCommand = useCallback(() => {
     setIsListening(true);
     setCurrentTranscription('');
@@ -225,7 +199,7 @@ export default function AIVoiceAssistantPage() {
 
     const commands = [
       { transcription: 'Show pending GSTR-1 returns', action: 'Navigate Returns', description: 'Opening GSTR-1 pending returns dashboard...' },
-      { transcription: 'File ABC Traders March return', action: 'Start Filing', description: 'Initiating GSTR-3B for ABC Traders...' },
+      { transcription: 'File this month return', action: 'Start Filing', description: 'Initiating GSTR-3B filing...' },
       { transcription: 'Which clients are at risk this month?', action: 'Risk Analysis', description: 'Analyzing compliance scores for all clients...' },
     ];
 
@@ -248,7 +222,7 @@ export default function AIVoiceAssistantPage() {
           actionDescription: cmd.description,
           timestamp: new Date().toLocaleString('en-IN'),
           status: 'success',
-          responseTime: +(Math.random() * 3 + 0.5).toFixed(1),
+          responseTime: 0,
         });
       }
     }, 200);
@@ -257,21 +231,14 @@ export default function AIVoiceAssistantPage() {
   }, []);
 
   const metrics = [
-    { label: 'Commands Today', value: '23', icon: Command, color: 'emerald' },
-    { label: 'Success Rate', value: '96.2%', icon: Target, color: 'emerald' },
-    { label: 'Avg Response', value: '1.9s', icon: Timer, color: 'teal' },
-    { label: 'Most Used', value: 'Returns', icon: FileText, color: 'purple' },
-    { label: 'Active Sessions', value: '1', icon: Activity, color: 'emerald' },
+    { label: 'Commands Today', value: '0', icon: Command, color: 'emerald' },
+    { label: 'Success Rate', value: '—', icon: Target, color: 'emerald' },
+    { label: 'Avg Response', value: '—', icon: Timer, color: 'teal' },
+    { label: 'Most Used', value: '—', icon: FileText, color: 'purple' },
+    { label: 'Active Sessions', value: '0', icon: Activity, color: 'emerald' },
   ];
 
-  const commandAnalytics = [
-    { command: 'Show pending GSTR-1', count: 34, successRate: 100, avgTime: 1.2 },
-    { command: 'File return', count: 28, successRate: 96, avgTime: 2.1 },
-    { command: 'Run reconciliation', count: 22, successRate: 95, avgTime: 2.7 },
-    { command: 'Generate report', count: 19, successRate: 100, avgTime: 3.4 },
-    { command: 'Show at-risk clients', count: 16, successRate: 100, avgTime: 1.8 },
-    { command: 'Check compliance', count: 14, successRate: 93, avgTime: 2.3 },
-  ];
+  const commandAnalytics: { command: string; count: number; successRate: number; avgTime: number }[] = [];
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
@@ -455,7 +422,13 @@ export default function AIVoiceAssistantPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {recentSessions.filter((s) => s.status === 'active').map((session) => (
+                      {recentSessions.filter((s) => s.status === 'active').length === 0 ? (
+                        <div className="h-40 flex flex-col items-center justify-center text-slate-400">
+                          <Activity className="h-10 w-10 mb-3 text-slate-200" />
+                          <p className="text-sm font-medium">No active session</p>
+                          <p className="text-xs text-slate-300 mt-1 text-center">Start speaking to begin a new voice session</p>
+                        </div>
+                      ) : recentSessions.filter((s) => s.status === 'active').map((session) => (
                         <div key={session.id} className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs font-semibold text-emerald-700">Session #{session.id}</span>
@@ -503,7 +476,7 @@ export default function AIVoiceAssistantPage() {
                               actionDescription: `Executing: ${cmd.action}...`,
                               timestamp: new Date().toLocaleString('en-IN'),
                               status: 'success',
-                              responseTime: +(Math.random() * 2 + 0.5).toFixed(1),
+                              responseTime: 0,
                             });
                           }}
                           whileHover={{ scale: 1.02 }}
@@ -536,7 +509,13 @@ export default function AIVoiceAssistantPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {commandAnalytics.map((cmd, i) => (
+                  {commandAnalytics.length === 0 ? (
+                    <div className="h-40 flex flex-col items-center justify-center text-slate-400">
+                      <BarChart3 className="h-10 w-10 mb-3 text-slate-200" />
+                      <p className="text-sm font-medium">No command analytics yet</p>
+                      <p className="text-xs text-slate-300 mt-1 text-center">Analytics will appear once you start issuing voice commands</p>
+                    </div>
+                  ) : commandAnalytics.map((cmd, i) => (
                     <motion.div
                       key={i}
                       initial={{ opacity: 0, x: -10 }}
@@ -567,31 +546,38 @@ export default function AIVoiceAssistantPage() {
                 {/* Usage chart */}
                 <div>
                   <h4 className="text-xs font-semibold text-slate-600 mb-3">Command Frequency</h4>
-                  <svg width="100%" height="120" viewBox="0 0 400 120" className="overflow-visible">
-                    {commandAnalytics.map((cmd, i) => {
-                      const barWidth = (cmd.count / 34) * 280;
-                      const y = i * 18 + 5;
-                      return (
-                        <React.Fragment key={i}>
-                          <text x="0" y={y + 10} className="fill-slate-400 text-[8px]">{cmd.command.slice(0, 15)}</text>
-                          <motion.rect
-                            x="120"
-                            y={y}
-                            width={barWidth}
-                            height="12"
-                            rx="3"
-                            fill={i < 3 ? COLORS.emerald : '#d1fae5'}
-                            initial={{ width: 0 }}
-                            animate={{ width: barWidth }}
-                            transition={{ duration: 0.6, delay: i * 0.08 }}
-                          />
-                          <text x={120 + barWidth + 5} y={y + 10} className="fill-slate-500 text-[9px] font-semibold">
-                            {cmd.count}
-                          </text>
-                        </React.Fragment>
-                      );
-                    })}
-                  </svg>
+                  {commandAnalytics.length === 0 ? (
+                    <div className="h-24 flex items-center justify-center text-slate-300 text-xs italic">
+                      No command frequency data yet
+                    </div>
+                  ) : (
+                    <svg width="100%" height="120" viewBox="0 0 400 120" className="overflow-visible">
+                      {commandAnalytics.map((cmd, i) => {
+                        const maxCount = Math.max(...commandAnalytics.map((c) => c.count), 1);
+                        const barWidth = (cmd.count / maxCount) * 280;
+                        const y = i * 18 + 5;
+                        return (
+                          <React.Fragment key={i}>
+                            <text x="0" y={y + 10} className="fill-slate-400 text-[8px]">{cmd.command.slice(0, 15)}</text>
+                            <motion.rect
+                              x="120"
+                              y={y}
+                              width={barWidth}
+                              height="12"
+                              rx="3"
+                              fill={i < 3 ? COLORS.emerald : '#d1fae5'}
+                              initial={{ width: 0 }}
+                              animate={{ width: barWidth }}
+                              transition={{ duration: 0.6, delay: i * 0.08 }}
+                            />
+                            <text x={120 + barWidth + 5} y={y + 10} className="fill-slate-500 text-[9px] font-semibold">
+                              {cmd.count}
+                            </text>
+                          </React.Fragment>
+                        );
+                      })}
+                    </svg>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -611,7 +597,13 @@ export default function AIVoiceAssistantPage() {
               <CardContent>
                 <ScrollArea className="h-[500px]">
                   <div className="space-y-2">
-                    {commandHistory.map((cmd, i) => {
+                    {commandHistory.length === 0 ? (
+                      <div className="h-[440px] flex flex-col items-center justify-center text-slate-400">
+                        <Clock className="h-10 w-10 mb-3 text-slate-200" />
+                        <p className="text-sm font-medium">No conversations yet</p>
+                        <p className="text-xs text-slate-300 mt-1 text-center">Your voice command history will appear here once you start speaking</p>
+                      </div>
+                    ) : commandHistory.map((cmd, i) => {
                       const isSuccess = cmd.status === 'success';
                       return (
                         <motion.div
@@ -665,7 +657,13 @@ export default function AIVoiceAssistantPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {recentSessions.map((session, i) => (
+                  {recentSessions.length === 0 ? (
+                    <div className="h-40 flex flex-col items-center justify-center text-slate-400">
+                      <Volume2 className="h-10 w-10 mb-3 text-slate-200" />
+                      <p className="text-sm font-medium">No sessions yet</p>
+                      <p className="text-xs text-slate-300 mt-1 text-center">Voice sessions will appear here once you start using the assistant</p>
+                    </div>
+                  ) : recentSessions.map((session, i) => (
                     <motion.div
                       key={session.id}
                       initial={{ opacity: 0, y: 5 }}

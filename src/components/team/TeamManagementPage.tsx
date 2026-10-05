@@ -138,7 +138,7 @@ export default function TeamManagementPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           firmName,
-          primaryColor: '#059669',
+          primaryColor: '#1D4ED8',
         }),
       });
       if (!res.ok) throw new Error('Save failed');

@@ -1178,6 +1178,205 @@ export async function completePayment(
   };
 }
 
+/**
+ * Verify a payment session by its sessionId (the provider's order/request id).
+ *
+ * This is the entry point used by the hosted-checkout return flow
+ * (POST /api/billing/verify-payment). It:
+ *   1. Looks up the PaymentAttempt by providerRequestId === sessionId.
+ *   2. Delegates to completePayment() to verify with the provider, record the
+ *      Payment, mark the invoice paid, and generate a receipt.
+ *   3. Returns a { verify, payment, receipt } bundle for the API route.
+ *
+ * If the attempt cannot be found, returns a failed verify result instead of
+ * throwing, so the client can surface a friendly error.
+ */
+export async function verifyPayment(
+  organizationId: string,
+  sessionId: string,
+): Promise<{
+  verify: {
+    succeeded: boolean;
+    providerPaymentId: string | null;
+    errorMessage: string | null;
+  };
+  payment: Payment | null;
+  receipt: Receipt | null;
+}> {
+  assertOrg(organizationId);
+
+  // 1. Find the PaymentAttempt for this session.
+  const attemptSnap = await getDocs(
+    query(
+      collection(db, 'payment_attempts'),
+      where('organizationId', '==', organizationId),
+      where('providerRequestId', '==', sessionId),
+      limitConstraint(1),
+    ),
+  );
+  if (attemptSnap.empty) {
+    return {
+      verify: {
+        succeeded: false,
+        providerPaymentId: null,
+        errorMessage: `Payment session ${sessionId} not found.`,
+      },
+      payment: null,
+      receipt: null,
+    };
+  }
+  const attemptData = attemptSnap.docs[0].data() as Record<string, unknown>;
+
+  // 2. Use the stored paymentId if present, else fall back to the sessionId.
+  const paymentId = String(attemptData.paymentId ?? sessionId);
+
+  // 3. Delegate to the full completion flow.
+  let result: CompletePaymentResult;
+  try {
+    result = await completePayment(organizationId, sessionId, paymentId);
+  } catch (err) {
+    return {
+      verify: {
+        succeeded: false,
+        providerPaymentId: null,
+        errorMessage: err instanceof Error ? err.message : 'Payment verification failed.',
+      },
+      payment: null,
+      receipt: null,
+    };
+  }
+
+  return {
+    verify: {
+      succeeded: result.succeeded,
+      providerPaymentId: result.payment?.providerPaymentId ?? null,
+      errorMessage: result.errorMessage,
+    },
+    payment: result.payment,
+    receipt: result.receipt,
+  };
+}
+
+// ─── Standalone Payment Session (checkout for an existing invoice) ───────────
+
+/**
+ * Result of {@link createPaymentSession}. The client redirects to `paymentUrl`
+ * to collect payment, then calls /api/billing/verify-payment with `id` to
+ * confirm. Mirrors the shape the create-payment API route spreads into its
+ * JSON response.
+ */
+export interface PaymentSessionResult {
+  /** The provider-side order / session id (also stored as providerRequestId). */
+  id: string;
+  /** Hosted-checkout URL the client should redirect to. May be null for mock providers. */
+  paymentUrl: string | null;
+  /** The Firestore invoice id this session collects payment for. */
+  invoiceId: string;
+  /** The organization that owns the invoice. */
+  organizationId: string;
+  /** The payment provider that created the session. */
+  provider: PaymentProviderName;
+  /** Whether the provider is a live (real-network) implementation. */
+  isLive: boolean;
+  /** Session status — always 'initiated' at creation time. */
+  status: 'initiated';
+  /** Amount being collected, in paise. */
+  amount: number;
+  /** Currency code (always INR for now). */
+  currency: 'INR';
+  /** The PaymentAttempt Firestore id created for this session. */
+  attemptId: string;
+  /** ISO timestamp of session creation. */
+  createdAt: string;
+}
+
+/**
+ * Create a hosted-checkout payment session for an existing invoice.
+ *
+ * Flow:
+ *   1. Read the invoice (must belong to `organizationId`).
+ *   2. Read the billing account → decrypt the provider customer id.
+ *   3. Call `provider.createPaymentSession`.
+ *   4. Persist a `payment_attempts` doc with status='initiated'.
+ *   5. Return the session descriptor (id, paymentUrl, etc.) for the client.
+ *
+ * Used by POST /api/billing/create-payment. Distinct from {@link initiatePayment}
+ * (which is called internally by `createSubscription` and takes a full input
+ * object) — this variant is the public entry point for ad-hoc invoice payment.
+ */
+export async function createPaymentSession(
+  organizationId: string,
+  invoiceId: string,
+): Promise<PaymentSessionResult> {
+  assertOrg(organizationId);
+
+  // 1. Read the invoice.
+  const invoice = await readInvoice(organizationId, invoiceId);
+  if (invoice.status === 'paid' || invoice.status === 'void') {
+    throw new InvoiceAlreadyPaidError(
+      `Invoice ${invoiceId} is already ${invoice.status} — no payment session required.`,
+    );
+  }
+
+  // 2. Read the billing account + decrypt the customer id.
+  const account = await readBillingAccount(organizationId);
+  if (!account.encryptedCustomerId) {
+    throw new BillingAccountNotFoundError(
+      'No payment provider customer is associated with this organization.',
+    );
+  }
+  const { decryptString } = await import('./crypto');
+  const customerId = decryptString(account.encryptedCustomerId);
+
+  // 3. Call the provider.
+  const provider = getPaymentProvider(account.paymentProvider ?? undefined);
+  let sessionResult;
+  try {
+    sessionResult = await provider.createPaymentSession({
+      customerId,
+      amount: invoice.amountDue,
+      currency: 'INR',
+      description: `Invoice ${invoice.invoiceNumber || invoice.id} — ${invoice.amountDue} paise`,
+      invoiceId,
+      returnUrl: '', // Filled by the API route / client if needed
+    });
+  } catch (err) {
+    throw rethrowTyped(err);
+  }
+
+  // 4. Persist the PaymentAttempt doc.
+  const now = new Date().toISOString();
+  const attemptRef = await addDoc(collection(db, 'payment_attempts'), {
+    organizationId,
+    paymentId: null,
+    subscriptionId: invoice.subscriptionId,
+    invoiceId,
+    amount: invoice.amountDue,
+    provider: provider.provider,
+    status: 'initiated',
+    errorCode: null,
+    errorMessage: null,
+    providerRequestId: sessionResult.orderId,
+    attemptNumber: 1,
+    createdAt: serverTimestamp(),
+  });
+
+  // 5. Return the session descriptor.
+  return {
+    id: sessionResult.orderId,
+    paymentUrl: sessionResult.paymentUrl ?? null,
+    invoiceId,
+    organizationId,
+    provider: provider.provider,
+    isLive: provider.isLive,
+    status: 'initiated',
+    amount: invoice.amountDue,
+    currency: 'INR',
+    attemptId: attemptRef.id,
+    createdAt: now,
+  };
+}
+
 // ─── Billing Health & Scheduler Operations ────────────────────────────────────
 
 /**

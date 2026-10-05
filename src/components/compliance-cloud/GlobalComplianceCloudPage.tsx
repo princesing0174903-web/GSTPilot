@@ -15,6 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { PremiumPageLoader } from '@/components/ui/premium-loading';
 import {
   Tabs, TabsList, TabsTrigger, TabsContent,
 } from '@/components/ui/tabs';
@@ -240,12 +241,7 @@ function KPICard({
 // ─── Loading / Error / Empty states ──────────────────────────────────────────
 
 function LoadingState({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-      <Loader2 className="h-8 w-8 animate-spin mb-3 text-emerald-500" />
-      <p className="text-sm">{label}…</p>
-    </div>
-  );
+  return <PremiumPageLoader label={label} />;
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {

@@ -156,239 +156,21 @@ function categorise(description: string, type: TxnType, amount: number): TxnCate
   return 'uncategorised';
 }
 
-// ─── Seeding: only runs when the DB has no BankAccount rows ────────────────────
-
+// ─── Seeding: DISABLED (no fake data) ──────────────────────────────────────────
+// PER USER DIRECTIVE: "no fake data anywhere — if there is nothing see 0."
+// This function previously auto-created 4 fake bank accounts (HDFC ₹48L,
+// ICICI ₹12L, SBI ₹3L, Axis ₹18L) plus hundreds of fake transactions,
+// UPI payments, reconciliations, and collections cases whenever the DB
+// was empty. That violated the no-fake-data contract. It is now a
+// permanent no-op — the banking engine must read ONLY real data
+// (synced via Account Aggregator / Zoho Books / manual entry). When the
+// DB is empty, every banking API returns an honest empty result and the
+// UI shows ₹0 / empty states.
 export async function ensureSeedData(): Promise<void> {
-  const accountCount = await db.bankAccount.count();
-  if (accountCount > 0) return;
-
-  // Create accounts
-  const accounts = [];
-  for (const seed of SEED_BANKS) {
-    const acc = await db.bankAccount.create({
-      data: {
-        bankName: seed.bankName,
-        accountMasked: seed.accountMasked,
-        accountType: seed.accountType,
-        ifsc: seed.ifsc ?? null,
-        balance: seed.currentBalance,
-        availableBalance: seed.availableBalance,
-        overdraftLimit: seed.overdraftLimit,
-        upiHandle: seed.upiHandle ?? null,
-        aaConsent: seed.aaConsent ?? false,
-        aaConsentExpiry: seed.aaConsentExpiry ?? null,
-        status: 'connected',
-        lastSyncAt: minsAgo(rand(5, 90)),
-      },
-    });
-    accounts.push(acc);
-  }
-
-  // Generate transactions for each account (last 30 days)
-  for (const acc of accounts) {
-    const txCount = rand(60, 110);
-    for (let i = 0; i < txCount; i++) {
-      const isCredit = Math.random() < 0.42;
-      const party = pick(PARTIES);
-      const amount = isCredit ? rand(15, 480) * 1000 : -(rand(5, 250) * 1000);
-      const tpl = isCredit ? pick(DESCRIPTIONS_CREDIT) : pick(DESCRIPTIONS_DEBIT);
-      const description = fillTemplate(tpl, party);
-      const category = categorise(description, isCredit ? 'credit' : 'debit', amount);
-      const ref = isCredit
-        ? (description.startsWith('UPI') ? `UPI${rand(10**9, 10**10)}` : `UTR${rand(10**11, 10**12)}`)
-        : (description.startsWith('UPI') ? `UPI${rand(10**9, 10**10)}` : `UTR${rand(10**11, 10**12)}`);
-      const matched = Math.random() < 0.62;
-      await db.bankTransaction.create({
-        data: {
-          accountId: acc.id,
-          date: new Date(daysAgoISO(rand(0, 29))),
-          description,
-          amount,
-          type: isCredit ? 'credit' : 'debit',
-          category,
-          referenceNo: ref,
-          counterparty: party,
-          matched,
-          matchedInvoice: matched ? pick(INVOICE_NUMS) : null,
-          matchedParty: matched ? party : null,
-          matchConfidence: matched ? rand(82, 99) : 0,
-          matchedAt: matched ? minsAgo(rand(60, 6000)) : null,
-        },
-      });
-    }
-  }
-
-  // Generate UPI transactions
-  const upiCount = rand(80, 140);
-  for (let i = 0; i < upiCount; i++) {
-    const isCredit = Math.random() < 0.55;
-    const vpa = pick(UPI_VPAS);
-    const partyName = vpa.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    const amount = isCredit ? rand(2, 95) * 1000 : -(rand(1, 35) * 1000);
-    const ref = `UPI${rand(10**9, 10**10)}`;
-    const matched = Math.random() < 0.48;
-    const settled = Math.random() < 0.85;
-    await db.uPITransaction.create({
-      data: {
-        accountId: accounts[0].id,
-        upiId: vpa,
-        vpaCounterparty: partyName,
-        date: new Date(daysAgoISO(rand(0, 29))),
-        amount,
-        type: isCredit ? 'credit' : 'debit',
-        referenceNo: ref,
-        notes: isCredit ? 'UPI Collect received' : 'UPI Payment',
-        matched,
-        matchedInvoice: matched ? pick(INVOICE_NUMS) : null,
-        matchedParty: matched ? partyName : null,
-        status: settled ? 'settled' : pick(['pending', 'pending', 'failed', 'reversed']),
-      },
-    });
-  }
-
-  // Generate AA connections
-  const aaSeeds = [
-    { aaName: 'OneMoney', linkedAccounts: 3, mobile: '9876543210' },
-    { aaName: 'Finvu', linkedAccounts: 2, mobile: '9876543210' },
-    { aaName: 'CAMSOVD', linkedAccounts: 1, mobile: '9876543210' },
-  ];
-  for (const s of aaSeeds) {
-    const approved = s.aaName !== 'CAMSOVD';
-    await db.aAConnection.create({
-      data: {
-        aaName: s.aaName,
-        customerMobile: s.mobile,
-        consentHandle: uid('ch'),
-        consentStatus: approved ? 'approved' : 'pending',
-        consentExpiry: approved ? daysFromNowISO(rand(10, 90)) : null,
-        fiTypes: 'DEPOSIT,TERM',
-        linkedAccounts: s.linkedAccounts,
-        lastFetchAt: approved ? minsAgo(rand(60, 600)) : null,
-        status: approved ? 'connected' : 'disconnected',
-      },
-    });
-  }
-
-  // Generate bank reconciliation entries
-  const reconCount = rand(40, 70);
-  for (let i = 0; i < reconCount; i++) {
-    const matched = Math.random() < 0.72;
-    const party = pick(PARTIES);
-    const amount = rand(15, 480) * 1000;
-    const isUPI = Math.random() < 0.45;
-    const bankRef = isUPI ? `UPI${rand(10**9, 10**10)}` : `UTR${rand(10**11, 10**12)}`;
-    let status: ReconStatus = 'matched';
-    let mismatchType: MismatchType | undefined;
-    if (!matched) {
-      const opts: Array<{ s: ReconStatus; m: MismatchType }> = [
-        { s: 'unmatched', m: 'unmatched_payment' },
-        { s: 'pending', m: 'missing_entry' },
-        { s: 'duplicate', m: 'duplicate' },
-        { s: 'partial', m: 'partial_payment' },
-      ];
-      const choice = pick(opts);
-      status = choice.s;
-      mismatchType = choice.m;
-    }
-    await db.bankReconciliation.create({
-      data: {
-        accountId: accounts[0].id,
-        bankRef,
-        bankAmount: amount,
-        matchedInvoice: matched ? pick(INVOICE_NUMS) : null,
-        matchedTo: matched ? party : null,
-        status,
-        mismatchType: mismatchType ?? null,
-        confidencePct: matched ? rand(82, 99) : rand(20, 60),
-        suggestedAction: matched ? null : pick([
-          'Match to invoice INV-2025-0431',
-          'Verify with customer — possible duplicate',
-          'Reclassify as bank charge',
-          'Create missing invoice entry',
-        ]),
-        at: minsAgo(rand(10, 4000)),
-      },
-    });
-  }
-
-  // Generate collections cases
-  const collCount = rand(10, 18);
-  for (let i = 0; i < collCount; i++) {
-    const party = pick(PARTIES);
-    const inv = pick(INVOICE_NUMS);
-    const outstanding = rand(35, 480) * 1000;
-    const daysOver = rand(3, 95);
-    const risk: RiskLevel = daysOver > 60 ? 'critical' : daysOver > 30 ? 'high' : daysOver > 14 ? 'medium' : 'low';
-    const recovered = Math.random() < 0.25;
-    await db.collectionsCase.create({
-      data: {
-        invoiceNo: inv,
-        clientName: party,
-        outstanding,
-        dueDate: daysAgoISO(daysOver),
-        daysOverdue: daysOver,
-        riskLevel: risk,
-        reminderCount: rand(0, 3),
-        lastReminderAt: Math.random() < 0.7 ? daysAgoISO(rand(1, 20)) : null,
-        nextActionAt: daysFromNowISO(rand(0, 5)),
-        escalationLevel: daysOver > 60 ? 3 : daysOver > 30 ? 2 : daysOver > 14 ? 1 : 0,
-        status: recovered ? 'recovered' : daysOver > 60 ? 'escalated' : 'open',
-      },
-    });
-  }
-
-  // Generate daily cash forecast (last 30 days + next 14 days)
-  let opening = 4500000;
-  for (let d = 30; d >= 1; d--) {
-    const date = new Date();
-    date.setDate(date.getDate() - d);
-    const inflows = rand(50, 350) * 1000;
-    const outflows = rand(40, 280) * 1000;
-    const closing = opening + inflows - outflows;
-    await db.cashForecast.create({
-      data: {
-        date,
-        openingBalance: opening,
-        inflows,
-        outflows,
-        closingBalance: closing,
-        expectedCollections: inflows,
-        expectedPayments: outflows,
-        burnRate: outflows,
-        runwayDays: closing > 0 ? Math.floor(closing / Math.max(outflows, 1) * 30) : 0,
-        shortage: closing < 500000,
-        shortageAmount: closing < 500000 ? 500000 - closing : 0,
-        horizon: 'daily',
-      },
-    });
-    opening = closing;
-  }
-  // Projection for next 14 days
-  for (let d = 1; d <= 14; d++) {
-    const date = new Date();
-    date.setDate(date.getDate() + d);
-    const inflows = rand(50, 280) * 1000;
-    const outflows = rand(60, 320) * 1000;
-    const closing = opening + inflows - outflows;
-    await db.cashForecast.create({
-      data: {
-        date,
-        openingBalance: opening,
-        inflows,
-        outflows,
-        closingBalance: closing,
-        expectedCollections: inflows,
-        expectedPayments: outflows,
-        burnRate: outflows,
-        runwayDays: closing > 0 ? Math.floor(closing / Math.max(outflows, 1) * 30) : 0,
-        shortage: closing < 500000,
-        shortageAmount: closing < 500000 ? 500000 - closing : 0,
-        horizon: d <= 7 ? '7d' : '30d',
-      },
-    });
-    opening = closing;
-  }
+  // Intentionally empty. Real bank data comes only from live integrations.
+  return;
 }
+
 
 // ─── Module 1: Bank Account Management™ ───────────────────────────────────────
 
@@ -968,373 +750,132 @@ export function formatBankingCloudContextBlock(state: BankingCloudState): string
 // ─── Action handlers (called by API routes) ───────────────────────────────────
 
 export async function connectBankAccount(payload: { bankName?: string; accountType?: string } = {}): Promise<BankActionResponse> {
-  await ensureSeedData();
-  const bankName = payload.bankName || pick(['Kotak Mahindra', 'Yes Bank', 'IndusInd Bank', 'Federal Bank', 'Punjab National Bank']);
-  const accountType = (payload.accountType as BankAccountSummary['accountType']) || 'current';
-  const last4 = String(rand(1000, 9999));
-  const ifsc = `${bankName.slice(0, 4).toUpperCase().padEnd(4, 'X')}000${rand(100, 999)}`.slice(0, 11);
-  const balance = rand(50, 250) * 10000;
-  const acc = await db.bankAccount.create({
-    data: {
-      bankName,
-      accountMasked: `****${last4}`,
-      accountType,
-      ifsc,
-      balance,
-      availableBalance: balance,
-      overdraftLimit: 0,
-      upiHandle: `yourbiz@${bankName.split(' ')[0].toLowerCase()}`,
-      aaConsent: false,
-      status: 'connected',
-      lastSyncAt: nowISO(),
-    },
-  });
+  // DISABLED: previously fabricated fake accounts data. Banking APIs are
+  // under development — this function now returns an honest "not available"
+  // response instead of creating fake accounts/transactions/payments.
   return {
-    ok: true,
+    ok: false,
     module: 'accounts',
     action: 'connect',
-    message: `Connected ${bankName} ${accountType} account ****${last4}`,
-    result: { accountId: acc.id, bankName, accountMasked: `****${last4}` },
-    oracleAck: `I've connected your ${bankName} ${accountType} account ****${last4}.`,
+    message: 'Banking integration is under development. Connect Google or Zoho Books to start syncing real financial data.',
+    oracleAck: "Banking APIs aren't live yet — I can't fabricate accounts data. Please connect Google or Zoho Books for real financials.",
   };
 }
 
 export async function syncBankAccounts(accountId?: string): Promise<BankActionResponse> {
-  await ensureSeedData();
-  const where = accountId ? { id: accountId } : {};
-  const accounts = await db.bankAccount.findMany({ where });
-  if (accounts.length === 0) {
-    return {
-      ok: false, module: 'accounts', action: 'sync',
-      message: 'No bank accounts to sync.', oracleAck: "I couldn't find any bank accounts to sync.",
-    };
-  }
-  let totalNew = 0;
-  for (const acc of accounts) {
-    // Create a few new transactions to simulate a fresh sync
-    const newCount = rand(3, 9);
-    for (let i = 0; i < newCount; i++) {
-      const isCredit = Math.random() < 0.45;
-      const party = pick(PARTIES);
-      const amount = isCredit ? rand(15, 480) * 1000 : -(rand(5, 250) * 1000);
-      const tpl = isCredit ? pick(DESCRIPTIONS_CREDIT) : pick(DESCRIPTIONS_DEBIT);
-      const description = fillTemplate(tpl, party);
-      const category = categorise(description, isCredit ? 'credit' : 'debit', amount);
-      const ref = `UTR${rand(10**11, 10**12)}`;
-      await db.bankTransaction.create({
-        data: {
-          accountId: acc.id,
-          date: new Date(),
-          description,
-          amount,
-          type: isCredit ? 'credit' : 'debit',
-          category,
-          referenceNo: ref,
-          counterparty: party,
-          matched: false,
-        },
-      });
-      totalNew++;
-    }
-    await db.bankAccount.update({
-      where: { id: acc.id },
-      data: { lastSyncAt: nowISO(), status: 'connected' },
-    });
-  }
+  // DISABLED: previously fabricated fake accounts data. Banking APIs are
+  // under development — this function now returns an honest "not available"
+  // response instead of creating fake accounts/transactions/payments.
   return {
-    ok: true,
+    ok: false,
     module: 'accounts',
     action: 'sync',
-    message: `Synced ${accounts.length} account(s) — ${totalNew} new transactions pulled.`,
-    result: { accountsSynced: accounts.length, newTransactions: totalNew },
-    oracleAck: `I've synced ${accounts.length} bank account${accounts.length > 1 ? 's' : ''} and pulled ${totalNew} new transactions.`,
+    message: 'Banking integration is under development. Connect Google or Zoho Books to start syncing real financial data.',
+    oracleAck: "Banking APIs aren't live yet — I can't fabricate accounts data. Please connect Google or Zoho Books for real financials.",
   };
 }
 
 export async function syncStatements(): Promise<BankActionResponse> {
-  return syncBankAccounts();
+  // DISABLED: previously fabricated fake statements data. Banking APIs are
+  // under development — this function now returns an honest "not available"
+  // response instead of creating fake accounts/transactions/payments.
+  return {
+    ok: false,
+    module: 'statements',
+    action: 'sync',
+    message: 'Banking integration is under development. Connect Google or Zoho Books to start syncing real financial data.',
+    oracleAck: "Banking APIs aren't live yet — I can't fabricate statements data. Please connect Google or Zoho Books for real financials.",
+  };
 }
 
 export async function connectAA(payload: { aaName?: string; mobile?: string } = {}): Promise<BankActionResponse> {
-  const aaName = payload.aaName || pick(['OneMoney', 'Finvu', 'CAMSOVD', 'Yodlee', 'MoneyOne']);
-  const mobile = payload.mobile || '9876543210';
-  const conn = await db.aAConnection.create({
-    data: {
-      aaName,
-      customerMobile: mobile,
-      consentHandle: uid('ch'),
-      consentStatus: 'pending',
-      fiTypes: 'DEPOSIT,TERM',
-      linkedAccounts: 0,
-      status: 'disconnected',
-    },
-  });
+  // DISABLED: previously fabricated fake aa data. Banking APIs are
+  // under development — this function now returns an honest "not available"
+  // response instead of creating fake accounts/transactions/payments.
   return {
-    ok: true,
+    ok: false,
     module: 'aa',
     action: 'connect',
-    message: `Initiated AA consent with ${aaName}.`,
-    result: { connectionId: conn.id, aaName, consentHandle: conn.consentHandle },
-    oracleAck: `I've initiated the Account Aggregator consent request with ${aaName}.`,
+    message: 'Banking integration is under development. Connect Google or Zoho Books to start syncing real financial data.',
+    oracleAck: "Banking APIs aren't live yet — I can't fabricate aa data. Please connect Google or Zoho Books for real financials.",
   };
 }
 
 export async function consentAA(payload: { connectionId?: string; action?: 'approve' | 'reject' } = {}): Promise<BankActionResponse> {
-  const action = payload.action || 'approve';
-  let conn;
-  if (payload.connectionId) {
-    conn = await db.aAConnection.findUnique({ where: { id: payload.connectionId } });
-  } else {
-    conn = await db.aAConnection.findFirst({ where: { consentStatus: 'pending' } });
-  }
-  if (!conn) {
-    return {
-      ok: false, module: 'aa', action: 'consent',
-      message: 'No pending AA consent found.', oracleAck: "I couldn't find a pending AA consent to action.",
-    };
-  }
-  const approved = action === 'approve';
-  const expiry = daysFromNowISO(rand(30, 90));
-  const updated = await db.aAConnection.update({
-    where: { id: conn.id },
-    data: {
-      consentStatus: approved ? 'approved' : 'rejected',
-      consentExpiry: approved ? expiry : null,
-      linkedAccounts: approved ? rand(1, 4) : 0,
-      lastFetchAt: approved ? nowISO() : null,
-      status: approved ? 'connected' : 'disconnected',
-    },
-  });
+  // DISABLED: previously fabricated fake aa data. Banking APIs are
+  // under development — this function now returns an honest "not available"
+  // response instead of creating fake accounts/transactions/payments.
   return {
-    ok: true,
+    ok: false,
     module: 'aa',
     action: 'consent',
-    message: approved ? `AA consent approved — ${updated.linkedAccounts} accounts linked.` : 'AA consent rejected.',
-    result: { connectionId: updated.id, consentStatus: updated.consentStatus, linkedAccounts: updated.linkedAccounts },
-    oracleAck: approved
-      ? `I've connected your financial accounts via ${conn.aaName} — ${updated.linkedAccounts} accounts linked.`
-      : `I've rejected the AA consent request from ${conn.aaName}.`,
+    message: 'Banking integration is under development. Connect Google or Zoho Books to start syncing real financial data.',
+    oracleAck: "Banking APIs aren't live yet — I can't fabricate aa data. Please connect Google or Zoho Books for real financials.",
   };
 }
 
 export async function runReconciliation(): Promise<BankActionResponse> {
-  await ensureSeedData();
-  // Take unmatched reconciliation entries and try to match them
-  const unmatched = await db.bankReconciliation.findMany({
-    where: { status: { in: ['unmatched', 'pending'] } },
-    take: 15,
-  });
-  let matchedCount = 0;
-  for (const r of unmatched) {
-    if (Math.random() < 0.55) {
-      const party = pick(PARTIES);
-      const inv = pick(INVOICE_NUMS);
-      await db.bankReconciliation.update({
-        where: { id: r.id },
-        data: {
-          status: 'matched',
-          matchedInvoice: inv,
-          matchedTo: party,
-          confidencePct: rand(82, 99),
-          mismatchType: null,
-        },
-      });
-      matchedCount++;
-    }
-  }
-  // Create a fresh recon run summary entry
-  const total = await db.bankReconciliation.count();
-  const matchedTotal = await db.bankReconciliation.count({ where: { status: 'matched' } });
-  const matchedPct = total > 0 ? Math.round((matchedTotal / total) * 100) : 0;
+  // DISABLED: previously fabricated fake reconciliation data. Banking APIs are
+  // under development — this function now returns an honest "not available"
+  // response instead of creating fake accounts/transactions/payments.
   return {
-    ok: true,
+    ok: false,
     module: 'reconciliation',
     action: 'run',
-    message: `Reconciliation run complete — ${matchedCount} newly matched. Match rate now ${matchedPct}%.`,
-    result: { newlyMatched: matchedCount, matchedPct, totalReconciled: matchedTotal, totalTransactions: total },
-    oracleAck: `I've reconciled your bank transactions — ${matchedCount} newly matched, match rate now ${matchedPct}%.`,
+    message: 'Banking integration is under development. Connect Google or Zoho Books to start syncing real financial data.',
+    oracleAck: "Banking APIs aren't live yet — I can't fabricate reconciliation data. Please connect Google or Zoho Books for real financials.",
   };
 }
 
 export async function connectUPI(): Promise<BankActionResponse> {
-  const account = await db.bankAccount.findFirst({ where: { upiHandle: { not: null } } });
-  if (!account) {
-    return {
-      ok: false, module: 'upi', action: 'connect',
-      message: 'No UPI-enabled bank account found.', oracleAck: "I couldn't find a UPI-enabled bank account.",
-    };
-  }
-  // Add a few UPI collection requests
-  let added = 0;
-  for (let i = 0; i < rand(3, 7); i++) {
-    const vpa = pick(UPI_VPAS);
-    const partyName = vpa.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    const amount = rand(5, 75) * 1000;
-    await db.uPITransaction.create({
-      data: {
-        accountId: account.id,
-        upiId: vpa,
-        vpaCounterparty: partyName,
-        date: new Date(),
-        amount,
-        type: 'credit',
-        referenceNo: `UPI${rand(10**9, 10**10)}`,
-        notes: 'UPI Collect request',
-        matched: false,
-        status: pick(['pending', 'pending', 'settled']),
-      },
-    });
-    added++;
-  }
+  // DISABLED: previously fabricated fake upi data. Banking APIs are
+  // under development — this function now returns an honest "not available"
+  // response instead of creating fake accounts/transactions/payments.
   return {
-    ok: true,
+    ok: false,
     module: 'upi',
     action: 'connect',
-    message: `UPI Collect active — ${added} new collect requests sent.`,
-    result: { newCollectRequests: added },
-    oracleAck: `I've activated UPI Collect and sent ${added} new collect requests.`,
+    message: 'Banking integration is under development. Connect Google or Zoho Books to start syncing real financial data.',
+    oracleAck: "Banking APIs aren't live yet — I can't fabricate upi data. Please connect Google or Zoho Books for real financials.",
   };
 }
 
 export async function syncUPI(): Promise<BankActionResponse> {
-  await ensureSeedData();
-  const account = await db.bankAccount.findFirst();
-  if (!account) {
-    return {
-      ok: false, module: 'upi', action: 'sync',
-      message: 'No bank account connected.', oracleAck: "I couldn't sync UPI — no bank account is connected.",
-    };
-  }
-  let added = 0;
-  let settled = 0;
-  // Pull new UPI transactions + settle pending ones
-  const pending = await db.uPITransaction.findMany({ where: { status: 'pending' }, take: 10 });
-  for (const p of pending) {
-    const willSettle = Math.random() < 0.7;
-    await db.uPITransaction.update({
-      where: { id: p.id },
-      data: { status: willSettle ? 'settled' : 'failed' },
-    });
-    if (willSettle) settled++;
-  }
-  for (let i = 0; i < rand(5, 12); i++) {
-    const isCredit = Math.random() < 0.6;
-    const vpa = pick(UPI_VPAS);
-    const partyName = vpa.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    const amount = isCredit ? rand(2, 75) * 1000 : -(rand(1, 35) * 1000);
-    await db.uPITransaction.create({
-      data: {
-        accountId: account.id,
-        upiId: vpa,
-        vpaCounterparty: partyName,
-        date: new Date(),
-        amount,
-        type: isCredit ? 'credit' : 'debit',
-        referenceNo: `UPI${rand(10**9, 10**10)}`,
-        notes: isCredit ? 'UPI Collect received' : 'UPI Payment',
-        matched: false,
-        status: 'settled',
-      },
-    });
-    added++;
-  }
-  // Detect collections total
-  const last30d = new Date();
-  last30d.setDate(last30d.getDate() - 30);
-  const collections = await db.uPITransaction.findMany({
-    where: { date: { gte: last30d }, type: 'credit', status: 'settled' },
-    select: { amount: true },
-  });
-  const totalColl = collections.reduce((s, t) => s + t.amount, 0);
+  // DISABLED: previously fabricated fake upi data. Banking APIs are
+  // under development — this function now returns an honest "not available"
+  // response instead of creating fake accounts/transactions/payments.
   return {
-    ok: true,
+    ok: false,
     module: 'upi',
     action: 'sync',
-    message: `UPI sync complete — ${added} new txns, ${settled} pending settled. 30d collections: ${inrShort(totalColl)}.`,
-    result: { newTransactions: added, settledPending: settled, collections30d: totalColl },
-    oracleAck: `I've detected ${inrShort(totalColl)} in UPI collections and matched payments with invoices.`,
+    message: 'Banking integration is under development. Connect Google or Zoho Books to start syncing real financial data.',
+    oracleAck: "Banking APIs aren't live yet — I can't fabricate upi data. Please connect Google or Zoho Books for real financials.",
   };
 }
 
 export async function recoverCollections(): Promise<BankActionResponse> {
-  await ensureSeedData();
-  // Take open cases and try to recover
-  const open = await db.collectionsCase.findMany({
-    where: { status: 'open' },
-    take: 12,
-  });
-  let recovered = 0;
-  let escalated = 0;
-  let recoveredAmt = 0;
-  for (const c of open) {
-    const willRecover = Math.random() < 0.4;
-    if (willRecover) {
-      await db.collectionsCase.update({
-        where: { id: c.id },
-        data: { status: 'recovered', nextActionAt: null },
-      });
-      recovered++;
-      recoveredAmt += c.outstanding;
-    } else if (c.daysOverdue > 30) {
-      await db.collectionsCase.update({
-        where: { id: c.id },
-        data: {
-          status: 'escalated',
-          escalationLevel: Math.min(3, c.escalationLevel + 1),
-          nextActionAt: daysFromNowISO(1),
-        },
-      });
-      escalated++;
-    } else {
-      await db.collectionsCase.update({
-        where: { id: c.id },
-        data: {
-          reminderCount: c.reminderCount + 1,
-          lastReminderAt: nowISO(),
-          nextActionAt: daysFromNowISO(2),
-        },
-      });
-    }
-  }
+  // DISABLED: previously fabricated fake collections data. Banking APIs are
+  // under development — this function now returns an honest "not available"
+  // response instead of creating fake accounts/transactions/payments.
   return {
-    ok: true,
+    ok: false,
     module: 'collections',
     action: 'recover',
-    message: `Recovery run dispatched — ${recovered} recovered (${inrShort(recoveredAmt)}), ${escalated} escalated, ${open.length - recovered - escalated} reminders queued.`,
-    result: { recovered, escalated, recoveredAmount: recoveredAmt, totalProcessed: open.length },
-    oracleAck: `I've initiated recovery workflows — ${recovered} invoices recovered (${inrShort(recoveredAmt)}) and ${escalated} escalated.`,
+    message: 'Banking integration is under development. Connect Google or Zoho Books to start syncing real financial data.',
+    oracleAck: "Banking APIs aren't live yet — I can't fabricate collections data. Please connect Google or Zoho Books for real financials.",
   };
 }
 
 export async function remindCollections(): Promise<BankActionResponse> {
-  await ensureSeedData();
-  const open = await db.collectionsCase.findMany({
-    where: { status: 'open' },
-    take: 20,
-  });
-  let queued = 0;
-  let channels = { whatsapp: 0, email: 0, sms: 0 };
-  for (const c of open) {
-    await db.collectionsCase.update({
-      where: { id: c.id },
-      data: {
-        reminderCount: c.reminderCount + 1,
-        lastReminderAt: nowISO(),
-        nextActionAt: daysFromNowISO(rand(1, 3)),
-      },
-    });
-    queued++;
-    channels.whatsapp++;
-    channels.email++;
-    if (c.riskLevel === 'high' || c.riskLevel === 'critical') channels.sms++;
-  }
+  // DISABLED: previously fabricated fake collections data. Banking APIs are
+  // under development — this function now returns an honest "not available"
+  // response instead of creating fake accounts/transactions/payments.
   return {
-    ok: true,
+    ok: false,
     module: 'collections',
     action: 'remind',
-    message: `Scheduled reminders for ${queued} overdue invoices — ${channels.whatsapp} WhatsApp, ${channels.email} email, ${channels.sms} SMS.`,
-    result: { queued, channels },
-    oracleAck: `I've scheduled collection reminders for ${queued} overdue invoices via WhatsApp, Email${channels.sms > 0 ? ' and SMS' : ''}.`,
+    message: 'Banking integration is under development. Connect Google or Zoho Books to start syncing real financial data.',
+    oracleAck: "Banking APIs aren't live yet — I can't fabricate collections data. Please connect Google or Zoho Books for real financials.",
   };
 }
 

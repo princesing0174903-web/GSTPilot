@@ -1,14 +1,55 @@
 import { NextResponse } from 'next/server';
 import { extractBill, importBillToPurchase, type OCRInput } from '@/lib/invoices/ocr';
+import {
+  requireAuth,
+  requireOrgMembership,
+  friendlyApiError,
+} from '@/lib/auth/session';
+import { db } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as OCRInput & { import?: boolean };
+    // ── Auth: every invoice mutation requires a verified caller. ──
+    const authResult = await requireAuth(req);
+    if (authResult instanceof NextResponse) return authResult;
+    const { uid } = authResult;
+
+    const body = (await req.json()) as OCRInput & {
+      import?: boolean;
+      organizationId?: string;
+      firmId?: string;
+      clientId?: string;
+    };
     if (!body.fileName) {
       return NextResponse.json({ error: 'fileName is required' }, { status: 400 });
     }
+
+    // ── Tenant scope: read org id from header or body, then verify membership. ──
+    // If an explicit clientId is supplied we resolve its firmId from Prisma so
+    // orphan-org callers (who only know the client) still pass membership.
+    const headerOrg = req.headers.get('x-gstpilot-orgid') ?? '';
+    let orgId = headerOrg.trim() || body.organizationId || body.firmId || '';
+    if (!orgId && body.clientId) {
+      try {
+        const client = await db.client.findUnique({
+          where: { id: body.clientId },
+          select: { firmId: true },
+        });
+        if (client?.firmId) orgId = client.firmId;
+      } catch {
+        /* ignore — best-effort */
+      }
+    }
+    if (!orgId) {
+      return NextResponse.json(
+        { error: 'An organization or client is required to import a bill.', code: 'NO_ORG' },
+        { status: 400 },
+      );
+    }
+    const memberResult = await requireOrgMembership(uid, orgId);
+    if (memberResult instanceof NextResponse) return memberResult;
 
     // ── Run OCR extraction (deterministic) ──
     const ocr = await extractBill(body);
@@ -32,10 +73,6 @@ export async function POST(req: Request) {
         : `I've extracted ${ocr.confidence}-confidence details from ${body.fileName}${ocr.warnings.length ? ' — ' + ocr.warnings[0] : ''}.`,
     });
   } catch (err) {
-    console.error('[API /invoices/import] error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to import bill' },
-      { status: 500 },
-    );
+    return friendlyApiError(err, 'We could not import this invoice. Please try again.');
   }
 }

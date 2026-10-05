@@ -38,7 +38,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50 backdrop-blur-sm",
         className
       )}
       {...props}
@@ -61,6 +61,14 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          // SCROLL INDEPENDENCE (POLISH-04):
+          // Dialog content scrolls independently of the page. The header /
+          // description stay visible because consumers typically place them
+          // above the scroll region (DialogHeader / DialogDescription render
+          // as plain flex children with no shrink). The body content is the
+          // scroll region. Cap at 85vh so very tall dialogs never overflow
+          // the viewport, and use a thin custom scrollbar.
+          "max-h-[85vh] overflow-y-auto custom-scrollbar",
           className
         )}
         {...props}

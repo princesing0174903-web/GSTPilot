@@ -4,8 +4,15 @@
 // GSTPilot — useGSTpilotInvoices() Hook
 //
 // Real-time invoices list (onSnapshot) + CRUD + search + mark paid + cancel.
-// Firestore is the ONLY source of truth: organizations/GSTpilot_SAAS/invoices
-// GST totals are computed in the service layer (never in the UI).
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Reads the current organizationId from OrgContext and passes it to every
+//   gstpilot-data service call. The Firestore path is:
+//     organizations/{organizationId}/invoices/{invoiceId}
+//   GST totals are computed in the service layer (never in the UI).
+//
+//   If no org is resolved (preview mode), the subscription returns an empty
+//   list — NO Firestore read, NO permission error.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -18,11 +25,13 @@ import {
   cancelInvoice as svcCancel,
   searchInvoices,
   computeInvoiceStatsLocal,
+  shouldSkipFirestore,
   type Invoice,
   type CreateInvoiceInput,
   type UpdateInvoiceInput,
   type InvoiceStats,
 } from '@/lib/gstpilot-data';
+import { useOrg } from '@/contexts/OrgContext';
 
 export interface UseGSTpilotInvoicesResult {
   invoices: Invoice[];
@@ -42,6 +51,9 @@ export interface UseGSTpilotInvoicesResult {
 }
 
 export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
+  const { organization, isPreviewMode } = useOrg();
+  const orgId = organization?.id ?? null;
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,9 +64,23 @@ export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
   const invoicesRef = useRef<Invoice[]>([]);
   invoicesRef.current = invoices;
 
+  // Keep orgId in a ref so the subscription effect doesn't re-run on every
+  // orgId identity change (it should only re-run when the ID actually changes).
+  const orgIdRef = useRef<string | null>(null);
+  orgIdRef.current = orgId;
+
   useEffect(() => {
+    const currentOrgId = orgIdRef.current;
+    // Local workspace, preview mode, or no org → NO Firestore read.
+    if (shouldSkipFirestore(currentOrgId, isPreviewMode)) {
+      setInvoices([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     setLoading(true);
     const unsubscribe = subscribeInvoices(
+      currentOrgId,
       (list) => {
         setInvoices(list);
         setLoading(false);
@@ -64,16 +90,22 @@ export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
         const code = (err as { code?: string }).code;
         const msg =
           code === 'permission-denied'
-            ? 'Permission denied. Check Firestore security rules for organizations/GSTpilot_SAAS/invoices.'
+            ? 'Unable to load invoices.\n\nReason: You don\'t currently have permission to read this organization\'s data. Please sign in and ensure you are a member of the organization.'
             : code === 'unavailable'
               ? 'You appear to be offline. Showing cached invoices.'
               : err.message || 'Could not load invoices.';
         setError(msg);
         setLoading(false);
+        console.error('[useGSTpilotInvoices] subscription error:', {
+          orgId: currentOrgId,
+          path: currentOrgId ? `organizations/${currentOrgId}/invoices` : '(no org)',
+          code,
+          message: err.message,
+        });
       },
     );
     return () => unsubscribe();
-  }, [retryTick]);
+  }, [orgId, isPreviewMode, retryTick]);
 
   const retry = useCallback(() => {
     setError(null);
@@ -84,11 +116,16 @@ export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
   const create = useCallback(async (input: CreateInvoiceInput) => {
     setSaving(true);
     try {
-      const invoice = await svcCreate(input);
+      const invoice = await svcCreate(orgIdRef.current, input);
       setInvoices((prev) => [invoice, ...prev]);
       return invoice;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create invoice.');
+      const msg = err instanceof Error ? err.message : 'Failed to create invoice.';
+      setError(msg);
+      console.error('[useGSTpilotInvoices] create error:', {
+        orgId: orgIdRef.current,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -98,11 +135,17 @@ export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
   const update = useCallback(async (id: string, patch: UpdateInvoiceInput) => {
     setSaving(true);
     try {
-      const updated = await svcUpdate(id, patch);
+      const updated = await svcUpdate(orgIdRef.current, id, patch);
       setInvoices((prev) => prev.map((i) => (i.id === id ? updated : i)));
       return updated;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update invoice.');
+      const msg = err instanceof Error ? err.message : 'Failed to update invoice.';
+      setError(msg);
+      console.error('[useGSTpilotInvoices] update error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -115,14 +158,20 @@ export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
       const prev = invoicesRef.current;
       setInvoices((cur) => cur.filter((i) => i.id !== id));
       try {
-        await svcDelete(id);
+        await svcDelete(orgIdRef.current, id);
         return true;
       } catch (err) {
         setInvoices(prev);
         throw err;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete invoice.');
+      const msg = err instanceof Error ? err.message : 'Failed to delete invoice.';
+      setError(msg);
+      console.error('[useGSTpilotInvoices] delete error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return false;
     } finally {
       setSaving(false);
@@ -132,11 +181,17 @@ export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
   const markPaid = useCallback(async (id: string, amount?: number) => {
     setSaving(true);
     try {
-      const updated = await svcMarkPaid(id, amount);
+      const updated = await svcMarkPaid(orgIdRef.current, id, amount);
       setInvoices((prev) => prev.map((i) => (i.id === id ? updated : i)));
       return updated;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to mark invoice as paid.');
+      const msg = err instanceof Error ? err.message : 'Failed to mark invoice as paid.';
+      setError(msg);
+      console.error('[useGSTpilotInvoices] markPaid error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -146,11 +201,17 @@ export function useGSTpilotInvoices(): UseGSTpilotInvoicesResult {
   const cancel = useCallback(async (id: string) => {
     setSaving(true);
     try {
-      const updated = await svcCancel(id);
+      const updated = await svcCancel(orgIdRef.current, id);
       setInvoices((prev) => prev.map((i) => (i.id === id ? updated : i)));
       return updated;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cancel invoice.');
+      const msg = err instanceof Error ? err.message : 'Failed to cancel invoice.';
+      setError(msg);
+      console.error('[useGSTpilotInvoices] cancel error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);

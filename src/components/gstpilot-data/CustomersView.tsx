@@ -227,10 +227,16 @@ export default function CustomersView() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    const ok = await remove(deleteTarget.id);
+    // Single-flight: clear deleteTarget synchronously so a second click is a no-op.
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    const ok = await remove(target.id);
     if (ok) {
-      toast.success(`Deleted customer “${deleteTarget.name}”.`);
-      setDeleteTarget(null);
+      toast.success(`Deleted customer “${target.name}”.`);
+    } else {
+      // Restore the dialog target so the user can retry.
+      setDeleteTarget(target);
+      toast.error('Could not delete customer. Please try again.');
     }
   };
 
@@ -307,8 +313,8 @@ export default function CustomersView() {
           />
         </div>
         {error && (
-          <Button variant="outline" size="sm" onClick={retry} className="border-white/10 text-white/70">
-            <RefreshCw className="mr-2 h-4 w-4" />
+          <Button variant="outline" size="sm" onClick={retry} disabled={loading} className="border-white/10 text-white/70">
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Retry
           </Button>
         )}
@@ -595,8 +601,10 @@ export default function CustomersView() {
             <AlertDialogCancel className="border-white/10 text-white/70">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
+              disabled={saving}
               className="bg-rose-600 text-white hover:bg-rose-500"
             >
+              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -16,6 +16,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import {
   createInvoiceRecord,
   calculateGST,
@@ -31,6 +32,11 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const startedAt = Date.now();
   let body: any = {};
   try {
@@ -46,6 +52,10 @@ export async function POST(request: NextRequest) {
     userId: String(body.userId ?? 'preview-user'),
     userEmail: String(body.userEmail ?? 'preview@gstpilot.in'),
   };
+
+  const orgId0 = String(body.organizationId ?? body.orgId ?? body.firmId ?? '');
+  const orgResult = await requireOrgMembership(uid, orgId0);
+  if (orgResult instanceof NextResponse) return orgResult;
 
   // ─── Handle rejection ───────────────────────────────────────────────
   if (decision === 'rejected') {

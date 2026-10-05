@@ -103,7 +103,7 @@ function ActionCard({
         borderClass,
         disabled
           ? 'cursor-not-allowed opacity-60'
-          : 'cursor-pointer hover:bg-card/[0.6] hover:shadow-[0_8px_32px_-12px_rgba(0,229,255,0.18)]',
+          : 'cursor-pointer hover:bg-card/[0.6] hover:shadow-[0_8px_32px_-12px_rgba(37, 99, 235,0.18)]',
       )}
     >
       {/* Glow accent on hover */}

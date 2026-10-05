@@ -498,6 +498,25 @@ export function subscribeToCoupons(
   );
 }
 
+/**
+ * Look up a single coupon by its code (case-insensitive). Returns null if no
+ * coupon with that code exists. Matches both global and org-private coupons —
+ * callers that need org scoping should filter the result themselves.
+ */
+export async function getCoupon(code: string): Promise<Coupon | null> {
+  const normalized = code.toUpperCase().trim();
+  if (!normalized) return null;
+  const q = query(
+    collection(db, BILLING_COLLECTIONS.COUPONS),
+    where('code', '==', normalized),
+    limitFn(1),
+  );
+  const snap = await withTimeout(getDocs(q), 'billing.getCoupon');
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return toCoupon(d.id, d.data() as Record<string, unknown>);
+}
+
 // ─── Usage Records ──────────────────────────────────────────────────────────
 
 export function toUsageRecord(id: string, raw: Record<string, unknown>): UsageRecord {

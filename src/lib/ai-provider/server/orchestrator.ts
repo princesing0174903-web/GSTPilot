@@ -82,12 +82,38 @@ function assertOrg(orgId: string | undefined | null): void {
  * BusinessContext. This is the SINGLE entry point for data gathering — every
  * AI method calls this first.
  *
+ * CANONICAL DELEGATION: The canonical Business Snapshot
+ * (`getBusinessSnapshot(orgId)`) is fetched in parallel with the org-scoped
+ * Firestore reads (listInvoices / listGstTransactions / getBankConnections /
+ * readClients / readReturns) and its headline aggregates OVERRIDE the
+ * locally-derived numbers in the returned BusinessContext — so every AI
+ * consumer (Oracle, AI CFO, /api/ai/score, scaling/ai-scaling.ts) sees the
+ * exact same Revenue / Expenses / Cash / Profit / Receivables / Payables /
+ * GST / ITC as the Home Dashboard. The raw Firestore reads are kept because
+ * they expose record-level detail (top debtors, top categories, deadlines,
+ * filing status, upcoming GST payments) that the snapshot doesn't surface.
+ *
+ * See AUDIT-DUP-1 + task DUP-CLEANUP in worklog.md.
+ *
  * Returns null if there is NO business data at all (no invoices, no GST, no
  * banking) so callers can surface a graceful "connect data" message.
  */
 export async function gatherBusinessContext(organizationId: string): Promise<BusinessContext | null> {
   assertOrg(organizationId);
   const period = currentPeriod();
+
+  // ── Fetch the canonical Business Snapshot in parallel with the Firestore reads ──
+  // The snapshot provides the headline aggregates (revenue / expenses / cash /
+  // profit / receivables / payables / GST / ITC / healthScore / riskScore).
+  // The Firestore reads provide the record-level detail (top debtors, top
+  // expense categories, deadlines, filing status) that the snapshot doesn't expose.
+  const snapshotPromise: Promise<{ revenue: number; expenses: number; profit: number; profitMargin: number; cash: number; receivables: number; payables: number; outputTax: number; inputTax: number; gstLiability: number; itcAvailable: number; healthScore: number; riskScore: number; overdueReceivables: number; collectionRate: number; runwayDays: number; customerCount: number; vendorCount: number; invoiceCount: number; billCount: number } | null> =
+    import('@/lib/business/snapshot')
+      .then(({ getBusinessSnapshot }) => getBusinessSnapshot(organizationId))
+      .catch((err) => {
+        console.warn('[ai-provider/orchestrator] getBusinessSnapshot failed:', err);
+        return null;
+      });
 
   // ── Sales invoices (revenue + receivables) ──
   const invoices = await listInvoices(organizationId).catch(() => []);
@@ -117,8 +143,12 @@ export async function gatherBusinessContext(organizationId: string): Promise<Bus
   // ── GSTN connected? (check gst_profiles) ──
   const gstnConnected = await checkGstnConnected(organizationId);
 
+  // ── Resolve the canonical Business Snapshot ──
+  const snapshot = await snapshotPromise;
+  const hasSnapshot = !!snapshot && (snapshot.revenue > 0 || snapshot.cash > 0 || snapshot.receivables > 0);
+
   // ── Build the snapshot ──
-  const snapshot: BusinessDataSnapshot = {
+  const snapshot_data: BusinessDataSnapshot = {
     organizationId,
     period,
     invoices: invoices.map((inv) => ({
@@ -192,7 +222,7 @@ export async function gatherBusinessContext(organizationId: string): Promise<Bus
       status: 'paid',
       partyName: t.sellerGstin ? `GSTIN: ${t.sellerGstin}` : 'Vendor',
     }));
-  snapshot.invoices = [...snapshot.invoices, ...purchaseInvoices];
+  snapshot_data.invoices = [...snapshot_data.invoices, ...purchaseInvoices];
 
   // ── Graceful empty state ──
   const hasAnyData =
@@ -200,10 +230,68 @@ export async function gatherBusinessContext(organizationId: string): Promise<Bus
     gstTxns.length > 0 ||
     bankConns.length > 0 ||
     clients.length > 0 ||
-    returns.length > 0;
+    returns.length > 0 ||
+    hasSnapshot;
   if (!hasAnyData) return null;
 
-  return buildBusinessContext(snapshot);
+  const context = buildBusinessContext(snapshot_data);
+
+  // ── Override headline aggregates with the canonical Business Snapshot ──
+  // The local `buildBusinessContext` derives these from raw Firestore records
+  // (which may be partial — e.g. a connected ERP may not sync to Firestore).
+  // When the canonical snapshot has real data, its headline numbers win so
+  // every AI consumer shows the same numbers as the Home Dashboard.
+  if (hasSnapshot && snapshot) {
+    // Revenue (current period) — use snapshot.revenueThisMonth when available,
+    // else fall back to snapshot.revenue (FY total).
+    const snapshotRevenueThisMonth =
+      (snapshot as { revenueThisMonth?: number }).revenueThisMonth ?? 0;
+    if (snapshotRevenueThisMonth > 0) {
+      context.revenue.current = Math.round(snapshotRevenueThisMonth);
+    } else if (snapshot.revenue > 0) {
+      context.revenue.current = Math.round(snapshot.revenue);
+    }
+    if (snapshot.revenue > 0) {
+      context.revenue.previous = Math.round(snapshot.revenue - snapshotRevenueThisMonth);
+    }
+    if (context.revenue.previous > 0) {
+      context.revenue.change = context.revenue.current - context.revenue.previous;
+      context.revenue.changePercent = (context.revenue.change / context.revenue.previous) * 100;
+    }
+
+    if (snapshot.expenses > 0) {
+      context.expenses.current = Math.round(snapshot.expenses);
+    }
+
+    context.profit.current = Math.round(snapshot.profit);
+    context.profit.margin = snapshot.profitMargin;
+
+    context.outstanding.receivables = Math.round(snapshot.receivables);
+    context.outstanding.payables = Math.round(snapshot.payables);
+    context.outstanding.net = context.outstanding.receivables - context.outstanding.payables;
+
+    context.gst.liability = Math.round(snapshot.outputTax);
+    context.gst.itcAvailable = Math.round(snapshot.itcAvailable);
+    context.gst.netPayable = Math.round(snapshot.gstLiability);
+
+    if (snapshot.cash > 0) {
+      context.banking.totalBalance = Math.round(snapshot.cash);
+      context.banking.availableBalance = Math.round(snapshot.cash);
+    }
+
+    if (Number.isFinite(snapshot.runwayDays) && snapshot.runwayDays > 0) {
+      context.cashFlow.runwayMonths = snapshot.runwayDays / 30;
+    }
+
+    if (snapshot.invoiceCount > 0) {
+      context.revenue.invoiceCount = snapshot.invoiceCount;
+    }
+    if (snapshot.customerCount > 0) {
+      context.customers.total = snapshot.customerCount;
+    }
+  }
+
+  return context;
 }
 
 /** Read clients from Firestore, scoped by organizationId. */
@@ -426,21 +514,83 @@ export async function generateAlerts(organizationId: string): Promise<Alert[]> {
   return p.generateAlerts(context, insights);
 }
 
-/** computeBusinessScore — the composite business score. */
+/** computeBusinessScore — the composite business score.
+ *
+ * The headline `score` is sourced from the CANONICAL Business Snapshot
+ * (`getBusinessSnapshot(orgId).healthScore`) so every consumer of the AI
+ * provider (Mock + future real providers) shows the same Health Score as the
+ * Home Dashboard / Oracle / AI CFO. The provider-derived BusinessScore still
+ * powers the per-component breakdown (revenue / cashflow / compliance / etc.)
+ * and the grade / trend / summary — only the headline number is overridden.
+ */
 export async function computeBusinessScore(organizationId: string): Promise<BusinessScore> {
   const context = await gatherBusinessContext(organizationId);
   if (!context) throw new NoBusinessDataError();
-  return provider().computeBusinessScore(context);
+
+  const providerScore = await provider().computeBusinessScore(context);
+
+  // ── Override headline with the canonical Health Score ──
+  try {
+    const { getBusinessSnapshot } = await import('@/lib/business/snapshot');
+    const snapshot = await getBusinessSnapshot(organizationId);
+    // Only override if the snapshot has real data (healthScore > 0 means the
+    // canonical engine saw at least one financial data point).
+    if (snapshot.healthScore > 0 || snapshot.revenue > 0 || snapshot.cash > 0) {
+      const canonicalScore = Math.max(0, Math.min(100, Math.round(snapshot.healthScore)));
+      // Preserve grade recomputation against the canonical score so the letter
+      // grade is consistent with the headline number.
+      const grade: BusinessScore['grade'] =
+        canonicalScore >= 80 ? 'A' : canonicalScore >= 65 ? 'B' : canonicalScore >= 50 ? 'C' : 'D';
+      return {
+        ...providerScore,
+        score: canonicalScore,
+        grade,
+      };
+    }
+  } catch {
+    // Swallow — return the provider-derived score.
+  }
+
+  return providerScore;
 }
 
-/** computeRiskScore — the risk score + factors. */
+/** computeRiskScore — the risk score + factors.
+ *
+ * The headline `score` is sourced from the CANONICAL Business Snapshot
+ * (`getBusinessSnapshot(orgId).riskScore`) so every consumer of the AI
+ * provider shows the same Risk Score as the Home Dashboard / Oracle / AI CFO.
+ * The provider-derived RiskScore still powers the per-factor breakdown and
+ * summary — only the headline number is overridden.
+ */
 export async function computeRiskScore(organizationId: string): Promise<RiskScore> {
   const context = await gatherBusinessContext(organizationId);
   if (!context) throw new NoBusinessDataError();
 
   const p = provider();
   const insights = await p.generateInsights(context);
-  return p.computeRiskScore(context, insights);
+  const providerScore = await p.computeRiskScore(context, insights);
+
+  // ── Override headline with the canonical Risk Score ──
+  try {
+    const { getBusinessSnapshot } = await import('@/lib/business/snapshot');
+    const snapshot = await getBusinessSnapshot(organizationId);
+    if (snapshot.healthScore > 0 || snapshot.revenue > 0 || snapshot.cash > 0) {
+      const canonicalScore = Math.max(0, Math.min(100, Math.round(snapshot.riskScore)));
+      const level: RiskScore['level'] =
+        canonicalScore >= 60 ? 'critical' :
+        canonicalScore >= 40 ? 'high' :
+        canonicalScore >= 20 ? 'medium' : 'low';
+      return {
+        ...providerScore,
+        score: canonicalScore,
+        level,
+      };
+    }
+  } catch {
+    // Swallow — return the provider-derived score.
+  }
+
+  return providerScore;
 }
 
 /** answerBusinessQuestion — Oracle chat (answers using REAL Firestore data). */

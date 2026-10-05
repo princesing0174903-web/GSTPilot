@@ -26,10 +26,12 @@ import {
   CheckCircle2,
   Trash2,
   User,
+  Loader2,
 } from 'lucide-react';
 import { format, isToday, subDays } from 'date-fns';
 import { AuditLogEntry } from '@/types/gst';
 import { formatNumber, periodToLabel } from '@/lib/gst-utils';
+import { useClients } from '@/hooks/useClients';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,12 +40,6 @@ interface PaginationInfo {
   limit: number;
   offset: number;
   hasMore: boolean;
-}
-
-interface ClientOption {
-  id: string;
-  tradeName: string;
-  gstin: string;
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -121,7 +117,7 @@ function formatTimestampShort(ts: string): string {
 export default function AuditLogsPage() {
   // ─── State ────────────────────────────────────────────────────────────────
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
-  const [clients, setClients] = useState<ClientOption[]>([]);
+  const { clients, loading: clientsLoading, error: clientsError } = useClients();
   const [pagination, setPagination] = useState<PaginationInfo>({
     total: 0,
     limit: PAGE_SIZE,
@@ -169,27 +165,6 @@ export default function AuditLogsPage() {
       setLoading(false);
     }
   }, [currentPage, filterClient, filterAction, filterEntity]);
-
-  // Fetch clients separately
-  useEffect(() => {
-    async function fetchClients() {
-      try {
-        const res = await fetch('/api/clients');
-        if (res.ok) {
-          const data = await res.json();
-          const clientList = (data.clients ?? data ?? []).map((c: { id: string; tradeName: string; gstin: string }) => ({
-            id: c.id,
-            tradeName: c.tradeName,
-            gstin: c.gstin,
-          }));
-          setClients(clientList);
-        }
-      } catch {
-        // Silently handle
-      }
-    }
-    fetchClients();
-  }, []);
 
   useEffect(() => {
     fetchLogs();
@@ -376,11 +351,21 @@ export default function AuditLogsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Clients</SelectItem>
-                {clients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.tradeName}
-                  </SelectItem>
-                ))}
+                {clientsLoading ? (
+                  <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading clients…
+                  </div>
+                ) : clientsError ? (
+                  <div className="px-2 py-3 text-xs text-red-600">{clientsError}</div>
+                ) : clients.length === 0 ? (
+                  <div className="px-2 py-3 text-xs text-muted-foreground">No clients found</div>
+                ) : (
+                  clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.tradeName}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
 
@@ -520,7 +505,7 @@ export default function AuditLogsPage() {
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-sm">
                           {log.entity ? (
-                            <Badge variant="outline" className="text-xs border-slate-200 bg-slate-50 text-slate-700">
+                            <Badge variant="outline" className="text-xs border-white/[0.08] bg-white/[0.03] text-muted-foreground">
                               {log.entity}
                             </Badge>
                           ) : (
@@ -618,7 +603,7 @@ export default function AuditLogsPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground">Entity</p>
-                  <Badge variant="outline" className="text-xs border-slate-200 bg-slate-50 text-slate-700">
+                  <Badge variant="outline" className="text-xs border-white/[0.08] bg-white/[0.03] text-muted-foreground">
                     {selectedLog.entity ?? '—'}
                   </Badge>
                 </div>

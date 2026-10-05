@@ -1,0 +1,22 @@
+ GET /api/workflow/pipeline?organizationId=local-dXKkLqbkIjbwN41dEG4pI6PgiMl2 200 in 3.4s (compile: 3.2s, render: 139ms)
+ GET /api/oracle/daily-briefing?organizationId=local-dXKkLqbkIjbwN41dEG4pI6PgiMl2 200 in 3.4s (compile: 3.2s, render: 180ms)
+ GET /api/business/snapshot?organizationId=local-dXKkLqbkIjbwN41dEG4pI6PgiMl2 200 in 3.5s (compile: 3.3s, render: 204ms)
+ GET /api/recommendations?organizationId=local-dXKkLqbkIjbwN41dEG4pI6PgiMl2 200 in 3.5s (compile: 3.2s, render: 227ms)
+ HEAD / 200 in 176ms (compile: 41ms, proxy.ts: 7ms, render: 128ms)
+ GET / 200 in 47ms (compile: 4ms, proxy.ts: 6ms, render: 37ms)
+ GET /api/integrations/google/status 200 in 1952ms (compile: 1931ms, render: 21ms)
+ GET /api/integrations/google/status 200 in 9ms (compile: 2ms, render: 6ms)
+ GET /api/integrations/google/status 200 in 11ms (compile: 2ms, render: 8ms)
+ HEAD / 200 in 161ms (compile: 32ms, proxy.ts: 6ms, render: 123ms)
+[/api/integrations/google/connect] error: Error: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars are not set. Configure them in .env
+    at getGoogleOAuthConfig (src/lib/google-workspace/auth.ts:61:11)
+    at buildAuthUrl (src/lib/google-workspace/auth.ts:278:57)
+    at GET (src/app/api/integrations/google/connect/route.ts:57:33)
+  59 |     'http://localhost:3000/api/integrations/google/callback';
+  60 |   if (!clientId || !clientSecret) {
+> 61 |     throw new Error(
+     |           ^
+  62 |       'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars are not set. Configure them in .env',
+  63 |     );
+  64 |   }
+ GET /api/integrations/google/connect?return=/google-workspace 500 in 2.0s (compile: 1912ms, render: 126ms)

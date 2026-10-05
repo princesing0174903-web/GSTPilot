@@ -1,6 +1,7 @@
 // GET /api/oracle/conversations — list conversations
 // POST /api/oracle/conversations — start or run an executive conversation
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import {
   listConversations,
   startConversation,
@@ -9,8 +10,18 @@ import {
 } from '@/lib/oracle-core/conversation';
 
 export async function GET(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+  const { searchParams } = new URL(request.url);
+  const orgId0 = searchParams.get('orgId') || searchParams.get('organizationId') || searchParams.get('firmId') || '';
+  if (orgId0) {
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
+  }
+
   try {
-    const { searchParams } = new URL(request.url);
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : 20;
     const statsOnly = searchParams.get('stats') === 'true';
 
@@ -28,6 +39,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   try {
     const body = (await request.json()) as {
       topic: string;
@@ -35,7 +51,16 @@ export async function POST(request: NextRequest) {
       participants?: string[];
       maxTurns?: number;
       runNow?: boolean;
+      orgId?: string;
+      organizationId?: string;
+      firmId?: string;
     };
+
+    const orgId0 = body.orgId || body.organizationId || body.firmId || '';
+    if (orgId0) {
+      const orgResult = await requireOrgMembership(uid, orgId0);
+      if (orgResult instanceof NextResponse) return orgResult;
+    }
 
     if (!body.topic) {
       return NextResponse.json({ error: 'topic is required' }, { status: 400 });

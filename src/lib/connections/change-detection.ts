@@ -90,7 +90,10 @@ async function captureSnapshot(): Promise<BusinessSnapshot | null> {
     let noticeNumbers: string[] = [];
     let returnPeriods: string[] = [];
     if (live.hasGstn && compliance) {
-      // Re-derive from the generated dataset (canonical source)
+      // Re-derive from the generated dataset (canonical source).
+      // NOTE: `generateGstnDataset` now returns null (real GSTN API pending),
+      // so noticeNumbers + returnPeriods stay empty until a real GSTN client
+      // populates them. The snapshot still captures compliance metrics below.
       try {
         const conn = await db.businessConnection.findFirst({
           where: { type: 'gstn', status: 'active' },
@@ -98,8 +101,10 @@ async function captureSnapshot(): Promise<BusinessSnapshot | null> {
         if (conn?.gstin) {
           const { generateGstnDataset } = await import('./gstn-data');
           const ds = generateGstnDataset(conn.gstin);
-          noticeNumbers = ds.notices.map((n) => n.noticeNumber);
-          returnPeriods = ds.gstrFilings.map((f) => `${f.returnType}:${f.period}`);
+          if (ds) {
+            noticeNumbers = ds.notices.map((n) => n.noticeNumber);
+            returnPeriods = ds.gstrFilings.map((f) => `${f.returnType}:${f.period}`);
+          }
         }
       } catch {
         /* ignore */

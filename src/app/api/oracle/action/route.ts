@@ -5,9 +5,15 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { executeOracleAction, type ActionContext } from '@/lib/autonomous-finance/oracle-actions';
 
 export async function POST(req: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   try {
     const body = await req.json();
     const { actionId, input, dryRun, organizationId, userId, userEmail } = body ?? {};
@@ -18,6 +24,10 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    const orgId0 = String(organizationId ?? body.orgId ?? body.firmId ?? '');
+    const orgResult = await requireOrgMembership(uid, orgId0);
+    if (orgResult instanceof NextResponse) return orgResult;
 
     const ctx: ActionContext = {
       organizationId: String(organizationId ?? 'preview-org'),

@@ -61,6 +61,9 @@ import {
   ArrowRightLeft,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
+import { useOrg } from '@/contexts/OrgContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 import {
   useFireClients,
   useFireInvoices,
@@ -182,6 +185,38 @@ export default function CommandPalette() {
   const { data: documents } = useFireDocuments();
   const { data: activities } = useFireRecentActivities(20);
 
+  // ─── Local-mode fallback (Prisma API) ─────────────────────────────────────
+  // In local/preview mode the Firestore hooks return empty (no Firebase org).
+  // To keep the command palette useful in the sandbox/preview, we fetch from
+  // the Prisma-backed REST endpoints instead. In production (real Firebase
+  // org), these stay empty and the Firestore data above is used.
+  const { organization } = useOrg();
+  const { user } = useAuth();
+  const orgId = organization?.id ?? null;
+  const isLocal = isLocalOrgId(orgId);
+  const [localClients, setLocalClients] = useState<Array<{ id: string; tradeName: string; gstin?: string; legalName?: string }>>([]);
+  const [localInvoices, setLocalInvoices] = useState<Array<{ id: string; invoiceNumber?: string; buyerName?: string; sellerGstin?: string }>>([]);
+
+  useEffect(() => {
+    if (!isLocal || !commandPaletteOpen) return;
+    let cancelled = false;
+    const actor = JSON.stringify({ uid: user?.uid ?? 'local-user', email: user?.email ?? 'local@gstpilot.dev' });
+    const headers = { 'x-gstpilot-actor': actor };
+    Promise.all([
+      fetch(`/api/clients?organizationId=${encodeURIComponent(orgId ?? '')}`, { headers }).then((r) => r.ok ? r.json() : { clients: [] }).catch(() => ({ clients: [] })),
+      fetch(`/api/invoices?organizationId=${encodeURIComponent(orgId ?? '')}`, { headers }).then((r) => r.ok ? r.json() : { invoices: [] }).catch(() => ({ invoices: [] })),
+    ]).then(([c, inv]) => {
+      if (cancelled) return;
+      setLocalClients((c.clients ?? []).map((x: Record<string, unknown>) => ({ id: String(x.id), tradeName: String(x.tradeName ?? ''), gstin: String(x.gstin ?? ''), legalName: String(x.legalName ?? '') })));
+      setLocalInvoices((inv.invoices ?? []).map((x: Record<string, unknown>) => ({ id: String(x.id), invoiceNumber: String(x.invoiceNumber ?? ''), buyerName: String(x.buyerName ?? x.client?.tradeName ?? ''), sellerGstin: String(x.sellerGstin ?? '') })));
+    });
+    return () => { cancelled = true; };
+  }, [isLocal, commandPaletteOpen, orgId, user]);
+
+  // Merge: prefer Firestore data when available, fall back to local API data.
+  const effectiveClients = clients.length > 0 ? clients : localClients;
+  const effectiveInvoices = invoices.length > 0 ? invoices : localInvoices;
+
   // ── GSTPilot live registry (organizations/GSTpilot_SAAS/*) ──
   const { customers: gstCustomers } = useGSTpilotCustomers();
   const { products: gstProducts } = useGSTpilotProducts();
@@ -260,6 +295,9 @@ export default function CommandPalette() {
         },
         group: 'Commands',
       },
+      /* ── HIDDEN per Step 0 (Product Mode) — fake/placeholder modules ──
+         invoice-cloud (duplicate of invoices), execution-engine, digital-twin
+         have no real backend. Uncomment to restore once they become real.
       {
         id: 'cmd-invoice-cloud',
         label: 'Open Invoice Cloud',
@@ -296,6 +334,7 @@ export default function CommandPalette() {
         },
         group: 'Commands',
       },
+      ── END HIDDEN ── */
       {
         id: 'cmd-create-return',
         label: 'Create Return',
@@ -347,6 +386,10 @@ export default function CommandPalette() {
         icon: Bell,
         action: () => {
           setCommandPaletteOpen(false);
+          // Phase 2 fix: previously this command just closed the palette
+          // without opening the notifications sheet. Dispatch a window event
+          // that DashboardShell listens for to open the sheet.
+          window.dispatchEvent(new CustomEvent('gstpilot:open-notifications'));
           addToRecent('cmd-open-notifications', 'Open Notifications', 'command');
         },
         group: 'Commands',
@@ -380,10 +423,18 @@ export default function CommandPalette() {
         icon: Bot,
         action: () => {
           setCommandPaletteOpen(false);
+          // Phase 2 fix: previously this command just closed the palette
+          // without opening the Copilot panel. Dispatch a window event that
+          // DashboardShell listens for to focus the Copilot input.
+          window.dispatchEvent(new CustomEvent('gstpilot:open-copilot'));
           addToRecent('cmd-open-ai-copilot', 'Open AI Copilot', 'command');
         },
         group: 'Commands',
       },
+      /* ── HIDDEN per Step 0 (Product Mode) — fake/placeholder modules ──
+         generate, autopilot, ai-software-factory, autonomous-enterprise,
+         enterprise-cloud-platform, enterprise-ai-platform, global-enterprise-network
+         have no real backend. Uncomment to restore once they become real.
       {
         id: 'cmd-open-generate',
         label: 'Open AI Generation Workbench',
@@ -461,7 +512,21 @@ export default function CommandPalette() {
         },
         group: 'Commands',
       },
-      // ─── Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™ ───
+      ── END HIDDEN ── */
+      // ─── Google Workspace — Enterprise Integration ───
+      {
+        id: 'cmd-open-google-workspace',
+        label: 'Open Google Workspace',
+        description: 'Connect Gmail, Drive, Docs, Sheets & Calendar — send emails, upload invoices, export reports, schedule reminders',
+        icon: Cloud,
+        action: () => {
+          setCurrentView('google-workspace');
+          addToRecent('cmd-open-google-workspace', 'Open Google Workspace', 'command');
+        },
+        group: 'Commands',
+      },
+      /* ── HIDDEN per Step 0 (Product Mode) — Phase 13 Enterprise Collaboration ──
+         All 11 Phase 13 modules have no real backend. Uncomment to restore.
       {
         id: 'cmd-open-enterprise-command-center',
         label: 'Open Enterprise Command Center™',
@@ -583,7 +648,10 @@ export default function CommandPalette() {
         },
         group: 'Phase 13 — Enterprise',
       },
-      // ─── Phase 14 — Global Expansion & International Financial Operating System™ ───
+      ── END HIDDEN (Phase 13) ── */
+      // Hidden per stabilization directive — global expansion uses demo data (src/lib/global/data.ts, data-enterprise.ts contain fabricated per-country revenue/tax).
+      // The 12 components under src/components/global-expansion/* are still registered in DashboardViews.tsx (routes remain reachable) but their Command Palette nav buttons are hidden until the demo data is replaced with real per-country records.
+      /* ─── Phase 14 — Global Expansion & International Financial Operating System™ ─── HIDDEN
       {
         id: 'cmd-open-multi-country-accounting',
         label: 'Open Multi-Country Accounting™',
@@ -716,7 +784,9 @@ export default function CommandPalette() {
         },
         group: 'Phase 14 — Global',
       },
-      // ─── Phase 16 — Global Financial Cloud™, Open Platform & Developer Ecosystem™ ───
+      */ // ─── END Phase 14 — Global Expansion (HIDDEN per stabilization directive) ───
+      /* ── HIDDEN per Step 0 (Product Mode) — Phase 16 Global Financial Cloud ──
+         All 16 Phase 16 modules have no real backend. Uncomment to restore.
       {
         id: 'cmd-open-global-financial-cloud',
         label: 'Open Global Financial Cloud™ Hub',
@@ -893,6 +963,7 @@ export default function CommandPalette() {
         },
         group: 'Phase 16 — Cloud',
       },
+      ── END HIDDEN (Phase 16) ── */
     ],
     [setCurrentView, setCommandPaletteOpen, addToRecent]
   );
@@ -917,7 +988,7 @@ export default function CommandPalette() {
 
     const q = query.toLowerCase();
 
-    const matchedClients = clients
+    const matchedClients = effectiveClients
       .filter(
         (c) =>
           c.tradeName?.toLowerCase().includes(q) ||
@@ -926,7 +997,7 @@ export default function CommandPalette() {
       )
       .slice(0, 5);
 
-    const matchedInvoices = invoices
+    const matchedInvoices = effectiveInvoices
       .filter(
         (inv) =>
           inv.invoiceNumber?.toLowerCase().includes(q) ||
@@ -1039,7 +1110,7 @@ export default function CommandPalette() {
       gstExpenses: matchedGstExpenses,
       gstPayments: matchedGstPayments,
     };
-  }, [query, clients, invoices, returns, documents, activities, gstCustomers, gstProducts, gstInvoices, gstVendors, gstExpenses, gstPayments]);
+  }, [query, effectiveClients, effectiveInvoices, returns, documents, activities, gstCustomers, gstProducts, gstInvoices, gstVendors, gstExpenses, gstPayments]);
 
   const hasSearchResults =
     searchResults.clients.length > 0 ||

@@ -17,36 +17,36 @@ import {
   Building2, Plane, Briefcase, Megaphone, Code2, Package,
 } from 'lucide-react'
 
-// ── Engine libs ────────────────────────────────────────────────────────────────
+// ── Engine libs (imported from -utils files to keep Prisma out of client bundle) ─
 import {
   formatInvoiceCurrency, getInvoiceStats,
   generateInvoiceNumber, calculateInvoiceTotals,
   daysOverdue,
-} from '@/lib/invoices/invoices'
+} from '@/lib/invoices/invoices-utils'
 import {
   seedPurchaseBills, getPurchaseStats,
-} from '@/lib/invoices/purchases'
+} from '@/lib/invoices/purchases-utils'
 import {
   seedExpenses, getExpenseStats, autoCategorize,
-} from '@/lib/invoices/expenses'
+} from '@/lib/invoices/expenses-utils'
 import {
   computeAging, getReceivablesSummary, scheduleReminders,
   forecastCollections,
-} from '@/lib/invoices/receivables'
+} from '@/lib/invoices/receivables-utils'
 import {
   getPayablesSummary, prioritizePayments, cashAllocationPlan,
-} from '@/lib/invoices/payables'
+} from '@/lib/invoices/payables-utils'
 import {
   seedPayments, getPaymentStats,
-} from '@/lib/invoices/payments'
+} from '@/lib/invoices/payments-utils'
 import {
   seedTDSRecords, getTDSStats, TDS_SECTIONS, detectSection, calculateTDS,
   quarterForDate,
-} from '@/lib/invoices/tds'
+} from '@/lib/invoices/tds-utils'
 import {
   seedEmployees, seedPayroll, getPayrollStats,
   calculateSalaryBreakdown,
-} from '@/lib/invoices/payroll'
+} from '@/lib/invoices/payroll-utils'
 import {
   generateCashFlowForecast, identifyDelayedCollections, predictSurplusOrDeficit,
 } from '@/lib/invoices/forecast'
@@ -67,6 +67,7 @@ import {
   ProButton, ProBadge, ProStatusDot, ProSkeleton, ProSpinner,
   springModalTransition, modalEnterVariants, backdropVariants,
 } from '@/components/ui-pro'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -376,8 +377,8 @@ function CashFlowAreaChart({
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto">
       <defs>
         <linearGradient id="cfInflow" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
         <linearGradient id="cfOutflow" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#ef4444" stopOpacity="0.22" />
@@ -390,7 +391,7 @@ function CashFlowAreaChart({
       />
       <polyline
         points={inflowPts.join(' ')}
-        fill="none" stroke="#10b981" strokeWidth="2"
+        fill="none" stroke="#2563EB" strokeWidth="2"
         strokeLinecap="round" strokeLinejoin="round"
       />
       <polygon
@@ -429,8 +430,8 @@ function ForecastBarChart({
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto">
       <defs>
         <linearGradient id="fcBarIn" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="100%" stopColor="#059669" />
+          <stop offset="0%" stopColor="#2563EB" />
+          <stop offset="100%" stopColor="#1D4ED8" />
         </linearGradient>
         <linearGradient id="fcBarOut" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#f87171" />
@@ -1078,8 +1079,8 @@ function SalesTab({
                   <td><StatusPill status={inv.paymentStatus} /></td>
                   <td>
                     <div className="flex items-center gap-1">
-                      <button className="p-1.5 rounded-lg text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></button>
-                      <button className="p-1.5 rounded-lg text-white/55 hover:text-[#60A5FA] hover:bg-white/10" title="Send"><Send className="h-3.5 w-3.5" /></button>
+                      <Button variant="ghost" size="icon" className="size-7 text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="size-7 text-white/55 hover:text-[#60A5FA] hover:bg-white/10" title="Send"><Send className="h-3.5 w-3.5" /></Button>
                     </div>
                   </td>
                 </tr>
@@ -1401,7 +1402,7 @@ function PurchaseTab({
                   <td><StatusPill status={b.status === 'matched' ? 'matched' : 'unmatched'} /></td>
                   <td>
                     <div className="flex items-center gap-1">
-                      <button className="p-1.5 rounded-lg text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></button>
+                      <Button variant="ghost" size="icon" className="size-7 text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></Button>
                     </div>
                   </td>
                 </tr>
@@ -2506,7 +2507,7 @@ function PayrollTab({
                   <td className="text-right tabular-nums text-emerald-400">{formatInvoiceCurrency(e.netSalary)}</td>
                   <td><StatusPill status={e.status} /></td>
                   <td>
-                    <button className="p-1.5 rounded-lg text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></button>
+                    <Button variant="ghost" size="icon" className="size-7 text-white/55 hover:text-white hover:bg-white/10" title="View"><Eye className="h-3.5 w-3.5" /></Button>
                   </td>
                 </tr>
               ))}

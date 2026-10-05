@@ -3,6 +3,15 @@
  * so the Admin Center shows LIVE production data on first load.
  *
  * Idempotent: skips anything that already exists. Safe to call on every boot.
+ *
+ * GATING: Disabled by default. Set `GSTPILOT_ALLOW_SEED=true` in env (and
+ * `NODE_ENV !== 'production'`) to enable. Real tenant data should be created
+ * via the normal onboarding flow — this seed file is a dev-only bootstrap that
+ * previously persisted synthetic users (Prince Singh, Arjun Mehta, Priya Nair,
+ * Rohan Kapoor), org hierarchy (GSTPilot Global Holding → India Pvt Ltd →
+ * Delhi Branch → Sales Dept), subscriptions, integrations, API keys, 30 days
+ * of usage events, billing invoices, audit logs, security events, policies,
+ * approvals, and backups. All synthetic. Now no-ops unless explicitly enabled.
  */
 import { db } from '@/lib/db'
 import { ensurePlatformTenant } from './tenant'
@@ -16,6 +25,10 @@ import { MODULE_CATALOG } from './org-marketplace'
 let seeded = false
 
 export async function seedEnterprise(): Promise<void> {
+  // GATING: Real tenant data should come from onboarding, not synthetic seed.
+  // Set GSTPILOT_ALLOW_SEED=true (and NODE_ENV !== 'production') to re-enable.
+  if (process.env.GSTPILOT_ALLOW_SEED !== 'true') return
+  if (process.env.NODE_ENV === 'production') return
   if (seeded) return
   seeded = true
   try {

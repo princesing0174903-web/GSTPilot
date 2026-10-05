@@ -764,8 +764,8 @@ function CurrencyExposureBubbles() {
                   top: `${top}%`,
                   width: `${size}px`,
                   height: `${size}px`,
-                  borderColor: isHigh ? 'rgba(244, 63, 94, 0.6)' : 'rgba(16, 185, 129, 0.6)',
-                  background: isHigh ? 'rgba(244, 63, 94, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                  borderColor: isHigh ? 'rgba(244, 63, 94, 0.6)' : 'rgba(37,99,235, 0.6)',
+                  background: isHigh ? 'rgba(244, 63, 94, 0.12)' : 'rgba(37,99,235, 0.12)',
                 }}
                 title={`${fx.currency} · ${fmtCompactUSD(fx.exposure)} exposure · ${fx.hedgeRatio}% hedged`}
               >

@@ -1,15 +1,18 @@
 #!/bin/bash
-# GSTPilot dev-server watchdog — Turbopack edition (memory-optimized).
-# 2500MB heap gives Turbopack room to cache the 146-dynamic-import page.tsx
-# without hitting the memory warning that causes mid-request restarts.
-trap '' SIGHUP SIGTERM SIGINT SIGPIPE
 cd /home/z/my-project
-echo "[watchdog $(date +%H:%M:%S)] started (turbopack, heap=1800m)" >> dev.log
+exec >> /home/z/my-project/watchdog.log 2>&1
 while true; do
-  NODE_OPTIONS="--max-old-space-size=1800 --max-semi-space-size=48" \
-    node node_modules/.bin/next dev -p 3000 --turbo >> dev.log 2>&1
-  EC=$?
-  echo "[watchdog $(date +%H:%M:%S)] next dev exited code=$EC — restarting in 4s..." >> dev.log
-  sync 2>/dev/null || true
-  sleep 4
+  if ! pgrep -f "next-server" > /dev/null 2>&1; then
+    echo "[$(date)] Starting next dev (webpack)..."
+    NODE_OPTIONS='--max-old-space-size=2560' node node_modules/next/dist/bin/next dev -p 3000 --webpack > /home/z/my-project/dev.log 2>&1 &
+    NODE_PID=$!
+    for i in $(seq 1 90); do
+      sleep 1
+      if curl -s --max-time 5 http://localhost:3000/ > /dev/null 2>&1; then
+        echo "[$(date)] Server ready (PID $NODE_PID)"
+        break
+      fi
+    done
+  fi
+  sleep 5
 done

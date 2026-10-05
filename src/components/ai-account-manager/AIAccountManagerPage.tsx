@@ -93,7 +93,7 @@ const escalations: { client: string; reason: string; since: string; severity: st
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const scoreColor = (score: number) => {
-  if (score >= 75) return '#10b981'
+  if (score >= 75) return '#2563EB'
   if (score >= 50) return '#f59e0b'
   return '#ef4444'
 }

@@ -30,10 +30,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import {
-  SIMULATION_SCENARIOS,
-  WORKFLOW_TEMPLATES,
-} from '@/lib/command-network';
+import { SIMULATION_SCENARIOS } from '@/lib/command-network/simulator-defs';
+import { WORKFLOW_TEMPLATES } from '@/lib/command-network/workflows-defs';
 import type {
   CommandDashboard, CommandFabric, ConnectedModule, CoordinatedDecision,
   CoordinatedWorkflow, CommandIncident, CommandPlaybook, CommandSimulation,

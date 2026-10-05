@@ -25,8 +25,6 @@
 
 import { db } from '@/lib/db';
 import { generateGstnDataset } from './gstn-data';
-import { generateBankDataset } from './bank-data';
-import type { BankProvider } from './types';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -100,7 +98,11 @@ function validateGstnDataset(gstin: string, ctx: GstnValidationContext): void {
     });
   }
 
+  // REAL GSTN API PENDING — generator returns null, nothing to validate.
+  // Future: rehydrate from real GSTRFiling / EInvoice / EWayBill / Notice rows
+  // and run the duplicate / missing-GSTIN / tax-mismatch / future-date checks.
   const dataset = generateGstnDataset(gstin);
+  if (!dataset) return;
 
   // 2. E-invoices — duplicates + missing GSTIN + tax mismatch
   const seenInvoiceNos = new Set<string>();

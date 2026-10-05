@@ -2,18 +2,78 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { graphEvents, invalidateGraph } from '@/lib/graph/live-update'
 import { emitCollectionNode } from '@/lib/graph/auto-emit'
+import { emitTimelineEvent } from '@/lib/timeline/emit'
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
+import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot'
 
-// GET /api/payments — Fetch payments, scoped by clientId (multi-tenant isolation).
-// Previously this returned ALL payments platform-wide with no `where` clause
-// (multi-tenant data leak). Now filters by clientId query param.
+/** Resolve orgId for a payment from header, body, or Client.firmId lookup. */
+async function resolveOrgForPayment(
+  req: NextRequest,
+  body: { organizationId?: string; firmId?: string; clientId?: string },
+): Promise<string | null> {
+  const headerOrg = req.headers.get('x-gstpilot-orgid')
+  if (headerOrg && headerOrg.trim()) return headerOrg.trim()
+  const bodyOrg = body.organizationId || body.firmId
+  if (bodyOrg && typeof bodyOrg === 'string' && bodyOrg.trim()) return bodyOrg.trim()
+  if (body.clientId) {
+    try {
+      const client = await db.client.findUnique({
+        where: { id: body.clientId },
+        select: { firmId: true },
+      })
+      if (client?.firmId) return client.firmId
+    } catch {
+      /* ignore — best-effort */
+    }
+  }
+  return null
+}
+
+/** Parse the `x-gstpilot-actor` request header (JSON { uid, email }). */
+function parseActorHeader(req: NextRequest): { userId?: string; userName?: string } | undefined {
+  const raw = req.headers.get('x-gstpilot-actor')
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as { uid?: string; email?: string; displayName?: string }
+    if (!parsed.uid && !parsed.email) return undefined
+    return { userId: parsed.uid, userName: parsed.displayName ?? parsed.email }
+  } catch {
+    return undefined
+  }
+}
+
+// GET /api/payments — Fetch payments, tenant-scoped.
+// Accepts organizationId (preferred) or clientId. If NEITHER is provided,
+// returns empty (prevents cross-tenant data leak).
 export async function GET(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const clientId = searchParams.get('clientId')
     const partyType = searchParams.get('partyType')
+    const organizationId = searchParams.get('organizationId') ?? searchParams.get('firmId')
 
-    const where: { clientId?: string; partyType?: string } = {}
-    if (clientId) where.clientId = clientId
+    const where: Record<string, unknown> = {}
+    if (clientId) {
+      where.clientId = clientId
+    } else if (organizationId) {
+      // Payment has no organizationId column — scope via client.firmId.
+      where.client = { firmId: organizationId }
+    } else {
+      // No tenant scope — return empty rather than leak cross-tenant data
+      return NextResponse.json({ payments: [] })
+    }
+
+    // ── 2. AUTHORIZATION — when an orgId is available, verify membership ────
+    if (organizationId) {
+      const memberResult = await requireOrgMembership(uid, organizationId)
+      if (memberResult instanceof NextResponse) return memberResult
+    }
+
     if (partyType) where.partyType = partyType
 
     const payments = await db.payment.findMany({
@@ -24,10 +84,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ payments: payments ?? [] })
   } catch (error) {
     console.error('GET /api/payments error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch payments' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not load your payments right now. Please try again.')
   }
 }
 
@@ -35,6 +92,11 @@ export async function GET(request: NextRequest) {
 // or purchase bill when one is referenced.
 export async function POST(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const {
       clientId,
@@ -54,6 +116,15 @@ export async function POST(request: NextRequest) {
         { error: 'partyName, partyType, amount, paymentDate and paymentMode are required' },
         { status: 400 }
       )
+    }
+
+    // ── 2. AUTHORIZATION — verify membership when an orgId can be resolved ──
+    // Resolve the orgId early via the existing helper so we can gate the write.
+    // The same orgId is reused below for the timeline emit (no double-resolve).
+    const orgId = await resolveOrgForPayment(request, body)
+    if (orgId) {
+      const memberResult = await requireOrgMembership(uid, orgId)
+      if (memberResult instanceof NextResponse) return memberResult
     }
 
     const paymentAmount = Number(amount) || 0
@@ -77,6 +148,9 @@ export async function POST(request: NextRequest) {
     })
 
     // If invoiceId provided — recompute Invoice paidAmount + balanceAmount + paymentStatus
+    let invoiceNowPaid = false
+    let paidInvoiceNumber: string | null = null
+    let paidInvoiceTotal = 0
     if (invoiceId) {
       const invoice = await db.invoice.findUnique({ where: { id: invoiceId } })
       if (invoice) {
@@ -99,6 +173,9 @@ export async function POST(request: NextRequest) {
         // ── Real Business Graph Engine™ — invoice cleared event ──
         if (paymentStatus === 'paid') {
           graphEvents.invoicePaid(invoiceId, invoice.invoiceNumber, paymentAmount)
+          invoiceNowPaid = true
+          paidInvoiceNumber = invoice.invoiceNumber
+          paidInvoiceTotal = total
         }
       }
     }
@@ -152,19 +229,94 @@ export async function POST(request: NextRequest) {
     // PT-2-b: canonical graph node emit — collection/payment node + Client→Collection edge
     try { await emitCollectionNode(payment.id) } catch (e) { console.error('[graph] emitCollectionNode failed', e) }
 
+    // ── Business Timeline events (fire-and-forget — never break the payment) ──
+    // orgId was resolved above for the membership check; reuse it here.
+    if (orgId) {
+      const actor = parseActorHeader(request)
+      const isCustomerPayment = partyType !== 'vendor'
+
+      // Always emit payment.received (for customer payments) — captures every
+      // inbound payment on the timeline.
+      if (isCustomerPayment) {
+        await emitTimelineEvent({
+          organizationId: orgId,
+          type: 'payment.received',
+          title: `Payment ₹${paymentAmount.toLocaleString('en-IN')} received`,
+          description: `${partyName} paid via ${paymentMode}${invoiceId ? ` — against invoice${paidInvoiceNumber ? ` ${paidInvoiceNumber}` : ''}` : ''}.${referenceNo ? ` Ref: ${referenceNo}.` : ''}`,
+          actor,
+          metadata: {
+            paymentId: payment.id,
+            amount: paymentAmount,
+            partyName,
+            partyType,
+            paymentMode,
+            paymentDate,
+            referenceNo: referenceNo ?? null,
+            invoiceId: invoiceId ?? null,
+            invoiceNumber: paidInvoiceNumber,
+            clientId: clientId ?? null,
+          },
+          severity: 'success',
+        })
+      }
+
+      // When the referenced invoice just transitioned to fully-paid, emit a
+      // separate invoice.paid event so the timeline surfaces the milestone.
+      if (invoiceNowPaid && paidInvoiceNumber) {
+        await emitTimelineEvent({
+          organizationId: orgId,
+          type: 'invoice.paid',
+          title: `Invoice ${paidInvoiceNumber} paid`,
+          description: `Invoice ${paidInvoiceNumber} (${paidInvoiceTotal > 0 ? `₹${paidInvoiceTotal.toLocaleString('en-IN')}` : 'fully settled'}) cleared by ${partyName}.`,
+          actor,
+          metadata: {
+            invoiceId: invoiceId!,
+            invoiceNumber: paidInvoiceNumber,
+            amount: paidInvoiceTotal,
+            paymentId: payment.id,
+            partyName,
+            paymentMode,
+            paymentDate,
+          },
+          severity: 'success',
+        })
+      }
+    }
+
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Payment recorded → cash flow, collection rate, receivables, customer
+    // outstanding, and health score all need recomputation.
+    if (orgId) invalidateBusinessSnapshotCache(orgId)
+
     return NextResponse.json({ payment }, { status: 201 })
   } catch (error) {
     console.error('POST /api/payments error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to record payment' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not record the payment right now. Please try again.')
+  }
+}
+
+// Helper: invalidate snapshot cache for the org that owns the payment's client.
+// Called after POST / PATCH / DELETE so cash flow, receivables, collection
+// rate, and health score all reflect the payment immediately.
+async function invalidateSnapshotForPayment(payment: { clientId?: string | null }): Promise<void> {
+  if (!payment.clientId) return
+  const client = await db.client.findUnique({
+    where: { id: payment.clientId },
+    select: { firmId: true },
+  }).catch(() => null)
+  if (client?.firmId) {
+    invalidateBusinessSnapshotCache(client.firmId)
   }
 }
 
 // PATCH /api/payments?id=XXX — Update a payment (e.g., mark reconciled)
 export async function PATCH(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) {
@@ -187,6 +339,19 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // ── 2. RESOURCE-LEVEL TENANT CHECK ────────────────────────────────
+    // Fetch the payment's client.firmId before mutating, and require the
+    // caller to be a member of that org. Mirrors `assertInvoiceTenantAccess`.
+    const existing = await db.payment.findUnique({
+      where: { id },
+      select: { clientId: true, client: { select: { firmId: true } } },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
+    }
+    const orgResult = await requireOrgMembership(uid, existing.client?.firmId)
+    if (orgResult instanceof NextResponse) return orgResult
+
     const payment = await db.payment.update({
       where: { id },
       data: updateData,
@@ -202,24 +367,41 @@ export async function PATCH(request: NextRequest) {
       },
     })
 
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    // Payment amount/status changed → cash flow, collection rate, receivables.
+    await invalidateSnapshotForPayment(payment)
+
     return NextResponse.json({ payment })
   } catch (error) {
     console.error('PATCH /api/payments error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update payment' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not update the payment right now. Please try again.')
   }
 }
 
 // DELETE /api/payments?id=XXX — Delete a payment
 export async function DELETE(request: NextRequest) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) {
       return NextResponse.json({ error: 'id query param is required' }, { status: 400 })
     }
+
+    // ── 2. RESOURCE-LEVEL TENANT CHECK ────────────────────────────────
+    const existing = await db.payment.findUnique({
+      where: { id },
+      select: { clientId: true, client: { select: { firmId: true } } },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
+    }
+    const orgResult = await requireOrgMembership(uid, existing.client?.firmId)
+    if (orgResult instanceof NextResponse) return orgResult
 
     const payment = await db.payment.delete({ where: { id } })
 
@@ -233,12 +415,12 @@ export async function DELETE(request: NextRequest) {
       },
     })
 
+    // ── Unified SaaS: invalidate the canonical Business Snapshot cache ──
+    await invalidateSnapshotForPayment(payment)
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('DELETE /api/payments error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete payment' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not delete the payment right now. Please try again.')
   }
 }

@@ -6,12 +6,17 @@
 // authenticated user's context — exactly like the existing onSnapshot hooks.
 //
 // Flow:
-//   1. uploadInvoiceFile(file, onProgress) → Supabase Storage upload + URL
+//   1. uploadInvoiceFile(organizationId, file, onProgress) → Supabase Storage upload + URL
 //   2. (client calls /api/invoices/extract with the data URL)
 //   3. matchCustomer(extracted, customers)  → reuse existing or create new
 //   4. matchProduct(lineItem, products)     → reuse existing or create new (per item)
 //   5. detectDuplicates(extracted, invoices)→ warn before save
-//   6. saveExtractedInvoice(reviewed)       → createInvoice with `source` metadata
+//   6. saveExtractedInvoice(organizationId, reviewed) → createInvoice with `source` metadata
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Both the Supabase Storage path and the Firestore writes use the real
+//   `organizationId` from OrgContext. If organizationId is null/empty,
+//   the save step throws a friendly error.
 //
 // No mock data. No local arrays. Firestore + Storage are the only sources of truth.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -24,7 +29,7 @@ import {
   resolveSupabaseAnonKey,
   GSTPILOT_STORAGE_BUCKET,
 } from '@/lib/supabase';
-import { ORG_PATH } from './config';
+import { ORG_ID } from './config';
 import { createCustomer } from './customers';
 import { createProduct } from './products';
 import { createInvoice } from './invoices';
@@ -119,19 +124,26 @@ function buildInvoiceUploadUrl(path: string): string {
  * Upload an invoice file to Supabase Storage under the organization's
  * invoices/uploads/ folder. Reports progress via the callback.
  *
- * Storage path:  organizations/GSTpilot_SAAS/invoices/uploads/{ts}-{slug}
+ * Storage path:  organizations/{organizationId}/invoices/uploads/{ts}-{slug}
+ *
+ * If `organizationId` is null/empty, falls back to the legacy
+ * `organizations/GSTpilot_SAAS/...` path so existing RLS policies still
+ * match — but a friendly warning is logged. New deployments should always
+ * pass the real orgId.
  */
 export function uploadInvoiceFile(
+  organizationId: string | null | undefined,
   file: File,
   onProgress?: (percent: number) => void,
 ): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
+    const orgId = organizationId && organizationId.trim() ? organizationId.trim() : ORG_ID;
     const ts = Date.now();
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
     const mimeType = resolveMimeType(file);
     const ext = safeName.split('.').pop() ?? 'bin';
     const base = safeName.slice(0, safeName.length - ext.length - 1) || 'invoice';
-    const path = `${ORG_PATH}/invoices/uploads/${ts}-${base}.${ext}`;
+    const path = `organizations/${orgId}/invoices/uploads/${ts}-${base}.${ext}`;
     const uploadUrl = buildInvoiceUploadUrl(path);
     const anonKey = resolveSupabaseAnonKey();
 
@@ -197,7 +209,7 @@ function getXhrErrorMessage(status: number, body: string): string {
 function translateStorageError(msg: string): string {
   const lower = msg.toLowerCase();
   if (lower.includes('permission') || lower.includes('denied') || lower.includes('unauthorized')) {
-    return 'Supabase Storage permission denied. Check your bucket RLS policies — the uploader needs write access to organizations/GSTpilot_SAAS/invoices/uploads/ in the "gstpilot-files" bucket.';
+    return 'Supabase Storage permission denied. Check your bucket RLS policies — the uploader needs write access to organizations/{orgId}/invoices/uploads/ in the "gstpilot-files" bucket.';
   }
   if (lower.includes('quota') || lower.includes('billing')) {
     return 'Supabase Storage quota exceeded. Check your Supabase project billing plan.';
@@ -605,14 +617,25 @@ export interface SaveExtractedInvoiceInput {
  * Persist the reviewed extraction as a real Firestore invoice.
  * Optionally creates a new customer and/or new products first, then calls
  * createInvoice with the AI source metadata attached.
+ *
+ * If `organizationId` is null/empty, throws a friendly error — the caller
+ * must resolve the org context before saving.
  */
 export async function saveExtractedInvoice(
+  organizationId: string | null | undefined,
   input: SaveExtractedInvoiceInput,
 ): Promise<Invoice> {
+  if (!organizationId || !organizationId.trim()) {
+    throw new Error(
+      'Unable to save invoice.\n\nReason: No organization is currently selected. ' +
+      'Please sign in and select an organization, then try again.',
+    );
+  }
+
   // 1. Optionally create a new customer.
   let customerId = input.customerId;
   if (!customerId && input.createNewCustomer && input.customerName.trim()) {
-    const newCustomer = await createCustomer({
+    const newCustomer = await createCustomer(organizationId, {
       name: input.customerName.trim(),
       gstin: input.customerGstin ?? null,
       address: input.customerAddress ?? null,
@@ -631,7 +654,7 @@ export async function saveExtractedInvoice(
   for (const li of input.lineItems) {
     let productId = li.productId;
     if (!productId && li.createNewProduct && li.description.trim()) {
-      const newProduct = await createProduct({
+      const newProduct = await createProduct(organizationId, {
         name: li.description.trim(),
         hsnSac: li.hsnSac || '',
         gstRate: sanitizeGstRate(li.gstRate),
@@ -690,5 +713,5 @@ export async function saveExtractedInvoice(
   };
 
   // 4. createInvoice computes GST atomically + writes to Firestore.
-  return createInvoice(createInput);
+  return createInvoice(organizationId, createInput);
 }

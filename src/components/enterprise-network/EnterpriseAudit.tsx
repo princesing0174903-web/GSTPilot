@@ -92,7 +92,7 @@ function avatarColor(avatar: string): string {
   if (avatar === 'AI') return '#14b8a6';
   if (avatar === 'SY') return '#64748b';
   // deterministic color from initials
-  const palette = ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#a855f7', '#84cc16'];
+  const palette = ['#2563EB', '#3B82F6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#a855f7', '#84cc16'];
   const hash = avatar.split('').reduce((s, ch) => s + ch.charCodeAt(0), 0);
   return palette[hash % palette.length];
 }

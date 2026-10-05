@@ -290,20 +290,20 @@ const PREP_STEPS = [
 
 function getStatusBadge(status: string) {
   switch (status) {
-    case 'approved': case 'validated': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><CheckCircle2 className="size-2.5" />Validated</Badge>;
-    case 'draft': return <Badge className="bg-slate-50 text-slate-700 border-slate-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><Clock className="size-2.5" />Draft</Badge>;
-    case 'cancelled': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><XCircle className="size-2.5" />Cancelled</Badge>;
-    case 'filed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-5 gap-0.5"><CheckCircle2 className="size-2.5" />Filed</Badge>;
-    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+    case 'approved': case 'validated': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] px-1.5 py-0 h-5 gap-0.5"><CheckCircle2 className="size-2.5" />Validated</Badge>;
+    case 'draft': return <Badge className="bg-slate-50 text-slate-700 border-slate-200 text-[11px] px-1.5 py-0 h-5 gap-0.5"><Clock className="size-2.5" />Draft</Badge>;
+    case 'cancelled': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[11px] px-1.5 py-0 h-5 gap-0.5"><XCircle className="size-2.5" />Cancelled</Badge>;
+    case 'filed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] px-1.5 py-0 h-5 gap-0.5"><CheckCircle2 className="size-2.5" />Filed</Badge>;
+    default: return <Badge variant="secondary" className="text-[11px]">{status}</Badge>;
   }
 }
 
 function getMatchBadge(status: string) {
   switch (status) {
-    case 'perfect_match': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Matched</Badge>;
-    case 'partial_match': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0">Partial</Badge>;
-    case 'mismatch': case 'missing_in_books': case 'missing_in_gstr': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">Mismatch</Badge>;
-    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+    case 'perfect_match': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] px-1.5 py-0">Matched</Badge>;
+    case 'partial_match': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[11px] px-1.5 py-0">Partial</Badge>;
+    case 'mismatch': case 'missing_in_books': case 'missing_in_gstr': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[11px] px-1.5 py-0">Mismatch</Badge>;
+    default: return <Badge variant="secondary" className="text-[11px]">{status}</Badge>;
   }
 }
 
@@ -360,7 +360,7 @@ function StepProgressBar({ currentStep }: { currentStep: number }) {
                 >
                   {isCompleted ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                 </motion.div>
-                <span className={`text-[10px] text-center leading-tight mt-2 whitespace-nowrap ${
+                <span className={`text-[11px] text-center leading-tight mt-2 whitespace-nowrap ${
                   isCompleted ? 'text-emerald-700 font-medium' : isActive ? 'text-foreground font-semibold' : 'text-muted-foreground'
                 }`}>
                   {step.label}
@@ -763,23 +763,23 @@ export default function ReturnPrepWorkspace() {
           {selectedInvoice && (
             <div className="space-y-4 mt-2">
               <div className="grid grid-cols-2 gap-3">
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice Number</span><p className="text-sm font-mono font-semibold">{selectedInvoice.invoiceNumber}</p></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Date</span><p className="text-sm">{selectedInvoice.invoiceDate}</p></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Seller GSTIN</span><p className="text-sm font-mono">{selectedInvoice.sellerGstin}</p></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Buyer</span><p className="text-sm">{selectedInvoice.buyerName || '—'}</p></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">HSN Code</span><p className="text-sm font-mono">{selectedInvoice.hsnCode || 'Missing'}</p></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Place of Supply</span><p className="text-sm">{selectedInvoice.placeOfSupply || '—'}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">Invoice Number</span><p className="text-sm font-mono font-semibold">{selectedInvoice.invoiceNumber}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">Date</span><p className="text-sm">{selectedInvoice.invoiceDate}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">Seller GSTIN</span><p className="text-sm font-mono">{selectedInvoice.sellerGstin}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">Buyer</span><p className="text-sm">{selectedInvoice.buyerName || '—'}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">HSN Code</span><p className="text-sm font-mono">{selectedInvoice.hsnCode || 'Missing'}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">Place of Supply</span><p className="text-sm">{selectedInvoice.placeOfSupply || '—'}</p></div>
               </div>
               <Separator />
               <div className="grid grid-cols-2 gap-3">
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Taxable Value</span><p className="text-sm font-bold">{formatCurrency(selectedInvoice.taxableValue)}</p></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Status</span><div className="mt-0.5">{getStatusBadge(selectedInvoice.status)}</div></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Match Status</span><div className="mt-0.5">{getMatchBadge(selectedInvoice.matchStatus)}</div></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Risk Level</span><div className="mt-0.5"><span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ${getRiskColor(selectedInvoice.riskLevel)}`}>{selectedInvoice.riskLevel}</span></div></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">CGST</span><p className="text-sm">{selectedInvoice.cgst > 0 ? formatCurrency(selectedInvoice.cgst) : '—'}</p></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">SGST</span><p className="text-sm">{selectedInvoice.sgst > 0 ? formatCurrency(selectedInvoice.sgst) : '—'}</p></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">IGST</span><p className="text-sm">{selectedInvoice.igst > 0 ? formatCurrency(selectedInvoice.igst) : '—'}</p></div>
-                <div><span className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Amount</span><p className="text-sm font-bold text-emerald-700">{formatCurrency(selectedInvoice.totalAmount)}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">Taxable Value</span><p className="text-sm font-bold">{formatCurrency(selectedInvoice.taxableValue)}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">Status</span><div className="mt-0.5">{getStatusBadge(selectedInvoice.status)}</div></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">Match Status</span><div className="mt-0.5">{getMatchBadge(selectedInvoice.matchStatus)}</div></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">Risk Level</span><div className="mt-0.5"><span className={`inline-flex items-center text-[11px] font-medium px-1.5 py-0.5 rounded ${getRiskColor(selectedInvoice.riskLevel)}`}>{selectedInvoice.riskLevel}</span></div></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">CGST</span><p className="text-sm">{selectedInvoice.cgst > 0 ? formatCurrency(selectedInvoice.cgst) : '—'}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">SGST</span><p className="text-sm">{selectedInvoice.sgst > 0 ? formatCurrency(selectedInvoice.sgst) : '—'}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">IGST</span><p className="text-sm">{selectedInvoice.igst > 0 ? formatCurrency(selectedInvoice.igst) : '—'}</p></div>
+                <div><span className="text-[11px] text-muted-foreground uppercase tracking-wider">Total Amount</span><p className="text-sm font-bold text-emerald-700">{formatCurrency(selectedInvoice.totalAmount)}</p></div>
               </div>
               {selectedInvoice.aiExplanation && (
                 <>
@@ -845,12 +845,12 @@ export default function ReturnPrepWorkspace() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground leading-tight">{clientName}</p>
-                  <p className="text-[10px] font-mono text-muted-foreground">{clientGSTIN}</p>
+                  <p className="text-[11px] font-mono text-muted-foreground">{clientGSTIN}</p>
                 </div>
               </div>
               <Badge variant="outline" className="text-xs font-medium">{returnType}</Badge>
               <Badge variant="outline" className="text-xs font-medium">{periodToLabel(period)}</Badge>
-              {currentReturn && <Badge className={`text-[10px] ${currentReturn.status === 'filed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{currentReturn.status}</Badge>}
+              {currentReturn && <Badge className={`text-[11px] ${currentReturn.status === 'filed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{currentReturn.status}</Badge>}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50" onClick={handleRunValidation} disabled={effectiveStep >= 2 || actionLoading}>
@@ -893,11 +893,11 @@ export default function ReturnPrepWorkspace() {
                         <FileText className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <p className="text-xs font-medium text-foreground">{doc.fileName}</p>
-                          <p className="text-[10px] text-muted-foreground">{doc.documentType} · {(doc.fileSize / 1024).toFixed(1)} KB</p>
+                          <p className="text-[11px] text-muted-foreground">{doc.documentType} · {(doc.fileSize / 1024).toFixed(1)} KB</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge className={`text-[10px] ${doc.extractionStatus === 'completed' ? 'bg-emerald-50 text-emerald-700' : doc.extractionStatus === 'in_progress' ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-700'}`}>
+                        <Badge className={`text-[11px] ${doc.extractionStatus === 'completed' ? 'bg-emerald-50 text-emerald-700' : doc.extractionStatus === 'in_progress' ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-700'}`}>
                           {doc.extractionStatus}
                         </Badge>
                       </div>
@@ -966,7 +966,7 @@ export default function ReturnPrepWorkspace() {
                       onClick={() => setInvoiceFilter(filter)}
                     >
                       {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
-                      <span className={`text-[10px] px-1 py-0 rounded-full ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-muted-foreground'}`}>{count}</span>
+                      <span className={`text-[11px] px-1 py-0 rounded-full ${isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-muted-foreground'}`}>{count}</span>
                     </Button>
                   );
                 })}
@@ -982,13 +982,13 @@ export default function ReturnPrepWorkspace() {
                 <table className="w-full">
                   <thead className="sticky top-0 bg-white z-10">
                     <tr className="border-b border-border/40">
-                      <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Invoice #</th>
-                      <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden sm:table-cell">Date</th>
-                      <th className="text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Buyer</th>
-                      <th className="text-right text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Taxable</th>
-                      <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Match</th>
-                      <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Status</th>
-                      <th className="text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Actions</th>
+                      <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Invoice #</th>
+                      <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden sm:table-cell">Date</th>
+                      <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Buyer</th>
+                      <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Taxable</th>
+                      <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Match</th>
+                      <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Status</th>
+                      <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2.5">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1026,15 +1026,15 @@ export default function ReturnPrepWorkspace() {
               <div className="grid grid-cols-3 gap-3 mt-4">
                 <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/50 text-center">
                   <p className="text-xl font-bold text-emerald-700">{matchedCount}</p>
-                  <p className="text-[10px] text-emerald-600 font-medium">Matched</p>
+                  <p className="text-[11px] text-emerald-600 font-medium">Matched</p>
                 </div>
                 <div className="border border-amber-200 rounded-xl p-4 bg-amber-50/50 text-center">
                   <p className="text-xl font-bold text-amber-700">{partialCount}</p>
-                  <p className="text-[10px] text-amber-600 font-medium">Partial Matches</p>
+                  <p className="text-[11px] text-amber-600 font-medium">Partial Matches</p>
                 </div>
                 <div className="border border-red-200 rounded-xl p-4 bg-red-50/50 text-center">
                   <p className="text-xl font-bold text-red-700">{mismatchedCount}</p>
-                  <p className="text-[10px] text-red-600 font-medium">Mismatches</p>
+                  <p className="text-[11px] text-red-600 font-medium">Mismatches</p>
                 </div>
               </div>
             )}
@@ -1046,7 +1046,7 @@ export default function ReturnPrepWorkspace() {
           <motion.section key="step4" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Step 5: Return Summary — {returnType}</h2>
-              <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground">{periodToLabel(period)}</Badge>
+              <Badge variant="outline" className="text-[11px] font-medium text-muted-foreground">{periodToLabel(period)}</Badge>
             </div>
 
             {isGSTR1 ? (
@@ -1054,16 +1054,16 @@ export default function ReturnPrepWorkspace() {
                 {[
                   { label: 'B2B Sales', value: gstr1Summary.b2bSales, icon: <Building2 className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50' },
                   { label: 'B2C Sales', value: gstr1Summary.b2cSales, icon: <IndianRupee className="h-4 w-4" />, color: 'text-teal-700', bg: 'bg-teal-50' },
-                  { label: 'Exports', value: gstr1Summary.exports, icon: <TrendingUp className="h-4 w-4" />, color: 'text-blue-700', bg: 'bg-blue-50' },
+                  { label: 'Exports', value: gstr1Summary.exports, icon: <TrendingUp className="h-4 w-4" />, color: 'text-cyan-700', bg: 'bg-cyan-50' },
                   { label: 'Credit Notes', value: gstr1Summary.creditNotes, icon: <TrendingDown className="h-4 w-4" />, color: 'text-orange-700', bg: 'bg-orange-50' },
-                  { label: 'Debit Notes', value: gstr1Summary.debitNotes, icon: <FilePlus2 className="h-4 w-4" />, color: 'text-purple-700', bg: 'bg-purple-50' },
+                  { label: 'Debit Notes', value: gstr1Summary.debitNotes, icon: <FilePlus2 className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50' },
                 ].map((item, idx) => (
                   <motion.div key={item.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05, duration: 0.3 }}
                     className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors"
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${item.bg} ${item.color}`}>{item.icon}</div>
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
+                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
                     </div>
                     <p className={`text-lg font-bold ${item.color}`}>{formatCurrency(item.value)}</p>
                   </motion.div>
@@ -1075,14 +1075,14 @@ export default function ReturnPrepWorkspace() {
                   { label: 'Taxable Supplies', value: gstr3bSummary.taxableSupplies, icon: <IndianRupee className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50' },
                   { label: 'ITC Available', value: gstr3bSummary.itcAvailable, icon: <Shield className="h-4 w-4" />, color: 'text-teal-700', bg: 'bg-teal-50' },
                   { label: 'Output Tax', value: gstr3bSummary.outputTax, icon: <FileText className="h-4 w-4" />, color: 'text-amber-700', bg: 'bg-amber-50' },
-                  { label: 'Net Tax Payable', value: gstr3bSummary.netTaxPayable, icon: <Zap className="h-4 w-4" />, color: 'text-violet-700', bg: 'bg-violet-50' },
+                  { label: 'Net Tax Payable', value: gstr3bSummary.netTaxPayable, icon: <Zap className="h-4 w-4" />, color: 'text-emerald-700', bg: 'bg-emerald-50' },
                 ].map((item, idx) => (
                   <motion.div key={item.label} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: idx * 0.05, duration: 0.3 }}
                     className="border border-border/60 rounded-xl p-4 hover:border-border transition-colors"
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${item.bg} ${item.color}`}>{item.icon}</div>
-                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
+                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
                     </div>
                     <p className={`text-lg font-bold ${item.color}`}>{formatCurrency(item.value)}</p>
                   </motion.div>
@@ -1125,15 +1125,15 @@ export default function ReturnPrepWorkspace() {
           <div className="border border-border/60 rounded-xl p-5 space-y-5">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: 'Validation', value: validationScore, target: 95, icon: <ClipboardCheck className="h-4 w-4" />, color: validationScore >= 95 ? 'text-emerald-700' : validationScore >= 80 ? 'text-amber-700' : 'text-red-700', bg: validationScore >= 95 ? 'bg-emerald-50' : validationScore >= 80 ? 'bg-amber-50' : 'bg-red-50', stroke: validationScore >= 95 ? '#10b981' : validationScore >= 80 ? '#f59e0b' : '#ef4444' },
-                { label: 'Match Rate', value: matchRate, target: 90, icon: <GitCompareArrows className="h-4 w-4" />, color: matchRate >= 90 ? 'text-emerald-700' : matchRate >= 70 ? 'text-amber-700' : 'text-red-700', bg: matchRate >= 90 ? 'bg-emerald-50' : matchRate >= 70 ? 'bg-amber-50' : 'bg-red-50', stroke: matchRate >= 90 ? '#10b981' : matchRate >= 70 ? '#f59e0b' : '#ef4444' },
-                { label: 'Compliance', value: complianceScore, target: 85, icon: <ShieldCheck className="h-4 w-4" />, color: complianceScore >= 85 ? 'text-emerald-700' : complianceScore >= 65 ? 'text-amber-700' : 'text-red-700', bg: complianceScore >= 85 ? 'bg-emerald-50' : complianceScore >= 65 ? 'bg-amber-50' : 'bg-red-50', stroke: complianceScore >= 85 ? '#10b981' : complianceScore >= 65 ? '#f59e0b' : '#ef4444' },
-                { label: 'High Risk', value: highRiskCount, target: 0, icon: <AlertTriangle className="h-4 w-4" />, color: highRiskCount === 0 ? 'text-emerald-700' : 'text-red-700', bg: highRiskCount === 0 ? 'bg-emerald-50' : 'bg-red-50', stroke: highRiskCount === 0 ? '#10b981' : '#ef4444' },
+                { label: 'Validation', value: validationScore, target: 95, icon: <ClipboardCheck className="h-4 w-4" />, color: validationScore >= 95 ? 'text-emerald-700' : validationScore >= 80 ? 'text-amber-700' : 'text-red-700', bg: validationScore >= 95 ? 'bg-emerald-50' : validationScore >= 80 ? 'bg-amber-50' : 'bg-red-50', stroke: validationScore >= 95 ? '#2563EB' : validationScore >= 80 ? '#f59e0b' : '#ef4444' },
+                { label: 'Match Rate', value: matchRate, target: 90, icon: <GitCompareArrows className="h-4 w-4" />, color: matchRate >= 90 ? 'text-emerald-700' : matchRate >= 70 ? 'text-amber-700' : 'text-red-700', bg: matchRate >= 90 ? 'bg-emerald-50' : matchRate >= 70 ? 'bg-amber-50' : 'bg-red-50', stroke: matchRate >= 90 ? '#2563EB' : matchRate >= 70 ? '#f59e0b' : '#ef4444' },
+                { label: 'Compliance', value: complianceScore, target: 85, icon: <ShieldCheck className="h-4 w-4" />, color: complianceScore >= 85 ? 'text-emerald-700' : complianceScore >= 65 ? 'text-amber-700' : 'text-red-700', bg: complianceScore >= 85 ? 'bg-emerald-50' : complianceScore >= 65 ? 'bg-amber-50' : 'bg-red-50', stroke: complianceScore >= 85 ? '#2563EB' : complianceScore >= 65 ? '#f59e0b' : '#ef4444' },
+                { label: 'High Risk', value: highRiskCount, target: 0, icon: <AlertTriangle className="h-4 w-4" />, color: highRiskCount === 0 ? 'text-emerald-700' : 'text-red-700', bg: highRiskCount === 0 ? 'bg-emerald-50' : 'bg-red-50', stroke: highRiskCount === 0 ? '#2563EB' : '#ef4444' },
               ].map((score) => (
                 <div key={score.label} className="border border-border/40 rounded-lg p-3 text-center">
                   <div className={`flex items-center justify-center h-7 w-7 rounded-lg mx-auto mb-1.5 ${score.bg} ${score.color}`}>{score.icon}</div>
                   <p className="text-xl font-bold text-foreground">{score.label === 'High Risk' ? score.value : `${score.value}%`}</p>
-                  <p className="text-[10px] text-muted-foreground">{score.label}</p>
+                  <p className="text-[11px] text-muted-foreground">{score.label}</p>
                   {score.label !== 'High Risk' && (
                     <div className="h-1.5 rounded-full bg-slate-100 mt-2 overflow-hidden">
                       <motion.div className="h-full rounded-full" style={{ backgroundColor: score.stroke }}
@@ -1141,7 +1141,7 @@ export default function ReturnPrepWorkspace() {
                       />
                     </div>
                   )}
-                  <p className="text-[9px] text-muted-foreground mt-1">Target: {score.label === 'High Risk' ? '0' : `${score.target}%`}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">Target: {score.label === 'High Risk' ? '0' : `${score.target}%`}</p>
                 </div>
               ))}
             </div>
@@ -1169,7 +1169,7 @@ export default function ReturnPrepWorkspace() {
             </Button>
 
             {!allChecksPass && (
-              <p className="text-[10px] text-center text-muted-foreground">Fix all issues above to unlock filing</p>
+              <p className="text-[11px] text-center text-muted-foreground">Fix all issues above to unlock filing</p>
             )}
           </div>
         </motion.section>

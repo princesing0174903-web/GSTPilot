@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
 
 // ─── Multi-tenant scoping ───────────────────────────────────────────────────
 // LEGACY NOTE: The Prisma `Client` model carries `firmId` (nullable String?).
@@ -23,6 +24,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const tenantId = resolveTenantId(request)
     if (!tenantId) {
       return NextResponse.json(
@@ -30,6 +35,9 @@ export async function GET(
         { status: 400 }
       )
     }
+
+    const memberResult = await requireOrgMembership(uid, tenantId)
+    if (memberResult instanceof NextResponse) return memberResult
 
     const { id } = await params
     const client = await db.client.findUnique({
@@ -51,10 +59,7 @@ export async function GET(
     return NextResponse.json({ client })
   } catch (error) {
     console.error('GET /api/clients/[id] error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch client' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not load this client right now. Please try again.')
   }
 }
 
@@ -64,6 +69,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const tenantId = resolveTenantId(request)
     if (!tenantId) {
       return NextResponse.json(
@@ -71,6 +80,9 @@ export async function PATCH(
         { status: 400 }
       )
     }
+
+    const memberResult = await requireOrgMembership(uid, tenantId)
+    if (memberResult instanceof NextResponse) return memberResult
 
     const { id } = await params
     const body = await request.json()
@@ -118,10 +130,7 @@ export async function PATCH(
     return NextResponse.json({ client })
   } catch (error) {
     console.error('PATCH /api/clients/[id] error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update client' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not update this client right now. Please try again.')
   }
 }
 
@@ -131,6 +140,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const tenantId = resolveTenantId(request)
     if (!tenantId) {
       return NextResponse.json(
@@ -138,6 +151,9 @@ export async function DELETE(
         { status: 400 }
       )
     }
+
+    const memberResult = await requireOrgMembership(uid, tenantId)
+    if (memberResult instanceof NextResponse) return memberResult
 
     const { id } = await params
 
@@ -161,9 +177,6 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('DELETE /api/clients/[id] error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete client' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not delete this client right now. Please try again.')
   }
 }

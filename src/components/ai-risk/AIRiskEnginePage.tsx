@@ -39,8 +39,8 @@ import { formatNumber } from '@/lib/gst-utils';
 
 // ─── Color Palette (Emerald/Red — Risk theme) ────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   red: '#ef4444',
   redLight: '#fee2e2',
   amber: '#f59e0b',
@@ -821,7 +821,7 @@ export default function AIRiskEnginePage() {
                         transition={{ delay: 0.4 + index * 0.08, duration: 0.4 }}
                         whileHover={{
                           x: 4,
-                          backgroundColor: 'rgba(16, 185, 129, 0.03)',
+                          backgroundColor: 'rgba(37,99,235, 0.03)',
                         }}
                         className="flex items-center gap-3 p-3 rounded-xl border border-border/30 hover:border-emerald-200/50 dark:hover:border-emerald-800/50 transition-all cursor-pointer group"
                       >

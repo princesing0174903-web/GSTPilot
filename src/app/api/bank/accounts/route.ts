@@ -2,12 +2,21 @@
 // Returns all connected bank accounts with balances, types, AA consent and last sync.
 
 import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { buildAccountsState } from '@/lib/banking/engine';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const auth = await requireAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { uid } = auth;
+    const url = new URL(req.url);
+    const orgId = url.searchParams.get('organizationId') || 'local';
+    const org = await requireOrgMembership(uid, orgId);
+    if (org instanceof NextResponse) return org;
+
     const accounts = await buildAccountsState();
     return NextResponse.json({
       ok: true,
@@ -17,10 +26,6 @@ export async function GET() {
       accounts,
     });
   } catch (err) {
-    console.error('[bank/accounts] GET failed:', err);
-    return NextResponse.json(
-      { ok: false, error: 'Failed to load bank accounts', detail: String(err) },
-      { status: 500 },
-    );
+    return friendlyApiError(err, 'Failed to load bank accounts.');
   }
 }

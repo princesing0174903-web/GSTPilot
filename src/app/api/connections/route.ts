@@ -17,6 +17,7 @@ import {
 import { db } from '@/lib/db';
 import { validateGSTIN } from '@/lib/gst-utils';
 import type { BankProvider, GstnDataset, BankDataset } from '@/lib/connections/types';
+import { logActivity, getOptionalUserId } from '@/lib/activity-logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -211,6 +212,7 @@ export async function POST(req: NextRequest) {
           gstin?: string;
           provider?: BankProvider;
           accountRef?: string;
+          organizationId?: string;
         }
       | null;
 
@@ -220,6 +222,14 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Best-effort attribution: Bearer token → decoded uid (for activity log).
+    // Not required — the connection is still created if the caller is unauth'd.
+    const userId = await getOptionalUserId(req);
+    const organizationId =
+      typeof body.organizationId === 'string' && body.organizationId.trim()
+        ? body.organizationId.trim()
+        : null;
 
     if (body.type === 'gstn') {
       const gstinRaw = (body.gstin ?? '').trim().toUpperCase();
@@ -268,6 +278,24 @@ export async function POST(req: NextRequest) {
         });
       } catch (syncErr) {
         console.error('POST /api/connections — initial SyncLog failed (non-fatal):', syncErr);
+      }
+
+      // Business Timeline event — "GSTN connected"
+      if (organizationId) {
+        await logActivity({
+          organizationId,
+          userId,
+          type: 'integration_connected',
+          title: 'GSTN Connected',
+          description: `Connected GSTIN ${gstinRaw} (${dataset.tradeName ?? dataset.legalName ?? '—'}). Imported ${initialRecords} records.`,
+          entityType: 'connection',
+          entityId: connection.id,
+          metadata: {
+            provider: 'GSTN',
+            gstin: gstinRaw,
+            recordsImported: initialRecords,
+          },
+        });
       }
 
       return NextResponse.json({
@@ -322,6 +350,25 @@ export async function POST(req: NextRequest) {
       });
     } catch (syncErr) {
       console.error('POST /api/connections — initial SyncLog failed (non-fatal):', syncErr);
+    }
+
+    // Business Timeline event — "Bank connected"
+    if (organizationId) {
+      await logActivity({
+        organizationId,
+        userId,
+        type: 'integration_connected',
+        title: 'Bank Connected',
+        description: `Connected ${provider} account ${dataset.maskedAccount}. Imported ${initialBankRecords} transactions.`,
+        entityType: 'connection',
+        entityId: connection.id,
+        metadata: {
+          provider,
+          maskedAccount: dataset.maskedAccount,
+          recordsImported: initialBankRecords,
+          closingBalance: dataset.closingBalance,
+        },
+      });
     }
 
     return NextResponse.json({

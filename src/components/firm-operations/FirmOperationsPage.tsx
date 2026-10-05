@@ -54,21 +54,27 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency, formatNumber } from '@/lib/gst-utils';
 import { useApp } from '@/contexts/AppContext';
+import { CHART_COLORS } from '@/lib/chart-theme';
 
-// ─── Color Palette (Emerald/Teal — NO blue/indigo) ────────────────────────
+// ─── Color Palette ─────────────────────────────────────────────────────────
+// Sourced from @/lib/chart-theme so every chart in this module stays aligned
+// with the GSTPilot Infinity™ brand system (blue primary, violet secondary,
+// amber for warning, red for danger, green reserved for success only).
+// The COLORS keys are kept (legacy compatibility) but every value now points
+// at a chart-theme constant — no raw hexes here.
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
-  emeraldLight: '#d1fae5',
-  teal: '#14b8a6',
-  tealDark: '#0d9488',
-  tealLight: '#ccfbf1',
-  amber: '#f59e0b',
-  amberLight: '#fef3c7',
-  red: '#ef4444',
-  redLight: '#fee2e2',
-  slate: '#64748b',
-  slateLight: '#f1f5f9',
+  emerald: CHART_COLORS.primary,           // blue-600   (was '#2563EB' — already blue)
+  emeraldDark: CHART_COLORS.primary,       // blue-600   (was '#1D4ED8')
+  emeraldLight: 'rgba(37, 99, 235, 0.15)', // blue tint  (was '#d1fae5' light-green)
+  teal: CHART_COLORS.primarySoft,          // blue-400   (was '#14b8a6' teal)
+  tealDark: CHART_COLORS.primary,          // blue-600   (was '#2563EB' — already blue)
+  tealLight: 'rgba(96, 165, 250, 0.15)',   // blue tint  (was '#ccfbf1' light-teal)
+  amber: CHART_COLORS.warning,             // amber-500  (was '#f59e0b')
+  amberLight: 'rgba(245, 158, 11, 0.15)',  // amber tint (was '#fef3c7')
+  red: CHART_COLORS.danger,                // red-500    (was '#ef4444')
+  redLight: 'rgba(239, 68, 68, 0.15)',     // red tint   (was '#fee2e2')
+  slate: CHART_COLORS.neutral,             // slate-500  (was '#64748b')
+  slateLight: 'rgba(100, 116, 139, 0.15)', // slate tint (was '#f1f5f9')
 };
 
 // ─── Types ─────────────────────────────────────────────────────────────────

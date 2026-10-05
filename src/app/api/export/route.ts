@@ -1,9 +1,31 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session'
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Multi-tenant scoping — P3-AUTH-FIX
+//
+// `/api/export` historically had NO auth at all. The `report` branch ran
+// `db.client.count()` with NO filter → returned ALL clients platform-wide in
+// the export summary. The `csv` branch filtered by `clientId` from the body —
+// anyone knowing a clientId could export any org's invoices. The `json`
+// branch fetched the filing via `findUnique` with no org filter.
+//
+// Fix: requireAuth → resolve tenantId from header/body → requireOrgMembership
+// → scope every query via `client: { firmId: tenantId }` (or `firmId: tenantId`
+// for Client itself). Resource-level checks (filing lookups) use findFirst
+// with the tenant filter so a foreign filingId returns 404 — never reveals
+// existence. Mirrors /api/invoices + /api/returns patterns.
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // POST /api/export — Generate export (JSON / CSV / Report)
 export async function POST(request: Request) {
   try {
+    // ── 1. AUTHENTICATION ──────────────────────────────────────────────────
+    const authResult = await requireAuth(request)
+    if (authResult instanceof NextResponse) return authResult
+    const { uid } = authResult
+
     const body = await request.json()
     const { type, filingId, clientId } = body
 
@@ -14,6 +36,57 @@ export async function POST(request: Request) {
       )
     }
 
+    // ── 2. AUTHORIZATION — resolve tenantId, verify membership ─────────────
+    // Priority: x-gstpilot-orgid header → body.organizationId → body.firmId.
+    // If clientId is provided but no tenantId, resolve via Client.firmId.
+    const headerOrgId = request.headers.get('x-gstpilot-orgid')
+    let tenantId: string | null =
+      (typeof headerOrgId === 'string' && headerOrgId.trim()) ||
+      (typeof body.organizationId === 'string' && body.organizationId.trim()) ||
+      (typeof body.firmId === 'string' && body.firmId.trim()) ||
+      null
+
+    if (!tenantId && clientId) {
+      try {
+        const client = await db.client.findUnique({
+          where: { id: clientId },
+          select: { firmId: true },
+        })
+        if (client?.firmId) tenantId = client.firmId
+      } catch {
+        /* ignore — best-effort */
+      }
+    }
+
+    if (!tenantId) {
+      // No tenant scope → no data. For json/csv branches, return 400 because
+      // they cannot be meaningfully scoped; for report, return empty summary.
+      if (type === 'report') {
+        return NextResponse.json({
+          generatedAt: new Date().toISOString(),
+          summary: {
+            totalClients: 0,
+            totalInvoices: 0,
+            filedReturns: 0,
+            pendingReturns: 0,
+            averageHealthScore: 0,
+            criticalIssues: 0,
+            warnings: 0,
+            totalTaxableValue: 0,
+            totalTax: 0,
+          },
+          clients: [],
+          filings: [],
+        })
+      }
+      return NextResponse.json(
+        { error: 'organizationId (or firmId) is required for export' },
+        { status: 400 }
+      )
+    }
+    const memberResult = await requireOrgMembership(uid, tenantId)
+    if (memberResult instanceof NextResponse) return memberResult
+
     // ── JSON Export: GSTR-1 JSON structure ──────────────────────────────────
     if (type === 'json') {
       if (!filingId) {
@@ -23,15 +96,19 @@ export async function POST(request: Request) {
         )
       }
 
-      const filing = await db.gSTRFiling.findUnique({
-        where: { id: filingId },
+      // Fetch filing scoped by the caller's tenant via the client relation.
+      // findFirst (not findUnique) so a foreign filingId returns 404 — never
+      // reveals existence.
+      const filing = await db.gSTRFiling.findFirst({
+        where: { id: filingId, client: { firmId: tenantId } },
         include: { client: true },
       })
       if (!filing) {
         return NextResponse.json({ error: 'Filing not found' }, { status: 404 })
       }
 
-      // Fetch invoices for this filing's client and period
+      // Fetch invoices for this filing's client and period (already verified
+      // to belong to the tenant via the filing lookup above).
       const invoices = await db.invoice.findMany({
         where: {
           clientId: filing.clientId,
@@ -198,10 +275,15 @@ export async function POST(request: Request) {
 
     // ── CSV Export ──────────────────────────────────────────────────────────
     if (type === 'csv') {
-      const where: Record<string, unknown> = {}
+      // Always scope by the caller's tenant via the client relation.
+      const where: Record<string, unknown> = { client: { firmId: tenantId } }
       if (clientId) where.clientId = clientId
       if (filingId) {
-        const filing = await db.gSTRFiling.findUnique({ where: { id: filingId } })
+        // Resolve the filing's clientId+period; scope by tenant too so a foreign
+        // filingId returns an empty result set (no leak).
+        const filing = await db.gSTRFiling.findFirst({
+          where: { id: filingId, client: { firmId: tenantId } },
+        })
         if (filing) {
           where.clientId = filing.clientId
           where.period = filing.period
@@ -287,7 +369,19 @@ export async function POST(request: Request) {
 
     // ── Report Export ───────────────────────────────────────────────────────
     if (type === 'report') {
-      const clientFilter = clientId ?? undefined
+      // CRITICAL FIX: every query is now scoped by the caller's tenant.
+      // Previously `db.client.count()` had NO filter → returned ALL clients
+      // platform-wide in the export summary.
+      const clientWhere: Record<string, unknown> = { firmId: tenantId }
+      if (clientId) clientWhere.id = clientId
+      // Invoice / GSTRFiling / Issue scope through client.firmId (no direct
+      // firmId on those models — mirrors /api/invoices + /api/returns).
+      const invoiceWhere: Record<string, unknown> = { client: { firmId: tenantId } }
+      if (clientId) invoiceWhere.clientId = clientId
+      const filingWhere: Record<string, unknown> = { client: { firmId: tenantId } }
+      if (clientId) filingWhere.clientId = clientId
+      const issueWhere: Record<string, unknown> = { client: { firmId: tenantId } }
+      if (clientId) issueWhere.clientId = clientId
 
       const [
         totalClients,
@@ -296,10 +390,10 @@ export async function POST(request: Request) {
         filingData,
         issueData,
       ] = await Promise.all([
-        db.client.count(),
-        db.invoice.count(clientFilter ? { where: { clientId: clientFilter } } : undefined),
+        db.client.count({ where: clientWhere }),
+        db.invoice.count({ where: invoiceWhere }),
         db.client.findMany({
-          where: clientFilter ? { id: clientFilter } : undefined,
+          where: clientWhere,
           select: {
             id: true,
             tradeName: true,
@@ -309,7 +403,7 @@ export async function POST(request: Request) {
           },
         }),
         db.gSTRFiling.findMany({
-          where: clientFilter ? { clientId: clientFilter } : undefined,
+          where: filingWhere,
           select: {
             id: true,
             returnType: true,
@@ -321,7 +415,7 @@ export async function POST(request: Request) {
           },
         }),
         db.issue.findMany({
-          where: clientFilter ? { clientId: clientFilter } : undefined,
+          where: issueWhere,
           select: {
             severity: true,
             status: true,
@@ -377,7 +471,7 @@ export async function POST(request: Request) {
       // Create audit log
       await db.auditLog.create({
         data: {
-          clientId: clientFilter ?? null,
+          clientId: clientId ?? null,
           action: 'Report Exported',
           entity: 'report',
           details: `Summary report generated — ${totalClients} clients, ${totalInvoices} invoices`,
@@ -390,9 +484,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid export type' }, { status: 400 })
   } catch (error) {
     console.error('POST /api/export error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to generate export' },
-      { status: 500 }
-    )
+    return friendlyApiError(error, 'We could not generate the export right now. Please try again.')
   }
 }

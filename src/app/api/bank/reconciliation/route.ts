@@ -3,32 +3,41 @@
 // POST /api/bank/reconciliation — runs a fresh reconciliation pass.
 
 import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { buildReconciliationState, runReconciliation } from '@/lib/banking/engine';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const auth = await requireAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { uid } = auth;
+    const url = new URL(req.url);
+    const orgId = url.searchParams.get('organizationId') || 'local';
+    const org = await requireOrgMembership(uid, orgId);
+    if (org instanceof NextResponse) return org;
+
     const reconciliation = await buildReconciliationState();
     return NextResponse.json({ ok: true, reconciliation });
   } catch (err) {
-    console.error('[bank/reconciliation] GET failed:', err);
-    return NextResponse.json(
-      { ok: false, error: 'Failed to load reconciliation', detail: String(err) },
-      { status: 500 },
-    );
+    return friendlyApiError(err, 'Failed to load reconciliation.');
   }
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const auth = await requireAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { uid } = auth;
+    const url = new URL(req.url);
+    const orgId = url.searchParams.get('organizationId') || 'local';
+    const org = await requireOrgMembership(uid, orgId);
+    if (org instanceof NextResponse) return org;
+
     const res = await runReconciliation();
     return NextResponse.json(res, { status: res.ok ? 200 : 400 });
   } catch (err) {
-    console.error('[bank/reconciliation] POST failed:', err);
-    return NextResponse.json(
-      { ok: false, error: 'Failed to run reconciliation', detail: String(err) },
-      { status: 500 },
-    );
+    return friendlyApiError(err, 'Failed to run reconciliation.');
   }
 }

@@ -48,8 +48,8 @@ type CategoryKey =
   | 'conversations'
 
 const CATEGORIES: { key: CategoryKey; label: string; icon: typeof Search; accent: string }[] = [
-  { key: 'all', label: 'All', icon: Search, accent: '#10b981' },
-  { key: 'companies', label: 'Companies', icon: Building2, accent: '#06b6d4' },
+  { key: 'all', label: 'All', icon: Search, accent: '#2563EB' },
+  { key: 'companies', label: 'Companies', icon: Building2, accent: '#3B82F6' },
   { key: 'documents', label: 'Documents', icon: FileText, accent: '#f59e0b' },
   { key: 'tasks', label: 'Tasks', icon: CheckSquare, accent: '#8b5cf6' },
   { key: 'approvals', label: 'Approvals', icon: FileCheck2, accent: '#14b8a6' },
@@ -68,8 +68,8 @@ const CAT_ICON: Record<CategoryKey, typeof Search> = {
 }
 
 const CAT_ACCENT: Record<CategoryKey, string> = {
-  all: '#10b981',
-  companies: '#06b6d4',
+  all: '#2563EB',
+  companies: '#3B82F6',
   documents: '#f59e0b',
   tasks: '#8b5cf6',
   approvals: '#14b8a6',
@@ -87,10 +87,10 @@ const RECENT_SEARCHES = [
 const SUGGESTED_SEARCHES = [
   { label: 'GSTR-3B filings', icon: FileText, accent: '#ef4444' },
   { label: 'Overdue invoices', icon: TrendingUp, accent: '#f97316' },
-  { label: 'Aurora Tech', icon: Building2, accent: '#06b6d4' },
+  { label: 'Aurora Tech', icon: Building2, accent: '#3B82F6' },
   { label: 'Pending approvals', icon: FileCheck2, accent: '#14b8a6' },
   { label: 'Vendor KYC', icon: Users, accent: '#8b5cf6' },
-  { label: 'Payroll September', icon: FileText, accent: '#10b981' },
+  { label: 'Payroll September', icon: FileText, accent: '#2563EB' },
   { label: 'ITC reversal', icon: Zap, accent: '#f59e0b' },
   { label: 'Critical tasks', icon: CheckSquare, accent: '#ec4899' },
 ]
@@ -122,7 +122,7 @@ function highlight(text: string, query: string) {
 
 const AVATAR_COLORS: Record<string, string> = {
   'Vikram Mehta': '#8b5cf6',
-  'Anita Desai': '#06b6d4',
+  'Anita Desai': '#3B82F6',
   'Rajesh Kumar': '#f59e0b',
   'Priya Sharma': '#ec4899',
   'Suresh Iyer': '#f97316',
@@ -131,10 +131,10 @@ const AVATAR_COLORS: Record<string, string> = {
   'Deepika Rao': '#a855f7',
   'Arjun Gupta': '#64748b',
   'Neha Singh': '#64748b',
-  'AI Copilot': '#10b981',
+  'AI Copilot': '#2563EB',
   'AI Risk Engine': '#ef4444',
   'System': '#64748b',
-  'Legal Bot': '#06b6d4',
+  'Legal Bot': '#3B82F6',
 }
 
 // ─── result row component ──────────────────────────────────────────────────────

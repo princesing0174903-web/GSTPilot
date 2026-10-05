@@ -63,7 +63,7 @@ interface SeverityMeta {
 const SEVERITY_META: Record<AlertSeverity, SeverityMeta> = {
   critical: { label: 'Critical', text: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/50', dot: 'bg-red-500', glow: 'shadow-[0_0_12px_rgba(239,68,68,0.35)]', icon: AlertCircle },
   warning:  { label: 'Warning',  text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/50', dot: 'bg-amber-500', glow: 'shadow-[0_0_12px_rgba(245,158,11,0.35)]', icon: FileWarning },
-  positive: { label: 'Positive', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/50', dot: 'bg-emerald-500', glow: 'shadow-[0_0_12px_rgba(16,185,129,0.35)]', icon: CheckCircle2 },
+  positive: { label: 'Positive', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/50', dot: 'bg-emerald-500', glow: 'shadow-[0_0_12px_rgba(37,99,235,0.35)]', icon: CheckCircle2 },
   info:     { label: 'Info',     text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/50', dot: 'bg-blue-500', glow: 'shadow-[0_0_12px_rgba(59,130,246,0.35)]', icon: Bell },
 };
 

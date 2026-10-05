@@ -25,12 +25,18 @@ import { Zap, RefreshCw } from 'lucide-react';
 
 type ConnectionState = 'connected' | 'reconnecting';
 
-const PING_INTERVAL_MS = 5000;
-const PING_TIMEOUT_MS = 8000;
+// PERF: Polling the dev server every 5s generated 445+ log entries per session
+// and kept the dev server's compile queue busy. Raised to 15s — still catches
+// genuine server restarts within ~30s (2 failures × 15s) but eliminates the
+// log spam and unnecessary compile churn. In production builds this component
+// is a no-op (the overlay never shows because the server is always up), so the
+// interval only matters in dev.
+const PING_INTERVAL_MS = 15_000;
+const PING_TIMEOUT_MS = 8_000;
 // Require 2 consecutive failures before showing the overlay. This prevents
 // the overlay from flickering during brief compile pauses (which can take
 // 5-10s in dev mode) while still catching genuine server restarts within
-// ~15 seconds.
+// ~30 seconds.
 const FAILURE_THRESHOLD = 2;
 
 export function DevServerReconnect() {
@@ -73,6 +79,11 @@ export function DevServerReconnect() {
   }, []);
 
   useEffect(() => {
+    // ── Production no-op ────────────────────────────────────────────────
+    // In production builds the server is always up; the poll is pure waste.
+    // Skip mounting the interval entirely so this component is a no-op.
+    if (process.env.NODE_ENV === 'production') return;
+
     // Ping immediately on mount, then on an interval. The ping is an async
     // network call — setState happens in the .then()/.catch(), not
     // synchronously in the effect body, so this doesn't cause cascading renders.

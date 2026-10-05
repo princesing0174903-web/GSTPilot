@@ -1,123 +1,156 @@
-'use client'
+'use client';
 
-import React, { useState, useEffect, useRef } from 'react'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
-import { Badge } from '@/components/ui/badge'
-import { Textarea } from '@/components/ui/textarea'
-import { Progress } from '@/components/ui/progress'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from '@/components/ui/alert-dialog'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import {
-  Building2,
-  ClipboardList,
-  Users,
-  Bell,
-  Lock,
-  CreditCard,
-  Save,
-  Check,
-  Loader2,
-  Camera,
-  AlertTriangle,
-  CalendarClock,
-  Mail,
-  Activity,
-  Upload,
-  Shield,
-  Smartphone,
-  Monitor,
-  Globe,
-  ChevronRight,
-  Download,
-  LockKeyhole,
-} from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { toast } from 'sonner'
-import { useAuth } from '@/contexts/AuthContext'
-import { useOrg } from '@/contexts/OrgContext'
-import { useIsMobile } from '@/hooks/use-mobile'
-import { useOrgMembers, useFireRecentActivities } from '@/hooks/use-firestore'
-import type { FirestoreActivity, ActivityType } from '@/lib/firestore-schema'
-import { db, auth } from '@/lib/firebase'
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { getSupabaseStorage } from '@/lib/supabase'
-import { updatePassword } from 'firebase/auth'
-import {
-  inviteMember,
-  updateMemberRole,
-  removeMember,
-} from '@/lib/auth/organizations'
-import type { OrgRole } from '@/lib/auth/types'
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot Infinity™ — Enterprise Settings Module
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Production-grade enterprise settings. Every field reads from and writes to
+// a real Prisma-backed API route. No mock data, no placeholder values, no
+// inactive buttons. Sections that are intentionally not yet implemented display
+// a clear "Coming Soon" badge.
+//
+// DESIGN — premium dark enterprise (Vercel / Linear / Stripe inspired):
+//   • Black background, dark-gray cards, white typography, BLUE accent
+//   • (The green theme used elsewhere in GSTPilot is intentionally NOT used
+//     here — Settings is a focused, neutral control surface.)
+//
+// SECTIONS:
+//   1. Organization   — Firm name, logo, GSTIN, PAN, address, phone, email (Firm table)
+//   2. Appearance     — Light / Dark / System theme (UserPreference.theme)
+//   3. Profile        — Name, email, avatar, password (UserProfile + Firebase Auth)
+//   4. Security       — Change password, active sessions, sign out others, 2FA (Coming Soon), login history
+//   5. Integrations   — Google + Zoho Books status / reconnect / disconnect / last sync
+//   6. Notifications  — Email / browser / invoice / sync / security alerts (UserPreference.notifications)
+//   7. Team           — Invite user, roles, remove member, transfer ownership
+//   8. API Keys       — List, generate, delete, copy, reveal once
+//   9. Audit Log      — Recent events from AuditLog table
+//  10. Billing        — Current plan, usage, upgrade, invoices, payment method
+//  11. Data           — Export data, backup, delete workspace
+//  12. Danger Zone    — Working logout (clears auth + session + redirects)
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── Permission-error detection (graceful degradation) ──────────────────
-// Mirrors the helper in src/hooks/use-firestore.ts so the Settings page can
-// detect Firestore permission-denied errors and surface a friendly message
-// instead of the raw "Missing or insufficient permissions" wall.
-function isPermissionError(err: unknown): boolean {
-  if (!err) return false
-  const e = err as { code?: string; message?: string; name?: string }
-  const code = (e.code || '').toLowerCase()
-  const message = (e.message || '').toLowerCase()
-  if (
-    code === 'permission-denied' ||
-    code === 'unauthenticated' ||
-    code === 'auth/operation-not-allowed' ||
-    code === 'auth/user-not-found'
-  ) {
-    return true
-  }
-  if (
-    message.includes('missing or insufficient permissions') ||
-    message.includes('permission-denied') ||
-    message.includes('insufficient permissions') ||
-    message.includes('not authorized') ||
-    message.includes('unauthenticated')
-  ) {
-    return true
-  }
-  return false
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useTheme } from 'next-themes';
+import {
+  Card, CardContent, CardHeader, CardTitle, CardDescription,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Progress } from '@/components/ui/progress';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Building2, Users, Bell, Lock, CreditCard, Save, Check, Loader2, Camera,
+  AlertTriangle, Mail, Activity, Upload, Shield, Smartphone, Monitor, Globe,
+  ChevronRight, Download, Database, Key, Plug, Power, RefreshCw, Trash2, Copy,
+  Eye, EyeOff, Plus, Clock, Sun, Moon, Laptop, LogOut, CheckCircle2,
+  XCircle, ShieldAlert, UserCog, Link as LinkIcon, ScrollText, Settings2,
+  ShieldCheck,
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useOrg } from '@/contexts/OrgContext';
+import { useApp } from '@/contexts/AppContext';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useOrgMembers, useFireRecentActivities } from '@/hooks/use-firestore';
+import { auth } from '@/lib/firebase';
+import { updatePassword } from 'firebase/auth';
+import {
+  inviteMember, updateMemberRole, removeMember,
+} from '@/lib/auth/organizations';
+import type { OrgRole } from '@/lib/auth/types';
+import { invalidateBusinessSnapshot } from '@/lib/business-snapshot-events';
+import { GSTSection } from './GSTSection';
+
+// ─── Section IDs ──────────────────────────────────────────────────────────────
+type SectionId =
+  | 'organization' | 'appearance' | 'profile' | 'security' | 'integrations'
+  | 'notifications' | 'team' | 'apikeys' | 'audit' | 'billing' | 'data' | 'danger'
+  | 'gst';
+
+interface NavSection {
+  id: SectionId;
+  label: string;
+  icon: React.ReactNode;
+  group: 'Workspace' | 'Account' | 'System';
 }
 
-const PERMISSION_DENIED_MSG =
-  "You don't have permission to save these changes. Contact your organization admin."
-const PREVIEW_MODE_MSG =
-  'Preview mode — your changes are shown here but not persisted to the cloud.'
+// Settings sub-nav. Grouped into Workspace / Account / System so the nav reads
+// like an enterprise control panel (Vercel / Stripe / Linear inspired).
+// SectionIds are kept stable so the deep-link map in SettingsPage keeps working.
+const SECTIONS: NavSection[] = [
+  // ── Workspace ── (organization-level settings)
+  { id: 'organization', label: 'Organization', icon: <Building2 className="h-4 w-4" />, group: 'Workspace' },
+  { id: 'gst', label: 'GST / GSTN', icon: <ShieldCheck className="h-4 w-4" />, group: 'Workspace' },
+  { id: 'team', label: 'Users', icon: <Users className="h-4 w-4" />, group: 'Workspace' },
+  { id: 'integrations', label: 'OAuth', icon: <LinkIcon className="h-4 w-4" />, group: 'Workspace' },
 
-// ─── Indian States ──────────────────────────────────────────────────────
+  // ── Account ── (user-level settings)
+  { id: 'profile', label: 'Profile', icon: <UserCog className="h-4 w-4" />, group: 'Account' },
+  { id: 'security', label: 'Security', icon: <Lock className="h-4 w-4" />, group: 'Account' },
+  { id: 'notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" />, group: 'Account' },
+  { id: 'appearance', label: 'Appearance', icon: <Sun className="h-4 w-4" />, group: 'Account' },
+
+  // ── System ── (platform / billing / data)
+  { id: 'apikeys', label: 'API Keys', icon: <Key className="h-4 w-4" />, group: 'System' },
+  { id: 'billing', label: 'Billing', icon: <CreditCard className="h-4 w-4" />, group: 'System' },
+  { id: 'audit', label: 'Audit Logs', icon: <ScrollText className="h-4 w-4" />, group: 'System' },
+  { id: 'data', label: 'Data & Backup', icon: <Database className="h-4 w-4" />, group: 'System' },
+  { id: 'danger', label: 'Danger Zone', icon: <ShieldAlert className="h-4 w-4" />, group: 'System' },
+];
+
+const SECTION_META: Record<SectionId, { title: string; subtitle: string }> = {
+  organization: { title: 'Organization', subtitle: 'Your firm\u2019s identity, tax registration, and contact details.' },
+  gst: { title: 'GST / GSTN', subtitle: 'Connect a GSP to fetch live GSTR-2B, verify GSTINs, and reconcile purchase data.' },
+  appearance: { title: 'Appearance', subtitle: 'Choose how GSTPilot looks. Synced across devices.' },
+  profile: { title: 'Profile', subtitle: 'Your personal account information.' },
+  security: { title: 'Security', subtitle: 'Manage your password, active sessions, and account security.' },
+  integrations: { title: 'OAuth Connections', subtitle: 'Connect external services to sync data into GSTPilot.' },
+  notifications: { title: 'Notifications', subtitle: 'Choose what updates you want to receive and how.' },
+  team: { title: 'Users & Team', subtitle: 'Manage who has access to your organization.' },
+  apikeys: { title: 'API Keys', subtitle: 'Generate keys to access the GSTPilot API programmatically.' },
+  audit: { title: 'Audit Logs', subtitle: 'A chronological record of actions taken in your account.' },
+  billing: { title: 'Billing', subtitle: 'Manage your subscription, usage, and payment method.' },
+  data: { title: 'Data & Backup', subtitle: 'Export, back up, or permanently delete your workspace data.' },
+  danger: { title: 'Danger Zone', subtitle: 'Irreversible and destructive account actions.' },
+};
+
+// ─── Headers helper (mirrors useZohoBooks) ────────────────────────────────────
+function useSettingsHeaders() {
+  const { organization, membership, role } = useOrg();
+  const { user } = useAuth();
+  const buildHeaders = useCallback(
+    (extra: Record<string, string> = {}): Record<string, string> => ({
+      'Content-Type': 'application/json',
+      'x-gstpilot-orgid': organization?.id ?? '',
+      'x-gstpilot-actor': JSON.stringify({
+        uid: user?.id ?? membership?.userId ?? '',
+        email: user?.email ?? membership?.userEmail ?? '',
+        name: user?.name ?? membership?.userDisplayName ?? null,
+        role: role ?? null,
+      }),
+      ...extra,
+    }),
+    [organization?.id, user?.id, user?.email, user?.name, membership, role],
+  );
+  return buildHeaders;
+}
+
+// ─── Indian States (for the address dropdown) ─────────────────────────────────
 const INDIAN_STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
   'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
@@ -127,2196 +160,2499 @@ const INDIAN_STATES = [
   'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
   'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli',
   'Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Puducherry',
-]
+];
 
-const ENTITY_TYPES = ['Proprietorship', 'Partnership', 'LLP', 'Pvt Ltd', 'Ltd']
-
-// ─── Section IDs ────────────────────────────────────────────────────────
-type SectionId = 'firm' | 'gst' | 'team' | 'notifications' | 'security' | 'billing' | 'api' | 'audit'
-
-interface NavSection {
-  id: SectionId
-  label: string
-  icon: React.ReactNode
-}
-
-const SECTIONS: NavSection[] = [
-  { id: 'firm', label: 'Firm Profile', icon: <Building2 className="h-4 w-4" /> },
-  { id: 'gst', label: 'GST Configuration', icon: <ClipboardList className="h-4 w-4" /> },
-  { id: 'api', label: 'GST API Connections', icon: <Globe className="h-4 w-4" /> },
-  { id: 'team', label: 'Team Members', icon: <Users className="h-4 w-4" /> },
-  { id: 'notifications', label: 'Notifications', icon: <Bell className="h-4 w-4" /> },
-  { id: 'security', label: 'Security', icon: <Lock className="h-4 w-4" /> },
-  { id: 'billing', label: 'Billing', icon: <CreditCard className="h-4 w-4" /> },
-  { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="h-4 w-4" /> },
-]
-
-// ─── Team Member Type ───────────────────────────────────────────────────
-// The Settings UI surfaces a simplified 4-role taxonomy (Admin / Manager /
-// Staff / Viewer). The Firestore `organization_members` collection stores the
-// richer `OrgRole` enum (owner / admin / accountant / employee / auditor /
-// viewer). The two helpers below translate between the two representations so
-// the UI keeps its existing labels while the persistence layer uses the
-// canonical org-role vocabulary.
-interface TeamMember {
-  id: string
-  /** Firestore Auth uid — used as the key for role/status mutations. */
-  userId: string
-  name: string
-  email: string
-  role: 'Admin' | 'Manager' | 'Staff' | 'Viewer'
-  status: 'Active' | 'Invited'
-  initials: string
-}
-
-/**
- * Map the Firestore `OrgRole` enum to the four UI role labels. The org owner
- * and admin both surface as "Admin" so the existing UI rule (hide Edit/Remove
- * for Admin rows) protects the owner from accidental demotion.
- */
-function orgRoleToUiRole(role: string): TeamMember['role'] {
-  switch (role) {
-    case 'owner':
-    case 'admin':
-      return 'Admin'
-    case 'accountant':
-      return 'Manager'
-    case 'employee':
-      return 'Staff'
-    case 'auditor':
-    case 'viewer':
-    default:
-      return 'Viewer'
-  }
-}
-
-/** Map a UI role label back to the Firestore `OrgRole` enum for persistence. */
-function uiRoleToOrgRole(role: TeamMember['role']): OrgRole {
-  switch (role) {
-    case 'Admin':
-      return 'admin'
-    case 'Manager':
-      return 'accountant'
-    case 'Staff':
-      return 'employee'
-    case 'Viewer':
-    default:
-      return 'viewer'
-  }
-}
-
-/** Map the Firestore `MemberStatus` to the two-state UI label. */
-function memberStatusToUi(status: string): TeamMember['status'] {
-  return status === 'invited' ? 'Invited' : 'Active'
-}
-
-/** Derive 2-letter initials for the avatar fallback. */
-function getInitials(name: string, email: string): string {
-  if (name && name.trim()) {
-    const parts = name.trim().split(/\s+/).filter(Boolean)
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase()
-    }
-    return parts[0].slice(0, 2).toUpperCase()
-  }
-  return (email.split('@')[0] || '?').slice(0, 2).toUpperCase()
-}
-
-// ─── Session Type ───────────────────────────────────────────────────────
-interface Session {
-  id: string
-  device: string
-  location: string
-  lastActive: string
-  icon: React.ReactNode
-  current?: boolean
-}
-
-const MOCK_SESSIONS: Session[] = [
-  { id: '1', device: 'Chrome on MacOS', location: 'Mumbai, India', lastActive: 'Now', icon: <Monitor className="h-4 w-4" />, current: true },
-  { id: '2', device: 'GSTPilot Mobile App', location: 'Mumbai, India', lastActive: '2 hours ago', icon: <Smartphone className="h-4 w-4" /> },
-  { id: '3', device: 'Firefox on Windows', location: 'Pune, India', lastActive: 'Yesterday', icon: <Globe className="h-4 w-4" /> },
-]
-
-// ─── Billing History ────────────────────────────────────────────────────
-interface BillingInvoice {
-  id: string
-  date: string
-  amount: string
-  status: 'Paid' | 'Pending' | 'Failed'
-}
-
-const BILLING_HISTORY: BillingInvoice[] = [
-  { id: '1', date: '1 Jun 2025', amount: '₹1,499', status: 'Paid' },
-  { id: '2', date: '1 May 2025', amount: '₹1,499', status: 'Paid' },
-  { id: '3', date: '1 Apr 2025', amount: '₹1,499', status: 'Paid' },
-  { id: '4', date: '1 Mar 2025', amount: '₹1,499', status: 'Paid' },
-]
-
-// ─── GST API Connection Status ──────────────────────────────────────────
-interface ApiConnection {
-  id: string
-  name: string
-  description: string
-  status: 'Connected' | 'Disconnected' | 'Not Configured'
-  lastSync?: string
-  icon: React.ReactNode
-}
-
-const MOCK_API_CONNECTIONS: ApiConnection[] = [
-  { id: 'gst-portal', name: 'GST Portal API', description: 'GSTN portal for filing returns and viewing status', status: 'Connected', lastSync: '5 minutes ago', icon: <Globe className="h-4 w-4" /> },
-  { id: 'eway-bill', name: 'E-Way Bill API', description: 'Generate and manage e-way bills for transport', status: 'Disconnected', lastSync: '2 hours ago', icon: <ClipboardList className="h-4 w-4" /> },
-  { id: 'e-invoice', name: 'E-Invoice API', description: 'IRN generation and e-invoice management', status: 'Not Configured', icon: <ClipboardList className="h-4 w-4" /> },
-]
-
-// ─── Audit Log Entry ──────────────────────────────────────────────────
-interface AuditLogEntry {
-  id: string
-  timestamp: string
-  user: string
-  action: string
-  entity: string
-  actionType: 'filing' | 'client_update' | 'invoice' | 'settings' | 'reconciliation'
-}
-
-const MOCK_AUDIT_LOGS: AuditLogEntry[] = [
-  { id: '1', timestamp: '2025-06-04 14:32', user: 'Rajesh Kumar', action: 'Filed GSTR-1 for Sharma Enterprises', entity: 'GSTR-1 May 2025', actionType: 'filing' },
-  { id: '2', timestamp: '2025-06-04 13:15', user: 'Priya Sharma', action: 'Updated client Patel & Sons', entity: 'Client Profile', actionType: 'client_update' },
-  { id: '3', timestamp: '2025-06-04 11:48', user: 'Rajesh Kumar', action: 'Uploaded 24 invoices for Krishna Traders', entity: 'Invoice Batch', actionType: 'invoice' },
-  { id: '4', timestamp: '2025-06-04 10:30', user: 'Amit Patel', action: 'Reconciled GSTR-2B for Metro Retail Solutions', entity: 'Reconciliation', actionType: 'reconciliation' },
-  { id: '5', timestamp: '2025-06-03 17:22', user: 'Priya Sharma', action: 'Changed notification preferences', entity: 'Settings', actionType: 'settings' },
-  { id: '6', timestamp: '2025-06-03 16:10', user: 'Rajesh Kumar', action: 'Filed GSTR-3B for Sunrise Exports Ltd', entity: 'GSTR-3B May 2025', actionType: 'filing' },
-  { id: '7', timestamp: '2025-06-03 14:45', user: 'Amit Patel', action: 'Approved 6 invoices for Gupta Manufacturing', entity: 'Invoice Queue', actionType: 'invoice' },
-  { id: '8', timestamp: '2025-06-03 11:20', user: 'Priya Sharma', action: 'Added new client Digital Commerce India', entity: 'Client Profile', actionType: 'client_update' },
-  { id: '9', timestamp: '2025-06-02 16:55', user: 'Rajesh Kumar', action: 'Reconciled ITC for Apex Logistics', entity: 'Reconciliation', actionType: 'reconciliation' },
-  { id: '10', timestamp: '2025-06-02 10:05', user: 'Amit Patel', action: 'Generated e-way bill for Sharma Enterprises', entity: 'E-Way Bill', actionType: 'invoice' },
-]
-
-// ─── Save Button with Animated States ──────────────────────────────────
-function SaveButton({ onSave }: { onSave: () => Promise<void> }) {
-  const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
-
-  const handleClick = async () => {
-    setState('saving')
-    try {
-      await onSave()
-      setState('saved')
-      setTimeout(() => setState('idle'), 2000)
-    } catch {
-      setState('idle')
-    }
-  }
-
-  return (
-    <Button
-      onClick={handleClick}
-      disabled={state === 'saving'}
-      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[110px]"
-    >
-      <AnimatePresence mode="wait">
-        {state === 'idle' && (
-          <motion.span
-            key="idle"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="flex items-center gap-2"
-          >
-            <Save className="h-4 w-4" />
-            Save
-          </motion.span>
-        )}
-        {state === 'saving' && (
-          <motion.span
-            key="saving"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="flex items-center gap-2"
-          >
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Saving...
-          </motion.span>
-        )}
-        {state === 'saved' && (
-          <motion.span
-            key="saved"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="flex items-center gap-2"
-          >
-            <Check className="h-4 w-4" />
-            Saved
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </Button>
-  )
-}
-
-// ─── Password Strength Helper ──────────────────────────────────────────
-function getPasswordStrength(password: string): { score: number; label: string; color: string } {
-  if (!password) return { score: 0, label: '', color: '' }
-  let score = 0
-  if (password.length >= 8) score++
-  if (password.length >= 12) score++
-  if (/[A-Z]/.test(password)) score++
-  if (/[0-9]/.test(password)) score++
-  if (/[^A-Za-z0-9]/.test(password)) score++
-
-  if (score <= 1) return { score: 20, label: 'Weak', color: 'bg-red-500' }
-  if (score <= 2) return { score: 40, label: 'Fair', color: 'bg-orange-500' }
-  if (score <= 3) return { score: 60, label: 'Good', color: 'bg-yellow-500' }
-  if (score <= 4) return { score: 80, label: 'Strong', color: 'bg-emerald-500' }
-  return { score: 100, label: 'Excellent', color: 'bg-emerald-600' }
-}
-
-// ─── Section Content Animation Variants ─────────────────────────────────
-const contentVariants = {
-  hidden: { opacity: 0, x: 12 },
-  visible: { opacity: 1, x: 0, transition: { duration: 0.3, ease: 'easeOut' as const } },
-  exit: { opacity: 0, x: -12, transition: { duration: 0.15 } },
-}
-
-// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════════════════
-export default function SettingsPage() {
-  const { user } = useAuth()
-  const { organization, reload: reloadOrg, isPreviewMode } = useOrg()
-  const orgId = organization?.id ?? null
-  const isMobile = useIsMobile()
+// ═══════════════════════════════════════════════════════════════════════════════
 
-  // True when there's no real organization to write to — either OrgContext is
-  // still loading, has fallen back to the demo "preview-org" (Firestore
-  // unreachable), or explicitly flagged preview mode. All save handlers use
-  // this to no-op gracefully instead of throwing permission-denied.
-  const isPreview = !orgId || isPreviewMode || orgId === 'preview-org'
+export function SettingsPage() {
+  const isMobile = useIsMobile();
+  const { pendingSettingsSection, setPendingSettingsSection } = useApp();
+  const [activeSection, setActiveSection] = useState<SectionId>('organization');
 
-  // ── Active Section ──────────────────────────────────────────────────
-  const [activeSection, setActiveSection] = useState<SectionId>('firm')
-
-  // ── Logo upload state ───────────────────────────────────────────────
-  // `logoPreview` holds a local object-URL while the upload is in flight so
-  // the avatar reflects the new image instantly. Once the Firestore write
-  // completes, `organization.logoUrl` becomes the source of truth.
-  const [logoPreview, setLogoPreview] = useState<string | null>(null)
-  const [logoUploading, setLogoUploading] = useState(false)
-  const logoInputRef = useRef<HTMLInputElement | null>(null)
-
-  // Track whether we've hydrated local form state from the org doc — we only
-  // want to do this once per organization to avoid clobbering in-progress edits.
-  const orgInitializedRef = useRef<string | null>(null)
-
-  // ── Firm Profile State ──────────────────────────────────────────────
-  const [firmName, setFirmName] = useState('Sharma & Associates')
-  const [legalName, setLegalName] = useState('Sharma & Associates Chartered Accountants LLP')
-  const [firmGstin, setFirmGstin] = useState('27AAACR5055K1ZB')
-  const [firmState, setFirmState] = useState('Maharashtra')
-  const [entityType, setEntityType] = useState('LLP')
-  const [caRegNumber, setCaRegNumber] = useState('ICAI/M/042817')
-  const [officeAddress, setOfficeAddress] = useState('302, Lotus Business Park, Link Road, Andheri West, Mumbai - 400053')
-
-  // ── GST Config State ────────────────────────────────────────────────
-  const [returnPeriod, setReturnPeriod] = useState<'monthly' | 'quarterly'>('monthly')
-  const [fyStart, setFyStart] = useState<'april' | 'january'>('april')
-  const [gstr1Pref, setGstr1Pref] = useState<'auto' | 'manual'>('auto')
-  const [gstr3bPref, setGstr3bPref] = useState<'auto' | 'manual'>('auto')
-  const [itcMethod, setItcMethod] = useState<'auto-match' | 'manual-review'>('auto-match')
-  const [lateFilingAlert, setLateFilingAlert] = useState(true)
-  const [dueDateReminderDays, setDueDateReminderDays] = useState('3')
-
-  // ── Team State ──────────────────────────────────────────────────────
-  // The roster is sourced from a real-time Firestore subscription on the
-  // `organization_members` collection (org-scoped). We map the canonical
-  // `OrganizationMemberDoc` shape to the simplified `TeamMember` UI type —
-  // no local seed data, no optimistic inserts that can drift from Firestore.
-  // Invite / role-change / remove mutate Firestore directly; the onSnapshot
-  // listener recomputes `teamMembers` automatically when the write lands.
-  const {
-    data: memberDocs,
-    loading: membersLoading,
-    error: membersError,
-  } = useOrgMembers()
-  const teamMembers: TeamMember[] = memberDocs
-    .filter(m => m.status === 'active' || m.status === 'invited')
-    .map(m => ({
-      id: m.id,
-      userId: m.userId,
-      name: m.userDisplayName || m.userEmail.split('@')[0] || 'Member',
-      email: m.userEmail,
-      role: orgRoleToUiRole(m.role),
-      status: memberStatusToUi(m.status),
-      initials: getInitials(m.userDisplayName, m.userEmail),
-    }))
-  const membersFetchError = membersError
-
-  const [showInviteDialog, setShowInviteDialog] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState<'Manager' | 'Staff' | 'Viewer'>('Staff')
-  const [inviting, setInviting] = useState(false)
-  const [showRemoveDialog, setShowRemoveDialog] = useState(false)
-  const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null)
-  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
-  const [editRole, setEditRole] = useState<string>('')
-
-  // ── Notifications State ─────────────────────────────────────────────
-  const [filingDeadline, setFilingDeadline] = useState(true)
-  const [mismatchAlerts, setMismatchAlerts] = useState(true)
-  const [weeklySummary, setWeeklySummary] = useState(false)
-  const [healthScoreChanges, setHealthScoreChanges] = useState(true)
-  const [teamActivity, setTeamActivity] = useState(false)
-  const [newInvoiceUploaded, setNewInvoiceUploaded] = useState(true)
-
-  // ── Security State ──────────────────────────────────────────────────
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
-
-  // ── Audit Log Filter ──────────────────────────────────────────────
-  const [auditFilter, setAuditFilter] = useState<string>('all')
-
-  // ── Real audit logs from Firestore activities ─────────────────────
-  // Replaces the former MOCK_AUDIT_LOGS — every entry is now a real
-  // activity document written by the firestore-service workflow engine.
-  const { data: recentActivities, loading: auditLoading } = useFireRecentActivities(50)
-
-  // ── API connection statuses (persisted on the org doc) ────────────
-  // The static MOCK_API_CONNECTIONS list defines the catalog of supported
-  // integrations; the LIVE status + lastSync are read from
-  // `organization.gstApiConnections` so they survive refresh.
-  type ApiConnStatus = 'Connected' | 'Disconnected' | 'Not Configured'
-  const [apiConnStatuses, setApiConnStatuses] = useState<Record<string, { status: ApiConnStatus; lastSync?: string }>>({})
-
+  // Deep-link: if the dashboard asked for a specific section, land on it.
+  // We consume the one-shot `pendingSettingsSection` signal DURING RENDER
+  // (the documented "adjusting state during render" pattern) rather than in an
+  // effect — calling setActiveSection synchronously inside useEffect triggers
+  // cascading renders and is flagged by react-hooks/set-state-in-effect.
+  // The map translates the legacy AppContext SettingsSection ids to SectionId.
+  const [consumedPending, setConsumedPending] = useState<string | null>(null);
+  if (pendingSettingsSection && pendingSettingsSection !== consumedPending) {
+    setConsumedPending(pendingSettingsSection);
+    const map: Record<string, SectionId> = {
+      firm: 'organization', gst: 'gst', team: 'team',
+      integrations: 'integrations', notifications: 'notifications',
+      security: 'security', billing: 'billing', audit: 'audit',
+      ai: 'appearance', data: 'data', apikeys: 'apikeys',
+    };
+    setActiveSection(map[pendingSettingsSection] ?? 'organization');
+  }
+  // Clear the external one-shot signal (legitimate effect — syncs back to the
+  // AppContext store so the deep-link doesn't re-fire on next mount).
   useEffect(() => {
-    if (!organization) return
-    const anyOrg = organization as Record<string, unknown>
-    if (anyOrg.gstApiConnections && typeof anyOrg.gstApiConnections === 'object') {
-      setApiConnStatuses(anyOrg.gstApiConnections as Record<string, { status: ApiConnStatus; lastSync?: string }>)
-    }
-  }, [organization])
+    if (pendingSettingsSection) setPendingSettingsSection(null);
+  }, [pendingSettingsSection, setPendingSettingsSection]);
 
-  // Map a FirestoreActivity.type → the audit-log actionType categories
-  // used by the filter dropdown (filing / client_update / invoice /
-  // reconciliation / settings).
-  const activityTypeToCategory = (t: ActivityType): AuditLogEntry['actionType'] => {
-    switch (t) {
-      case 'return_prepared':
-      case 'return_reviewed':
-      case 'return_filed':
-      case 'return_reopened':
-        return 'filing'
-      case 'client_created':
-      case 'client_updated':
-      case 'client_deleted':
-        return 'client_update'
-      case 'invoice_extracted':
-      case 'invoice_approved':
-      case 'invoice_corrected':
-      case 'document_uploaded':
-      case 'document_processed':
-      case 'document_failed':
-        return 'invoice'
-      case 'reconciliation_run':
-      case 'mismatch_resolved':
-        return 'reconciliation'
-      default:
-        return 'settings'
-    }
-  }
-
-  // Convert real activities into the AuditLogEntry shape the UI expects.
-  const auditLogs: AuditLogEntry[] = recentActivities.map((a: FirestoreActivity & { id: string }) => {
-    const created = (a.createdAt as { toDate?: () => Date } | string | null)
-    let ts = '—'
-    if (created && typeof created === 'object' && typeof created.toDate === 'function') {
-      ts = created.toDate().toLocaleString('en-IN', {
-        day: '2-digit', month: 'short', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-      })
-    } else if (typeof created === 'string') {
-      const d = new Date(created)
-      if (!Number.isNaN(d.getTime())) {
-        ts = d.toLocaleString('en-IN', {
-          day: '2-digit', month: 'short', year: 'numeric',
-          hour: '2-digit', minute: '2-digit',
-        })
-      }
-    }
-    return {
-      id: a.id,
-      timestamp: ts,
-      user: (a.metadata?.userName as string) || a.userId || 'System',
-      action: a.title || a.description || a.type,
-      entity: a.entityType || a.entityId || '—',
-      actionType: activityTypeToCategory(a.type),
-    }
-  })
-
-  // ── GSTIN Validation ────────────────────────────────────────────────
-  const isGstinValid = (gstin: string) => {
-    const regex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
-    return regex.test(gstin.toUpperCase())
-  }
-  const gstinValidation = firmGstin ? isGstinValid(firmGstin) : null
-
-  // ── Hydrate form state from the organization doc (once per org) ─────
+  // Scroll the content panel back to top whenever the active section changes —
+  // otherwise switching from a long section (Audit Log) to a short one keeps
+  // the scroll position mid-page.
+  const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!organization) return
-    if (orgInitializedRef.current === organization.id) return
-    orgInitializedRef.current = organization.id
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [activeSection]);
 
-    if (organization.name) setFirmName(organization.name)
-    if (organization.gstin) setFirmGstin(organization.gstin)
+  const meta = SECTION_META[activeSection];
 
-    // Extended fields may or may not exist on every org doc — read defensively.
-    const anyOrg = organization as Record<string, unknown>
-    if (typeof anyOrg.legalName === 'string' && anyOrg.legalName) setLegalName(anyOrg.legalName)
-    if (typeof anyOrg.state === 'string' && anyOrg.state) setFirmState(anyOrg.state)
-    if (typeof anyOrg.entityType === 'string' && anyOrg.entityType) setEntityType(anyOrg.entityType)
-    if (typeof anyOrg.caRegNumber === 'string' && anyOrg.caRegNumber) setCaRegNumber(anyOrg.caRegNumber)
-    if (typeof anyOrg.officeAddress === 'string' && anyOrg.officeAddress) setOfficeAddress(anyOrg.officeAddress)
-    if (anyOrg.gstConfig && typeof anyOrg.gstConfig === 'object') {
-      const c = anyOrg.gstConfig
-      if (c.returnPeriod === 'monthly' || c.returnPeriod === 'quarterly') setReturnPeriod(c.returnPeriod)
-      if (c.fyStart === 'april' || c.fyStart === 'january') setFyStart(c.fyStart)
-      if (c.gstr1Pref === 'auto' || c.gstr1Pref === 'manual') setGstr1Pref(c.gstr1Pref)
-      if (c.gstr3bPref === 'auto' || c.gstr3bPref === 'manual') setGstr3bPref(c.gstr3bPref)
-      if (c.itcMethod === 'auto-match' || c.itcMethod === 'manual-review') setItcMethod(c.itcMethod)
-      if (typeof c.lateFilingAlert === 'boolean') setLateFilingAlert(c.lateFilingAlert)
-      if (typeof c.dueDateReminderDays === 'number') setDueDateReminderDays(String(c.dueDateReminderDays))
-    }
-    if (anyOrg.notifications && typeof anyOrg.notifications === 'object') {
-      const n = anyOrg.notifications
-      if (typeof n.filingDeadline === 'boolean') setFilingDeadline(n.filingDeadline)
-      if (typeof n.mismatchAlerts === 'boolean') setMismatchAlerts(n.mismatchAlerts)
-      if (typeof n.weeklySummary === 'boolean') setWeeklySummary(n.weeklySummary)
-      if (typeof n.healthScoreChanges === 'boolean') setHealthScoreChanges(n.healthScoreChanges)
-      if (typeof n.teamActivity === 'boolean') setTeamActivity(n.teamActivity)
-      if (typeof n.newInvoiceUploaded === 'boolean') setNewInvoiceUploaded(n.newInvoiceUploaded)
-    }
-  }, [organization])
-
-  // ── Handlers ────────────────────────────────────────────────────────
-  // Every Save button persists to Firestore `organizations/{orgId}`. Org-level
-  // writes satisfy the Firestore security rules because the signed-in user is
-  // a member of the org (owner/admin for the membership row). `reloadOrg()` is
-  // called after each successful write so the navbar / sidebar / context
-  // reflect the new value immediately.
-
-  const handleSaveFirmProfile = async () => {
-    // Preview mode — gracefully no-op. Don't attempt the write (it would fail
-    // with permission-denied and confuse the user). The inline check also
-    // narrows `orgId` to `string` for TypeScript.
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
-      toast.info(PREVIEW_MODE_MSG)
-      // Throw so SaveButton reverts to its idle state — we already surfaced
-      // the info toast, so no error toast is needed.
-      throw new Error('preview-mode')
-    }
-    try {
-      await updateDoc(doc(db, 'organizations', orgId), {
-        name: firmName,
-        legalName,
-        gstin: firmGstin,
-        state: firmState,
-        entityType,
-        caRegNumber,
-        officeAddress,
-        updatedAt: serverTimestamp(),
-      })
-      await reloadOrg()
-      toast.success('Firm profile saved')
-    } catch (err) {
-      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save firm profile'))
-      throw err
-    }
-  }
-
-  const handleSaveGstConfig = async () => {
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
-      toast.info(PREVIEW_MODE_MSG)
-      throw new Error('preview-mode')
-    }
-    try {
-      await updateDoc(doc(db, 'organizations', orgId), {
-        gstConfig: {
-          returnPeriod,
-          fyStart,
-          gstr1Pref,
-          gstr3bPref,
-          itcMethod,
-          lateFilingAlert,
-          dueDateReminderDays: parseInt(dueDateReminderDays, 10) || 3,
-        },
-        updatedAt: serverTimestamp(),
-      })
-      await reloadOrg()
-      toast.success('GST configuration saved')
-    } catch (err) {
-      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save GST configuration'))
-      throw err
-    }
-  }
-
-  const handleSaveNotifications = async () => {
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
-      toast.info(PREVIEW_MODE_MSG)
-      throw new Error('preview-mode')
-    }
-    try {
-      await updateDoc(doc(db, 'organizations', orgId), {
-        notifications: {
-          filingDeadline,
-          mismatchAlerts,
-          weeklySummary,
-          healthScoreChanges,
-          teamActivity,
-          newInvoiceUploaded,
-        },
-        updatedAt: serverTimestamp(),
-      })
-      await reloadOrg()
-      toast.success('Notification preferences saved')
-    } catch (err) {
-      toast.error(isPermissionError(err) ? PERMISSION_DENIED_MSG : (err instanceof Error ? err.message : 'Failed to save notifications'))
-      throw err
-    }
-  }
-
-  const handleChangePassword = async () => {
-    if (!newPassword || newPassword !== confirmPassword) {
-      toast.error('Passwords do not match')
-      throw new Error('Password mismatch')
-    }
-    if (newPassword.length < 8) {
-      toast.error('Password must be at least 8 characters')
-      throw new Error('Password too short')
-    }
-    // Preview mode (no real Firebase session) — password changes aren't
-    // available. Don't attempt the call.
-    const fbUser = auth.currentUser
-    if (!fbUser || isPreview) {
-      toast.info('Preview mode — password changes are not available. Sign in to enable.')
-      throw new Error('preview-mode')
-    }
-    try {
-      await updatePassword(fbUser, newPassword)
-      setCurrentPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
-      toast.success('Password updated successfully')
-    } catch (err) {
-      // Firebase throws auth/requires-recent-login if the user hasn't signed
-      // in recently — surface that hint to the user.
-      const raw = err instanceof Error ? err.message : 'Failed to change password'
-      const friendly = raw.includes('requires-recent-login')
-        ? 'For your security, please sign out and sign back in, then try again.'
-        : raw
-      toast.error(friendly)
-      throw err
-    }
-  }
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    // Reset the input so the same file can be re-selected later.
-    e.target.value = ''
-    if (!file) return
-
-    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      toast.error('Logo must be a PNG, JPG, or WebP file')
-      return
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Logo must be under 2 MB')
-      return
-    }
-
-    setLogoUploading(true)
-    // Show a local preview immediately so the user sees feedback before the
-    // upload completes. In preview mode this is the ONLY copy we keep — the
-    // logo stays visible locally but is never written to the cloud.
-    const localPreviewUrl = URL.createObjectURL(file)
-    setLogoPreview(localPreviewUrl)
-
-    // Preview mode: keep the local preview, skip the cloud writes. The avatar
-    // shows the new logo for the rest of the session but it won't persist.
-    if (isPreview) {
-      setLogoUploading(false)
-      toast.info('Preview mode — logo change is shown here but not persisted to the cloud.')
-      return
-    }
-
-    // After the preview-mode check, orgId is guaranteed non-null.
-    const orgIdNonNull: string = orgId as string
-
-    try {
-      const ext = (file.name.split('.').pop() || 'png').toLowerCase()
-      const logoPath = `organizations/${orgIdNonNull}/logo.${ext}`
-      // Upload to Supabase Storage (bucket: gstpilot-files). upsert:true
-      // overwrites any previous logo at the same path — same semantics as the
-      // previous Firebase uploadBytes call.
-      const { error: uploadError } = await getSupabaseStorage().upload(
-        logoPath,
-        file,
-        { contentType: file.type || 'image/png', upsert: true },
-      )
-      if (uploadError) throw uploadError
-      const { data: urlData, error: urlError } =
-        await getSupabaseStorage().createSignedUrl(logoPath, 3600)
-      if (urlError || !urlData?.signedUrl) {
-        throw new Error('Could not generate a download URL for the logo.')
-      }
-      const downloadUrl = urlData.signedUrl
-      await updateDoc(doc(db, 'organizations', orgIdNonNull), {
-        logoUrl: downloadUrl,
-        updatedAt: serverTimestamp(),
-      })
-      await reloadOrg()
-      // The Firestore-backed URL is now the source of truth — drop the local
-      // preview so the canonical URL takes over on the next render.
-      setLogoPreview(null)
-      URL.revokeObjectURL(localPreviewUrl)
-      toast.success('Firm logo updated')
-    } catch (err) {
-      setLogoPreview(null)
-      URL.revokeObjectURL(localPreviewUrl)
-      const msg = isPermissionError(err)
-        ? PERMISSION_DENIED_MSG
-        : (err instanceof Error ? err.message : 'Failed to upload logo')
-      toast.error(msg)
-    } finally {
-      setLogoUploading(false)
-    }
-  }
-
-  const handleInviteMember = async () => {
-    if (!inviteEmail.trim()) return
-    // Preview mode — gracefully no-op. The invite would fail Firestore rules
-    // (no real org to write to), so we surface the same friendly message used
-    // by the other Settings save handlers instead of attempting the write.
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
-      toast.info(PREVIEW_MODE_MSG)
-      return
-    }
-    setInviting(true)
-    try {
-      const email = inviteEmail.trim()
-      // Pre-auth invite: the invitee has no Firebase Auth UID yet, so we
-      // synthesize a deterministic placeholder (`pending-<email>`) that the
-      // backend can later reconcile with a real UID when the user signs up.
-      // The Firestore `inviteMember()` helper de-dupes on the resulting doc
-      // id `${orgId}_${userId}`, preventing double-invites of the same email.
-      const pendingUserId = `pending-${email.toLowerCase()}`
-      const { member, error } = await inviteMember({
-        organizationId: orgId,
-        invitedBy: user?.id ?? null,
-        userId: pendingUserId,
-        userEmail: email,
-        userDisplayName: email.split('@')[0],
-        role: uiRoleToOrgRole(inviteRole),
-      })
-      if (error || !member) {
-        throw new Error(error ?? 'Failed to send invite')
-      }
-      // No optimistic local insert — the `useOrgMembers()` onSnapshot
-      // subscription will surface the new membership row automatically when
-      // the Firestore write lands, keeping local state in lockstep with the
-      // canonical source of truth.
-      toast.success(`Invitation sent to ${email}`)
-      setInviteEmail('')
-      setInviteRole('Staff')
-      setShowInviteDialog(false)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send invite')
-    } finally {
-      setInviting(false)
-    }
-  }
-
-  const handleRemoveMember = async () => {
-    if (!memberToRemove) return
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
-      toast.info(PREVIEW_MODE_MSG)
-      setShowRemoveDialog(false)
-      setMemberToRemove(null)
-      return
-    }
-    try {
-      const { error } = await removeMember(orgId, memberToRemove.userId)
-      if (error) throw new Error(error)
-      // Soft-delete flips `status` → 'removed' in Firestore. The
-      // `useOrgMembers()` listener filters removed rows out of `teamMembers`
-      // on the next snapshot, so no local mutation is needed.
-      toast.success(`${memberToRemove.name} removed from team`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove member')
-    } finally {
-      setShowRemoveDialog(false)
-      setMemberToRemove(null)
-    }
-  }
-
-  const handleUpdateRole = async (memberId: string, role: string) => {
-    const member = teamMembers.find(m => m.id === memberId)
-    if (!member) return
-    if (!orgId || isPreviewMode || orgId === 'preview-org') {
-      toast.info(PREVIEW_MODE_MSG)
-      setEditingMemberId(null)
-      setEditRole('')
-      return
-    }
-    try {
-      const uiRole = role as TeamMember['role']
-      const { error } = await updateMemberRole(orgId, member.userId, uiRoleToOrgRole(uiRole))
-      if (error) throw new Error(error)
-      // The role change lands via the onSnapshot subscription — no local
-      // state mutation, so the badge only flips once Firestore confirms.
-      toast.success(`${member.name}'s role updated to ${role}`)
-      setEditingMemberId(null)
-      setEditRole('')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update role')
-    }
-  }
-
-  // ── Password strength ───────────────────────────────────────────────
-  const passwordStrength = getPasswordStrength(newPassword)
-
-  // ── Role Badge Color ────────────────────────────────────────────────
-  const getRoleBadgeClass = (role: string) => {
-    switch (role) {
-      case 'Admin': return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
-      case 'Manager': return 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800'
-      case 'Staff': return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
-      case 'Viewer': return 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/40 dark:text-slate-400 dark:border-slate-700'
-      default: return ''
-    }
-  }
-
-  const getStatusBadgeClass = (status: string) => {
-    return status === 'Active'
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
-      : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // RENDER SECTION CONTENT
-  // ═══════════════════════════════════════════════════════════════════
-  const renderSection = () => {
-    switch (activeSection) {
-      // ───────────────────────────────────────────────────────────────
-      // SECTION 1: FIRM PROFILE
-      // ───────────────────────────────────────────────────────────────
-      case 'firm':
-        return (
-          <motion.div
-            key="firm"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={contentVariants}
-            className="space-y-6"
-          >
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">Firm Profile</h2>
-              <p className="text-sm text-muted-foreground mt-1">Manage your CA firm details used across all GST filings</p>
-            </div>
-
-            <Card className="border-border/50">
-              <CardContent className="pt-6 space-y-6">
-                {/* Logo Upload */}
-                <div className="flex items-center gap-5">
-                  <div className="relative group">
-                    <div className="h-20 w-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-600/20 overflow-hidden">
-                      {/* Render the uploaded logo (Firestore-backed URL or local
-                          in-flight preview) when available; otherwise fall back
-                          to the firm-initials mark so the logo never disappears. */}
-                      {(logoPreview || organization?.logoUrl) ? (
-                        <img
-                          src={(logoPreview || organization!.logoUrl) as string}
-                          alt={firmName || 'Firm logo'}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span>
-                          {firmName.split(' ').filter(w => w === '&' || w.length > 1).map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => logoInputRef.current?.click()}
-                      disabled={logoUploading}
-                      aria-label="Upload firm logo"
-                      className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      {logoUploading ? (
-                        <Loader2 className="h-5 w-5 text-white animate-spin" />
-                      ) : (
-                        <Camera className="h-5 w-5 text-white" />
-                      )}
-                    </button>
-                    <input
-                      ref={logoInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={handleLogoUpload}
-                      className="hidden"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Firm Logo</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {logoUploading ? 'Uploading...' : 'Click the avatar to upload a logo'}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">Recommended: 200×200px, PNG, JPG, or WebP (max 2 MB)</p>
-                    {isPreview && (
-                      <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
-                        Preview only — logo change won&rsquo;t be saved.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Firm Name & Legal Name */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firmName" className="text-sm font-medium">Firm Name</Label>
-                    <Input
-                      id="firmName"
-                      value={firmName}
-                      onChange={(e) => setFirmName(e.target.value)}
-                      placeholder="Enter firm name"
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="legalName" className="text-sm font-medium">Legal Name</Label>
-                    <Input
-                      id="legalName"
-                      value={legalName}
-                      onChange={(e) => setLegalName(e.target.value)}
-                      placeholder="Enter legal name as per registration"
-                      className="h-10"
-                    />
-                  </div>
-                </div>
-
-                {/* GSTIN & State */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firmGstin" className="text-sm font-medium">Firm GSTIN</Label>
-                    <div className="relative">
-                      <Input
-                        id="firmGstin"
-                        value={firmGstin}
-                        onChange={(e) => setFirmGstin(e.target.value.toUpperCase())}
-                        placeholder="22AAAAA0000A1Z5"
-                        className={`h-10 pr-10 ${gstinValidation === false ? 'border-red-300 focus-visible:ring-red-400' : gstinValidation === true ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''}`}
-                        maxLength={15}
-                      />
-                      {gstinValidation !== null && (
-                        <div className={`absolute right-3 top-1/2 -translate-y-1/2 ${gstinValidation ? 'text-emerald-500' : 'text-red-500'}`}>
-                          {gstinValidation ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-                        </div>
-                      )}
-                    </div>
-                    {gstinValidation === false && (
-                      <p className="text-[11px] text-red-500">Invalid GSTIN format</p>
-                    )}
-                    {gstinValidation === true && (
-                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Valid GSTIN format</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Registration State</Label>
-                    <Select value={firmState} onValueChange={setFirmState}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INDIAN_STATES.map((state) => (
-                          <SelectItem key={state} value={state}>{state}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Entity Type & CA Reg Number */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Entity Type</Label>
-                    <Select value={entityType} onValueChange={setEntityType}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ENTITY_TYPES.map((type) => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="caRegNumber" className="text-sm font-medium">CA Registration Number</Label>
-                    <Input
-                      id="caRegNumber"
-                      value={caRegNumber}
-                      onChange={(e) => setCaRegNumber(e.target.value)}
-                      placeholder="ICAI/M/000000"
-                      className="h-10"
-                    />
-                  </div>
-                </div>
-
-                {/* Office Address */}
-                <div className="space-y-2">
-                  <Label htmlFor="officeAddress" className="text-sm font-medium">Office Address</Label>
-                  <Textarea
-                    id="officeAddress"
-                    value={officeAddress}
-                    onChange={(e) => setOfficeAddress(e.target.value)}
-                    placeholder="Enter complete office address"
-                    className="min-h-[80px] resize-none"
-                  />
-                </div>
-
-                {/* Save */}
-                <div className="flex justify-end pt-2">
-                  <SaveButton onSave={handleSaveFirmProfile} />
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )
-
-      // ───────────────────────────────────────────────────────────────
-      // SECTION 2: GST CONFIGURATION
-      // ───────────────────────────────────────────────────────────────
-      case 'gst':
-        return (
-          <motion.div
-            key="gst"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={contentVariants}
-            className="space-y-6"
-          >
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">GST Configuration</h2>
-              <p className="text-sm text-muted-foreground mt-1">Configure default GST filing preferences and automation rules</p>
-            </div>
-
-            <Card className="border-border/50">
-              <CardContent className="pt-6 space-y-6">
-                {/* Default Return Period */}
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-sm font-medium">Default Return Period</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">Set the default filing frequency for new clients</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setReturnPeriod('monthly')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                        returnPeriod === 'monthly'
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      Monthly
-                    </button>
-                    <button
-                      onClick={() => setReturnPeriod('quarterly')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                        returnPeriod === 'quarterly'
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      Quarterly
-                    </button>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Financial Year Start */}
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-sm font-medium">Financial Year Start</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">Start month for financial year calculations</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setFyStart('april')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                        fyStart === 'april'
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      April
-                    </button>
-                    <button
-                      onClick={() => setFyStart('january')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                        fyStart === 'january'
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                          : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      January
-                    </button>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* GSTR-1 Filing Preference */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium">GSTR-1 Filing Preference</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">Auto-fill from sales register or manual entry</p>
-                  </div>
-                  <Select value={gstr1Pref} onValueChange={(v) => setGstr1Pref(v as 'auto' | 'manual')}>
-                    <SelectTrigger className="w-[140px] h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Auto</SelectItem>
-                      <SelectItem value="manual">Manual</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* GSTR-3B Filing Preference */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium">GSTR-3B Filing Preference</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">Auto-compute liability or manual entry</p>
-                  </div>
-                  <Select value={gstr3bPref} onValueChange={(v) => setGstr3bPref(v as 'auto' | 'manual')}>
-                    <SelectTrigger className="w-[140px] h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Auto</SelectItem>
-                      <SelectItem value="manual">Manual</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* ITC Claiming Method */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium">ITC Claiming Method</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">Auto-match with GSTR-2A or manual review</p>
-                  </div>
-                  <Select value={itcMethod} onValueChange={(v) => setItcMethod(v as 'auto-match' | 'manual-review')}>
-                    <SelectTrigger className="w-[160px] h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto-match">Auto-match</SelectItem>
-                      <SelectItem value="manual-review">Manual review</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Separator />
-
-                {/* Late Filing Penalty Alert */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
-                      <AlertTriangle className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">Late Filing Penalty Alert</Label>
-                      <p className="text-xs text-muted-foreground mt-0.5">Get notified when penalty is applicable</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={lateFilingAlert}
-                    onCheckedChange={setLateFilingAlert}
-                    className="data-[state=checked]:bg-emerald-600"
-                  />
-                </div>
-
-                {/* Due Date Reminder Days */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium">Due Date Reminder Days</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">Days before due date to send reminder</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={dueDateReminderDays}
-                    onChange={(e) => setDueDateReminderDays(e.target.value)}
-                    min={1}
-                    max={30}
-                    className="w-[80px] h-9 text-center"
-                  />
-                </div>
-
-                {/* Save */}
-                <div className="flex justify-end pt-2">
-                  <SaveButton onSave={handleSaveGstConfig} />
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )
-
-      // ───────────────────────────────────────────────────────────────
-      // SECTION 3: TEAM MEMBERS
-      // ───────────────────────────────────────────────────────────────
-      case 'team':
-        return (
-          <motion.div
-            key="team"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={contentVariants}
-            className="space-y-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-foreground">Team Members</h2>
-                <p className="text-sm text-muted-foreground mt-1">Manage your team and their access levels</p>
-              </div>
-              <Button
-                onClick={() => setShowInviteDialog(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-              >
-                <Users className="h-4 w-4" />
-                Invite Team Member
-              </Button>
-            </div>
-
-            <div className="space-y-3">
-              {teamMembers.map((member) => (
-                <Card key={member.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
-                  <CardContent className="pt-0 py-4">
-                    <div className="flex items-center gap-4">
-                      <Avatar className="h-10 w-10">
-                        <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white text-sm font-semibold">
-                          {member.initials}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-semibold text-foreground">{member.name}</p>
-                          <Badge className={`text-[11px] px-2 py-0 border ${getRoleBadgeClass(member.role)}`}>
-                            {member.role}
-                          </Badge>
-                          <Badge className={`text-[11px] px-2 py-0 border ${getStatusBadgeClass(member.status)}`}>
-                            {member.status}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
-                      </div>
-
-                      {/* Edit Role */}
-                      {editingMemberId === member.id ? (
-                        <div className="flex items-center gap-2">
-                          <Select value={editRole} onValueChange={(v) => setEditRole(v)}>
-                            <SelectTrigger className="w-[110px] h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Admin">Admin</SelectItem>
-                              <SelectItem value="Manager">Manager</SelectItem>
-                              <SelectItem value="Staff">Staff</SelectItem>
-                              <SelectItem value="Viewer">Viewer</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700"
-                            onClick={() => handleUpdateRole(member.id, editRole)}
-                          >
-                            <Check className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          {member.role !== 'Admin' && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                onClick={() => {
-                                  setEditingMemberId(member.id)
-                                  setEditRole(member.role)
-                                }}
-                              >
-                                Edit role
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 px-2 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                onClick={() => {
-                                  setMemberToRemove(member)
-                                  setShowRemoveDialog(true)
-                                }}
-                              >
-                                Remove
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            {teamMembers.length === 0 && (
-              <Card className="border-border/50 border-dashed">
-                <CardContent className="pt-6 text-center py-12">
-                  <Users className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">No team members yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">Invite your first team member to get started</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Invite Dialog */}
-            <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-emerald-600" />
-                    Invite Team Member
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 py-2">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Email Address</Label>
-                    <Input
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="colleague@firm.com"
-                      type="email"
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Role</Label>
-                    <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as 'Manager' | 'Staff' | 'Viewer')}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Manager">Manager</SelectItem>
-                        <SelectItem value="Staff">Staff</SelectItem>
-                        <SelectItem value="Viewer">Viewer</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[11px] text-muted-foreground">Admin role can only be assigned by existing admins</p>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowInviteDialog(false)}
-                    disabled={inviting}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleInviteMember}
-                    disabled={!inviteEmail.trim() || inviting}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-                  >
-                    {inviting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Mail className="h-4 w-4" />
-                        Send Invite
-                      </>
-                    )}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
-            {/* Remove Confirmation */}
-            <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle className="flex items-center gap-2 text-red-700 dark:text-red-400">
-                    <AlertTriangle className="h-5 w-5" />
-                    Remove Team Member?
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {memberToRemove && (
-                      <>Are you sure you want to remove <strong>{memberToRemove.name}</strong> from your team? They will lose access to all firm data immediately.</>
-                    )}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleRemoveMember}
-                    className="bg-red-600 hover:bg-red-700 text-white"
-                  >
-                    Remove Member
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </motion.div>
-        )
-
-      // ───────────────────────────────────────────────────────────────
-      // SECTION 4: NOTIFICATIONS
-      // ───────────────────────────────────────────────────────────────
-      case 'notifications':
-        return (
-          <motion.div
-            key="notifications"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={contentVariants}
-            className="space-y-6"
-          >
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">Notifications</h2>
-              <p className="text-sm text-muted-foreground mt-1">Choose what notifications you want to receive</p>
-            </div>
-
-            <Card className="border-border/50">
-              <CardContent className="pt-6 space-y-1">
-                {/* Filing Deadline Reminders */}
-                <div className="flex items-center justify-between py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
-                      <CalendarClock className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Filing Deadline Reminders</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Get notified before GST filing due dates</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={filingDeadline}
-                    onCheckedChange={setFilingDeadline}
-                    className="data-[state=checked]:bg-emerald-600"
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Mismatch Alerts */}
-                <div className="flex items-center justify-between py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
-                      <AlertTriangle className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Mismatch Alerts</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Alert when GSTR-2A vs books mismatches are detected</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={mismatchAlerts}
-                    onCheckedChange={setMismatchAlerts}
-                    className="data-[state=checked]:bg-emerald-600"
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Weekly Summary Email */}
-                <div className="flex items-center justify-between py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
-                      <Mail className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Weekly Summary Email</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Receive a weekly digest of filing statuses and activity</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={weeklySummary}
-                    onCheckedChange={setWeeklySummary}
-                    className="data-[state=checked]:bg-emerald-600"
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Client Health Score Changes */}
-                <div className="flex items-center justify-between py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 shrink-0">
-                      <Activity className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Client Health Score Changes</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Alert when a client&apos;s health score drops significantly</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={healthScoreChanges}
-                    onCheckedChange={setHealthScoreChanges}
-                    className="data-[state=checked]:bg-emerald-600"
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Team Activity Updates */}
-                <div className="flex items-center justify-between py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0">
-                      <Users className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Team Activity Updates</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Notifications when team members complete filings or actions</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={teamActivity}
-                    onCheckedChange={setTeamActivity}
-                    className="data-[state=checked]:bg-emerald-600"
-                  />
-                </div>
-
-                <Separator />
-
-                {/* New Invoice Uploaded */}
-                <div className="flex items-center justify-between py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
-                      <Upload className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">New Invoice Uploaded</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Notify when clients upload new invoices or documents</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={newInvoiceUploaded}
-                    onCheckedChange={setNewInvoiceUploaded}
-                    className="data-[state=checked]:bg-emerald-600"
-                  />
-                </div>
-
-                {/* Save */}
-                <div className="flex justify-end pt-4">
-                  <SaveButton onSave={handleSaveNotifications} />
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )
-
-      // ───────────────────────────────────────────────────────────────
-      // SECTION 5: SECURITY
-      // ───────────────────────────────────────────────────────────────
-      case 'security':
-        return (
-          <motion.div
-            key="security"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={contentVariants}
-            className="space-y-6"
-          >
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">Security</h2>
-              <p className="text-sm text-muted-foreground mt-1">Manage your password, two-factor authentication, and sessions</p>
-            </div>
-
-            {/* Change Password */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-0">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
-                    <Lock className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Change Password</CardTitle>
-                    <CardDescription>Update your account password</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Current Password</Label>
-                  <Input
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="Enter current password"
-                    className="h-10"
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">New Password</Label>
-                    <Input
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Enter new password"
-                      className="h-10"
-                    />
-                    {newPassword && (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-muted-foreground">Strength</span>
-                          <span className={`text-[11px] font-medium ${
-                            passwordStrength.score <= 40 ? 'text-red-500' :
-                            passwordStrength.score <= 60 ? 'text-yellow-600' :
-                            'text-emerald-600'
-                          }`}>{passwordStrength.label}</span>
-                        </div>
-                        <Progress value={passwordStrength.score} className={`h-1.5 ${passwordStrength.color}`} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Confirm Password</Label>
-                    <Input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Confirm new password"
-                      className={`h-10 ${confirmPassword && newPassword !== confirmPassword ? 'border-red-300 focus-visible:ring-red-400' : confirmPassword && newPassword === confirmPassword ? 'border-emerald-300 focus-visible:ring-emerald-400' : ''}`}
-                    />
-                    {confirmPassword && newPassword !== confirmPassword && (
-                      <p className="text-[11px] text-red-500">Passwords do not match</p>
-                    )}
-                    {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
-                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400">Passwords match</p>
-                    )}
-                  </div>
-                </div>
-                {newPassword && confirmPassword && newPassword === confirmPassword && newPassword.length >= 8 && (
-                  <div className="flex justify-end">
-                    <SaveButton onSave={handleChangePassword} />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Two-Factor Authentication */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-0">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 shrink-0">
-                    <Shield className="h-4.5 w-4.5" />
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-base">Two-Factor Authentication</CardTitle>
-                    <CardDescription>Add an extra layer of security to your account</CardDescription>
-                  </div>
-                  <Badge className={`text-[11px] px-2.5 py-0.5 border ${
-                    twoFactorEnabled
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
-                      : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                  }`}>
-                    {twoFactorEnabled ? 'Enabled' : 'Disabled'}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {twoFactorEnabled ? 'Two-factor authentication is enabled' : 'Enable two-factor authentication'}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {twoFactorEnabled
-                        ? 'Your account is protected with an additional verification step'
-                        : 'Protect your account with OTP verification on login'}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={twoFactorEnabled}
-                    onCheckedChange={setTwoFactorEnabled}
-                    className="data-[state=checked]:bg-emerald-600"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Active Sessions */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-0">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 shrink-0">
-                    <Smartphone className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Active Sessions</CardTitle>
-                    <CardDescription>Devices currently signed in to your account</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="space-y-3">
-                  {MOCK_SESSIONS.map((session) => (
-                    <div
-                      key={session.id}
-                      className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                        session.current
-                          ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800'
-                          : 'bg-slate-50 dark:bg-slate-900/50 border border-transparent'
-                      }`}
-                    >
-                      <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
-                        session.current
-                          ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-                      }`}>
-                        {session.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-foreground">{session.device}</p>
-                          {session.current && (
-                            <Badge className="text-[10px] px-1.5 py-0 border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
-                              Current
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">{session.location} · {session.lastActive}</p>
-                      </div>
-                      {!session.current && (
-                        <Button variant="ghost" size="sm" className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 h-8">
-                          Revoke
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Data Encryption */}
-            <Card className="border-border/50">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50">
-                  <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
-                    <LockKeyhole className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Your data is encrypted at rest and in transit</p>
-                    <p className="text-xs text-emerald-600/80 dark:text-emerald-400/70 mt-0.5">All sensitive data is protected using AES-256 encryption with TLS 1.3 for data in transit</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )
-
-      // ───────────────────────────────────────────────────────────────
-      // SECTION 6: BILLING
-      // ───────────────────────────────────────────────────────────────
-      case 'billing':
-        return (
-          <motion.div
-            key="billing"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={contentVariants}
-            className="space-y-6"
-          >
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">Billing</h2>
-              <p className="text-sm text-muted-foreground mt-1">Manage your subscription, payment methods, and invoices</p>
-            </div>
-
-            {/* Current Plan */}
-            <Card className="border-border/50 overflow-hidden">
-              <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-semibold text-foreground">Professional Plan</h3>
-                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">
-                        Active
-                      </Badge>
-                    </div>
-                    <div className="flex items-baseline gap-1 mt-2">
-                      <span className="text-3xl font-bold text-foreground">₹1,499</span>
-                      <span className="text-sm text-muted-foreground">/month</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Next billing date: <span className="font-medium text-foreground">1 July 2025</span>
-                    </p>
-                  </div>
-                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
-                    <ChevronRight className="h-4 w-4" />
-                    Upgrade Plan
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Usage This Month */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-0">
-                <CardTitle className="text-base">Usage This Month</CardTitle>
-                <CardDescription>Your current usage against plan limits</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-5">
-                {/* Clients */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium text-foreground">Clients</span>
-                    </div>
-                    <span className="text-sm text-muted-foreground">12 / 25</span>
-                  </div>
-                  <Progress value={48} className="h-2 bg-emerald-100 dark:bg-emerald-950 [&>div]:bg-emerald-500" />
-                </div>
-
-                {/* Invoices Processed */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium text-foreground">Invoices Processed</span>
-                    </div>
-                    <span className="text-sm text-muted-foreground">347 / 1,000</span>
-                  </div>
-                  <Progress value={34.7} className="h-2 bg-teal-100 dark:bg-teal-950 [&>div]:bg-teal-500" />
-                </div>
-
-                {/* Reconciliation Runs */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Activity className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium text-foreground">Reconciliation Runs</span>
-                    </div>
-                    <span className="text-sm text-muted-foreground">23 / 50</span>
-                  </div>
-                  <Progress value={46} className="h-2 bg-amber-100 dark:bg-amber-950 [&>div]:bg-amber-500" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Payment Method */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-0">
-                <CardTitle className="text-base">Payment Method</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-10 w-14 rounded-md bg-gradient-to-br from-slate-700 to-slate-900 text-white text-[10px] font-bold tracking-wider">
-                      VISA
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">•••• •••• •••• 4242</p>
-                      <p className="text-xs text-muted-foreground">Expires 12/2025</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" className="text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 h-8">
-                    Update Payment Method
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Billing History */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-0">
-                <CardTitle className="text-base">Billing History</CardTitle>
-                <CardDescription>Download past invoices</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {BILLING_HISTORY.map((invoice) => (
-                    <div
-                      key={invoice.id}
-                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0">
-                          <CreditCard className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{invoice.date}</p>
-                          <p className="text-xs text-muted-foreground">{invoice.amount}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Badge className={`text-[11px] px-2 py-0 border ${
-                          invoice.status === 'Paid'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
-                            : invoice.status === 'Pending'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
-                              : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
-                        }`}>
-                          {invoice.status}
-                        </Badge>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground">
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )
-
-      // ───────────────────────────────────────────────────────────────
-      // SECTION: GST API CONNECTIONS
-      // ───────────────────────────────────────────────────────────────
-      case 'api':
-        return (
-          <motion.div
-            key="api"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={contentVariants}
-            className="space-y-6"
-          >
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">GST API Connections</h2>
-              <p className="text-sm text-muted-foreground mt-1">Manage connections to GST portal and government APIs</p>
-            </div>
-
-            <div className="space-y-4">
-              {MOCK_API_CONNECTIONS.map((connection) => {
-                const live = apiConnStatuses[connection.id]
-                const status: ApiConnStatus = live?.status ?? connection.status
-                const lastSync = live?.lastSync
-                return (
-                <Card key={connection.id} className="border-border/50 hover:shadow-md hover:shadow-emerald-500/5 transition-all duration-200">
-                  <CardContent className="pt-0 py-4">
-                    <div className="flex items-center gap-4">
-                      <div className={`flex items-center justify-center h-10 w-10 rounded-xl shrink-0 ${
-                        status === 'Connected'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
-                          : status === 'Disconnected'
-                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
-                      }`}>
-                        {connection.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-semibold text-foreground">{connection.name}</p>
-                          <Badge className={`text-[10px] px-2 py-0 border ${
-                            status === 'Connected'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
-                              : status === 'Disconnected'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
-                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                          }`}>
-                            <span className={`size-1.5 rounded-full mr-1 ${
-                              status === 'Connected' ? 'bg-emerald-500' : status === 'Disconnected' ? 'bg-amber-500' : 'bg-slate-400'
-                            }`} />
-                            {status}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{connection.description}</p>
-                        {lastSync && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            Last synced: {lastSync}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs gap-1.5"
-                          onClick={async () => {
-                            try {
-                              // Test by hitting the GSTN connect endpoint with the
-                              // firm's own GSTIN — if it returns a valid profile,
-                              // the connection is healthy.
-                              const res = await fetch('/api/connect/gstn', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  userId: user?.id ?? 'system-test',
-                                  gstin: firmGstin || '27AABCS1429B1Z5',
-                                }),
-                              })
-                              const data = await res.json()
-                              if (!res.ok) {
-                                throw new Error(data?.error ?? 'Test failed')
-                              }
-                              // Persist the healthy status + lastSync to the org doc
-                              // so the badge survives refresh.
-                              if (orgId && !isPreviewMode && orgId !== 'preview-org') {
-                                const now = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
-                                await updateDoc(doc(db, 'organizations', orgId), {
-                                  [`gstApiConnections.${connection.id}`]: { status: 'Connected' as ApiConnStatus, lastSync: now },
-                                  updatedAt: serverTimestamp(),
-                                })
-                                setApiConnStatuses(prev => ({ ...prev, [connection.id]: { status: 'Connected', lastSync: now } }))
-                              }
-                              toast.success(`${connection.name} — connection OK`)
-                            } catch (err) {
-                              // Persist the failed status too.
-                              if (orgId && !isPreviewMode && orgId !== 'preview-org') {
-                                try {
-                                  await updateDoc(doc(db, 'organizations', orgId), {
-                                    [`gstApiConnections.${connection.id}`]: { status: 'Disconnected' as ApiConnStatus, lastSync: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) },
-                                    updatedAt: serverTimestamp(),
-                                  })
-                                  setApiConnStatuses(prev => ({ ...prev, [connection.id]: { status: 'Disconnected', lastSync: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) } }))
-                                } catch { /* non-fatal */ }
-                              }
-                              toast.error(err instanceof Error ? err.message : 'Test failed')
-                            }
-                          }}
-                        >
-                          <Activity className="h-3.5 w-3.5" />
-                          Test Connection
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-xs text-muted-foreground"
-                          disabled
-                          title={`${connection.name} configuration is managed in the provider's dashboard`}
-                        >
-                          Configure
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                )
-              })}
-            </div>
-          </motion.div>
-        )
-
-      // ───────────────────────────────────────────────────────────────
-      // SECTION: AUDIT LOGS
-      // ───────────────────────────────────────────────────────────────
-      case 'audit':
-        return (
-          <motion.div
-            key="audit"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            variants={contentVariants}
-            className="space-y-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-foreground">Audit Logs</h2>
-                <p className="text-sm text-muted-foreground mt-1">Track all actions performed across your firm</p>
-              </div>
-              <Select value={auditFilter} onValueChange={setAuditFilter}>
-                <SelectTrigger className="w-[160px] h-9">
-                  <SelectValue placeholder="Filter by type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Actions</SelectItem>
-                  <SelectItem value="filing">Filing</SelectItem>
-                  <SelectItem value="client_update">Client Updates</SelectItem>
-                  <SelectItem value="invoice">Invoices</SelectItem>
-                  <SelectItem value="settings">Settings</SelectItem>
-                  <SelectItem value="reconciliation">Reconciliation</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Card className="border-border/50">
-              <CardContent className="pt-6 p-0">
-                <div className="max-h-[520px] overflow-y-auto">
-                  <div className="divide-y divide-border/50">
-                    {auditLoading && (
-                      <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-sm">Loading activity…</span>
-                      </div>
-                    )}
-                    {!auditLoading && auditLogs
-                      .filter(log => auditFilter === 'all' || log.actionType === auditFilter)
-                      .map((log, idx) => (
-                      <motion.div
-                        key={log.id}
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.2, delay: idx * 0.03 }}
-                        className="flex items-start gap-3 px-6 py-3.5 hover:bg-slate-50/80 dark:hover:bg-slate-900/30 transition-colors"
-                      >
-                        <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 mt-0.5 ${
-                          log.actionType === 'filing'
-                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
-                            : log.actionType === 'client_update'
-                            ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400'
-                            : log.actionType === 'invoice'
-                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
-                            : log.actionType === 'reconciliation'
-                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-                        }`}>
-                          {log.actionType === 'filing' ? <ClipboardList className="h-4 w-4" /> :
-                           log.actionType === 'invoice' ? <Upload className="h-4 w-4" /> :
-                           log.actionType === 'reconciliation' ? <Activity className="h-4 w-4" /> :
-                           <Shield className="h-4 w-4" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground">{log.action}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-muted-foreground">{log.entity}</span>
-                            <span className="text-muted-foreground/40">·</span>
-                            <span className="text-xs text-muted-foreground">{log.user}</span>
-                          </div>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
-                          {log.timestamp}
-                        </span>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-                {!auditLoading && auditLogs.filter(log => auditFilter === 'all' || log.actionType === auditFilter).length === 0 && (
-                  <div className="py-12 text-center">
-                    <ClipboardList className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">No audit logs match this filter</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
-        )
-
-      default:
-        return null
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // MAIN LAYOUT
-  // ═══════════════════════════════════════════════════════════════════
   return (
-    <div className="h-full flex flex-col">
-      {/* ── Mobile: Horizontal Scrollable Tabs ── */}
-      {isMobile && (
-        <div className="border-b border-border bg-background px-4 pt-4">
-          <h1 className="text-xl font-bold text-foreground mb-3">Settings</h1>
-          <div className="flex gap-1 overflow-x-auto pb-0 -mb-px scrollbar-hide">
-            {SECTIONS.map((section) => (
-              <button
-                key={section.id}
-                onClick={() => setActiveSection(section.id)}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-all cursor-pointer ${
-                  activeSection === section.id
-                    ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
-              >
-                {section.icon}
-                {section.label}
-              </button>
-            ))}
+    // ═══ FIXED-LAYOUT SETTINGS SHELL (enterprise / Stripe-style) ═══
+    // The DashboardShell top header is h-14 (3.5rem). We use an explicit
+    // viewport-relative height (calc(100vh - 3.5rem)) instead of h-full so the
+    // height chain NEVER collapses — regardless of intermediate wrappers
+    // (ViewErrorBoundary, DashboardViews) or percentage-resolution quirks.
+    //
+    // Architecture:
+    //   root (fixed height, overflow-hidden)
+    //     ├─ page header  (shrink-0, NEVER scrolls)  — "Settings" + Save
+    //     └─ body row (flex-1, min-h-0)
+    //          ├─ sidebar  (shrink-0, own overflow-y-auto)  — NEVER scrolls with content
+    //          └─ content  (flex-1, overflow-y-auto)        — ONLY this scrolls
+    <div
+      className="flex flex-col overflow-hidden bg-black text-white"
+      style={{ height: 'calc(100vh - 3.5rem)' }}
+    >
+      {/* ── PAGE HEADER (fixed, never scrolls) ── */}
+      <header className="relative z-20 flex shrink-0 items-center justify-between gap-4 border-b border-[#1F1F1F] bg-black/80 px-5 py-4 backdrop-blur md:px-8">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            <Settings2 className="h-5 w-5 text-[#3B82F6] shrink-0" />
+            <h1 className="gst-page-title truncate text-white">Settings</h1>
           </div>
+          <p className="gst-description mt-0.5 truncate text-zinc-400">
+            Manage your organization, account, and system preferences.
+          </p>
         </div>
-      )}
+        {/* The Save button is intentionally a no-op placeholder here at the
+            page level — each section has its own contextual Save with the
+            real API call. This top-right button surfaces the active section's
+            label so the user always knows what they'd be saving. */}
+        <div className="hidden items-center gap-2 sm:flex">
+          <span className="gst-status gst-status-neutral">{meta.title}</span>
+        </div>
+      </header>
 
-      <div className="flex-1 flex min-h-0">
-        {/* ── Desktop: Left Navigation ── */}
-        {!isMobile && (
-          <aside className="w-[220px] shrink-0 border-r border-border bg-slate-50/50 dark:bg-slate-900/30 flex flex-col">
-            <div className="p-5 pb-4">
-              <h1 className="text-lg font-bold text-foreground">Settings</h1>
-            </div>
+      {/* ── BODY ROW: sidebar + scrollable content ── */}
+      <div className="flex min-h-0 flex-1">
+        {/* ── SIDEBAR NAV (sticky / fixed, own vertical scroll if list overflows) ── */}
+        <SettingsSidebar
+          activeSection={activeSection}
+          onSelect={setActiveSection}
+          isMobile={isMobile}
+        />
 
-            <nav className="flex-1 px-3 space-y-0.5">
-              {SECTIONS.map((section) => (
-                <button
-                  key={section.id}
-                  onClick={() => setActiveSection(section.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                    activeSection === section.id
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-l-[3px] border-emerald-600 pl-[9px]'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800/50 border-l-[3px] border-transparent'
-                  }`}
-                >
-                  {section.icon}
-                  {section.label}
-                </button>
-              ))}
-            </nav>
-
-            {/* Version & Status */}
-            <div className="p-4 border-t border-border mt-auto">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs text-muted-foreground font-medium">GSTPilot</span>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-200 text-emerald-700 bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-950/40">
-                  v1.0.0
-                </Badge>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[11px] text-muted-foreground">Online</span>
-              </div>
-            </div>
-          </aside>
-        )}
-
-        {/* ── Right Content Area ── */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="max-w-2xl mx-auto p-4 md:p-6 lg:p-8">
-            {/* Preview-mode banner — shown only when OrgContext fell back to
-                the demo workspace (Firestore unreachable / no real org). The
-                form below still works visually but saves are no-ops. */}
-            {isPreview && (
-              <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 p-3 flex items-start gap-2.5">
-                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Preview mode</p>
-                  <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-0.5">
-                    You&rsquo;re viewing a preview workspace. Settings edits are shown here but won&rsquo;t be persisted to the cloud.
-                  </p>
-                </div>
-              </div>
-            )}
+        {/* ── CONTENT PANEL (ONLY this region scrolls) ── */}
+        <main
+          ref={contentRef}
+          className="min-w-0 flex-1 overflow-y-auto custom-scrollbar"
+        >
+          <div className="mx-auto w-full max-w-4xl px-5 py-8 md:px-8 md:py-10">
             <AnimatePresence mode="wait">
-              {renderSection()}
+              <motion.div
+                key={activeSection}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+              >
+                {activeSection === 'organization' && <OrganizationSection />}
+                {activeSection === 'gst' && <GSTSection />}
+                {activeSection === 'appearance' && <AppearanceSection />}
+                {activeSection === 'profile' && <ProfileSection />}
+                {activeSection === 'security' && <SecuritySection />}
+                {activeSection === 'integrations' && <IntegrationsSection />}
+                {activeSection === 'notifications' && <NotificationsSection />}
+                {activeSection === 'team' && <TeamSection />}
+                {activeSection === 'apikeys' && <ApiKeysSection />}
+                {activeSection === 'audit' && <AuditLogSection />}
+                {activeSection === 'billing' && <BillingSection />}
+                {activeSection === 'data' && <DataSection />}
+                {activeSection === 'danger' && <DangerZoneSection />}
+              </motion.div>
             </AnimatePresence>
           </div>
         </main>
       </div>
     </div>
-  )
+  );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function SettingsSidebar({
+  activeSection, onSelect, isMobile,
+}: {
+  activeSection: SectionId;
+  onSelect: (s: SectionId) => void;
+  isMobile: boolean;
+}) {
+  const groups = useMemo(() => {
+    // Render in the order: Workspace → Account → System (matches SECTIONS order).
+    const g: Record<string, NavSection[]> = { Workspace: [], Account: [], System: [] };
+    for (const s of SECTIONS) g[s.group].push(s);
+    return g;
+  }, []);
+
+  // ── MOBILE: compact Select dropdown in place of the vertical nav ──
+  if (isMobile) {
+    return (
+      <div className="shrink-0 border-b border-[#1F1F1F] bg-black px-4 py-3">
+        <Select value={activeSection} onValueChange={(v) => onSelect(v as SectionId)}>
+          <SelectTrigger className="h-9 border-[#2A2A2A] bg-[#0A0A0A] text-white">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="max-h-80 border-[#2A2A2A] bg-[#0A0A0A]">
+            {(['Workspace', 'Account', 'System'] as const).map((gn) => (
+              <div key={gn}>
+                <p className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-600">
+                  {gn}
+                </p>
+                {groups[gn].map((s) => (
+                  <SelectItem
+                    key={s.id}
+                    value={s.id}
+                    className="text-white focus:bg-[#181818] focus:text-white"
+                  >
+                    <div className="flex items-center gap-2">
+                      {s.icon}
+                      <span>{s.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </div>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
+
+  // ── DESKTOP: sticky sub-nav panel ──
+  // The parent body row is `flex min-h-0 flex-1` with the root `overflow-hidden`,
+  // so this <nav> never causes the whole page to scroll. It is `shrink-0` with
+  // its own `overflow-y-auto` in case the nav list ever exceeds the viewport
+  // (12 sections fits comfortably, but future additions won't break layout).
+  // Active item: blue LEFT border + blue-tinted bg (Stripe / Linear style)
+  // rather than a solid blue pill — feels more enterprise / less playful.
+  return (
+    <nav className="sticky top-0 flex h-full w-60 shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-[#1F1F1F] bg-[#070707] px-3 py-5 custom-scrollbar">
+      {/* Tiny brand label at the top of the nav */}
+      <div className="mb-5 px-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-600">
+          Settings
+        </p>
+      </div>
+
+      <div className="space-y-5">
+        {(['Workspace', 'Account', 'System'] as const).map((groupName) => {
+          const items = groups[groupName];
+          if (!items?.length) return null;
+          return (
+            <div key={groupName}>
+              <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-600">
+                {groupName}
+              </p>
+              <div className="space-y-0.5">
+                {items.map((s) => {
+                  const active = activeSection === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => onSelect(s.id)}
+                      aria-current={active ? 'page' : undefined}
+                      className={`group relative flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-all duration-150 ${
+                        active
+                          ? 'bg-blue-500/10 text-white'
+                          : 'text-zinc-400 hover:bg-[#141414] hover:text-white'
+                      }`}
+                    >
+                      {/* Blue left accent bar for the active item */}
+                      <span
+                        className={`absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full transition-all duration-150 ${
+                          active ? 'bg-blue-400' : 'bg-transparent'
+                        }`}
+                      />
+                      <span className={active ? 'text-blue-400' : 'text-zinc-500 group-hover:text-zinc-300'}>
+                        {s.icon}
+                      </span>
+                      <span className="truncate">{s.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer hint inside the sidebar */}
+      <div className="mt-auto pt-6">
+        <div className="rounded-lg border border-[#1F1F1F] bg-[#0A0A0A] px-3 py-2.5">
+          <p className="text-[11px] leading-relaxed text-zinc-500">
+            Changes are saved per-section. Use the Save button inside each card.
+          </p>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHARED UI PRIMITIVES (premium dark enterprise — aligned to GSTPilot design system)
+//   • Cards:        .gst-card base  → bg #0A0A0A, border #1F1F1F, p-6, rounded-xl
+//   • Buttons:      .gst-btn base   → h-9, blue accent #2563EB
+//   • Status pills: .gst-status     → success / neutral variants
+//   • Inputs:       #0A0A0A bg, #2A2A2A border, blue focus ring
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function SettingsCard({
+  title, description, children, action,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <Card className="gst-card border-[#1F1F1F] bg-[#0A0A0A] p-0 shadow-[0_1px_0_0_rgba(255,255,255,0.02)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)]">
+      <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-[#1F1F1F] px-6 py-5">
+        <div className="min-w-0">
+          <CardTitle className="gst-card-title text-white">{title}</CardTitle>
+          {description && (
+            <CardDescription className="gst-description mt-1 text-zinc-400">
+              {description}
+            </CardDescription>
+          )}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </CardHeader>
+      <CardContent className="p-6">{children}</CardContent>
+    </Card>
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <Label className="gst-label text-zinc-300">{children}</Label>;
+}
+
+function FieldInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <Input
+      {...props}
+      className={`h-9 rounded-md border-[#2A2A2A] bg-[#0A0A0A] text-white placeholder:text-zinc-600 focus:border-[#2563EB] focus-visible:ring-[#2563EB]/20 ${props.className ?? ''}`}
+    />
+  );
+}
+
+function FieldTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <Textarea
+      {...props}
+      className={`rounded-md border-[#2A2A2A] bg-[#0A0A0A] text-white placeholder:text-zinc-600 focus:border-[#2563EB] focus-visible:ring-[#2563EB]/20 ${props.className ?? ''}`}
+    />
+  );
+}
+
+function PrimaryButton({
+  children, loading, ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) {
+  return (
+    <Button
+      {...props}
+      disabled={loading || props.disabled}
+      className="gst-btn gst-btn-primary h-9 gap-2 border-0 disabled:cursor-not-allowed"
+    >
+      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+      {children}
+    </Button>
+  );
+}
+
+function GhostButton({
+  children, ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <Button
+      {...props}
+      variant="outline"
+      className="gst-btn gst-btn-outline h-9 gap-2"
+    >
+      {children}
+    </Button>
+  );
+}
+
+function DangerButton({
+  children, loading, ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) {
+  return (
+    <Button
+      {...props}
+      disabled={loading || props.disabled}
+      className="gst-btn gst-btn-danger h-9 gap-2 border-0 disabled:cursor-not-allowed"
+    >
+      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+      {children}
+    </Button>
+  );
+}
+
+function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
+  // Slim in-content section header. The page header (sticky top) carries the
+  // big "Settings" wordmark; this reinforces the active section's context.
+  return (
+    <div className="mb-6 flex items-start gap-3">
+      <div className="h-8 w-1 rounded-full bg-[#2563EB]" aria-hidden />
+      <div>
+        <h2 className="gst-section-title text-white">{title}</h2>
+        <p className="gst-description mt-1 text-zinc-400">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function ComingSoonBadge() {
+  return (
+    <Badge className="gst-status gst-status-info border-[#8B5CF6]/25 bg-[#8B5CF6]/15 text-[#A78BFA] hover:bg-[#8B5CF6]/15">
+      Coming Soon
+    </Badge>
+  );
+}
+
+function StatusPill({ ok, label }: { ok: boolean; label?: string }) {
+  return (
+    <span className={`gst-status ${ok ? 'gst-status-success' : 'gst-status-neutral'}`}>
+      {ok ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+      {label ?? (ok ? 'Connected' : 'Not Connected')}
+    </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 1. ORGANIZATION SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface OrgData {
+  id: string;
+  name: string;
+  gstin: string;
+  pan: string;
+  address: string;
+  state: string;
+  stateCode: string;
+  contactEmail: string;
+  contactPhone: string;
+  website: string;
+  logoUrl: string | null;
+}
+
+function OrganizationSection() {
+  const buildHeaders = useSettingsHeaders();
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? '';
+  const [data, setData] = useState<OrgData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const load = useCallback(async () => {
+    // Even when orgId is empty, we MUST clear loading so the section doesn't
+    // sit on a spinner forever waiting for an org that won't arrive.
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/settings/organization', { headers: buildHeaders() });
+      const body = await res.json();
+      if (body.organization) setData(body.organization);
+    } catch {
+      /* ignore — empty state */
+    } finally {
+      setLoading(false);
+    }
+  }, [orgId, buildHeaders]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleSave = async () => {
+    if (!data) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/settings/organization', {
+        method: 'PUT',
+        headers: buildHeaders(),
+        body: JSON.stringify({
+          name: data.name, gstin: data.gstin, pan: data.pan, address: data.address,
+          state: data.state, contactEmail: data.contactEmail, contactPhone: data.contactPhone,
+          website: data.website,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Failed to save');
+      }
+      toast.success('Organization settings saved');
+      invalidateBusinessSnapshot();
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !orgId) return;
+    setUploadingLogo(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/firm-settings/logo?firmId=${encodeURIComponent(orgId)}`, {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Upload failed');
+      }
+      const body = await res.json();
+      if (data) setData({ ...data, logoUrl: body.logoUrl });
+      toast.success('Logo uploaded');
+      invalidateBusinessSnapshot();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setUploadingLogo(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        title="Organization"
+        subtitle="Your firm's identity, tax registration, and contact details."
+      />
+
+      <SettingsCard
+        title="Logo"
+        description="PNG, JPG, or WebP. Max 2 MB. Displayed across the app and on invoices."
+      >
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+          {/* Circular 64×64 preview with overlay upload button */}
+          <div className="relative shrink-0">
+            <Avatar className="h-16 w-16 rounded-full border border-[#2A2A2A] bg-[#0A0A0A] shadow-[0_0_0_4px_rgba(16,185,129,0.08)]">
+              {data?.logoUrl ? (
+                <AvatarImage src={data.logoUrl} alt="Firm logo" />
+              ) : null}
+              <AvatarFallback className="rounded-full bg-[#0A0A0A] text-zinc-600">
+                <Building2 className="h-6 w-6" />
+              </AvatarFallback>
+            </Avatar>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingLogo}
+              className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#0A0A0A] bg-blue-600 text-white shadow-lg transition-colors hover:bg-blue-500 disabled:opacity-60"
+              aria-label="Upload logo"
+              title="Upload logo"
+            >
+              {uploadingLogo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleLogoUpload}
+              className="hidden"
+            />
+          </div>
+
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-white">
+                {data?.logoUrl ? 'Logo uploaded' : 'No logo uploaded yet'}
+              </p>
+              {data?.logoUrl && (
+                <span className="gst-status gst-status-success">
+                  <CheckCircle2 className="h-3 w-3" /> Active
+                </span>
+              )}
+            </div>
+            <p className="gst-caption mt-1 text-zinc-500">
+              Recommended: 512×512px square. Used in the sidebar, invoices, and reports.
+            </p>
+            <div className="mt-3">
+              <GhostButton
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingLogo}
+              >
+                {uploadingLogo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {data?.logoUrl ? 'Replace Logo' : 'Upload Logo'}
+              </GhostButton>
+            </div>
+          </div>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Firm Details"
+        description="These details appear on invoices, GST returns, and compliance documents."
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="space-y-2">
+            <FieldLabel>Firm Name</FieldLabel>
+            <FieldInput
+              value={data?.name ?? ''}
+              onChange={(e) => setData(d => d ? { ...d, name: e.target.value } : d)}
+              placeholder="e.g. Sharma & Associates CA"
+            />
+          </div>
+          <div className="space-y-2">
+            <FieldLabel>GSTIN</FieldLabel>
+            <FieldInput
+              value={data?.gstin ?? ''}
+              onChange={(e) => setData(d => d ? { ...d, gstin: e.target.value.toUpperCase() } : d)}
+              placeholder="22AAAAA0000A1Z5"
+              maxLength={15}
+            />
+          </div>
+          <div className="space-y-2">
+            <FieldLabel>PAN</FieldLabel>
+            <FieldInput
+              value={data?.pan ?? ''}
+              onChange={(e) => setData(d => d ? { ...d, pan: e.target.value.toUpperCase() } : d)}
+              placeholder="AAAAA0000A"
+              maxLength={10}
+            />
+          </div>
+          <div className="space-y-2">
+            <FieldLabel>State</FieldLabel>
+            <Select
+              value={data?.state ?? ''}
+              onValueChange={(v) => setData(d => d ? { ...d, state: v } : d)}
+            >
+              <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white">
+                <SelectValue placeholder="Select state" />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-zinc-800 max-h-72">
+                {INDIAN_STATES.map((s) => (
+                  <SelectItem key={s} value={s} className="text-white focus:bg-zinc-800">{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <FieldLabel>Registered Address</FieldLabel>
+            <FieldTextarea
+              value={data?.address ?? ''}
+              onChange={(e) => setData(d => d ? { ...d, address: e.target.value } : d)}
+              placeholder="Door no, street, area, city, PIN code"
+              rows={3}
+            />
+          </div>
+          <div className="space-y-2">
+            <FieldLabel>Phone</FieldLabel>
+            <FieldInput
+              value={data?.contactPhone ?? ''}
+              onChange={(e) => setData(d => d ? { ...d, contactPhone: e.target.value } : d)}
+              placeholder="+91 98765 43210"
+            />
+          </div>
+          <div className="space-y-2">
+            <FieldLabel>Email</FieldLabel>
+            <FieldInput
+              type="email"
+              value={data?.contactEmail ?? ''}
+              onChange={(e) => setData(d => d ? { ...d, contactEmail: e.target.value } : d)}
+              placeholder="contact@firm.com"
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <FieldLabel>Website (optional)</FieldLabel>
+            <FieldInput
+              value={data?.website ?? ''}
+              onChange={(e) => setData(d => d ? { ...d, website: e.target.value } : d)}
+              placeholder="https://firm.com"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end mt-6">
+          <PrimaryButton onClick={handleSave} loading={saving}>
+            <Save className="h-4 w-4 mr-2" />
+            Save Changes
+          </PrimaryButton>
+        </div>
+      </SettingsCard>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2. APPEARANCE SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function AppearanceSection() {
+  const { theme, setTheme } = useTheme();
+  const buildHeaders = useSettingsHeaders();
+  const [mounted, setMounted] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // next-themes hydration guard
+  useEffect(() => { setMounted(true); }, []);
+
+  const options: { value: 'light' | 'dark' | 'system'; label: string; icon: React.ReactNode; desc: string }[] = [
+    { value: 'light', label: 'Light', icon: <Sun className="h-5 w-5" />, desc: 'Bright background for daytime use.' },
+    { value: 'dark', label: 'Dark', icon: <Moon className="h-5 w-5" />, desc: 'Reduced glare for low-light environments.' },
+    { value: 'system', label: 'System', icon: <Laptop className="h-5 w-5" />, desc: 'Follow your operating system setting.' },
+  ];
+
+  const apply = async (t: 'light' | 'dark' | 'system') => {
+    setTheme(t);
+    setSaving(true);
+    try {
+      const res = await fetch('/api/settings/theme', {
+        method: 'PUT',
+        headers: buildHeaders(),
+        body: JSON.stringify({ theme: t }),
+      });
+      // Check res.ok — otherwise a 500 would falsely toast success.
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `Failed to save theme (${res.status})`);
+      }
+      toast.success(`Theme set to ${t}`);
+    } catch (err) {
+      // Theme is applied locally via next-themes even if the server save fails,
+      // but we surface the failure so the user knows it didn't sync.
+      toast.error('Theme applied locally', {
+        description: err instanceof Error ? err.message : 'Could not sync to the server — your preference will reset on next login.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Appearance" subtitle="Choose how GSTPilot looks. Your preference is saved and syncs across devices." />
+
+      <SettingsCard title="Theme" description="Applied instantly. Persisted to your account.">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {options.map((opt) => {
+            const active = mounted && theme === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => apply(opt.value)}
+                className={`relative p-5 rounded-xl border text-left transition-all duration-200 ${
+                  active
+                    ? 'border-blue-500 bg-blue-600/10 shadow-lg shadow-blue-600/10'
+                    : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700 hover:bg-zinc-800/50'
+                }`}
+              >
+                <div className={`mb-3 ${active ? 'text-blue-400' : 'text-zinc-400'}`}>
+                  {opt.icon}
+                </div>
+                <p className="text-sm font-semibold text-white">{opt.label}</p>
+                <p className="text-xs text-zinc-500 mt-1">{opt.desc}</p>
+                {active && (
+                  <div className="absolute top-3 right-3">
+                    <CheckCircle2 className="h-4 w-4 text-blue-400" />
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {saving && (
+          <p className="text-xs text-zinc-500 mt-4 flex items-center gap-2">
+            <Loader2 className="h-3 w-3 animate-spin" /> Saving preference…
+          </p>
+        )}
+      </SettingsCard>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 3. PROFILE SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface ProfileData {
+  name: string;
+  email: string;
+  designation: string;
+  firmName: string;
+  city: string;
+  timezone: string;
+}
+
+function ProfileSection() {
+  const buildHeaders = useSettingsHeaders();
+  const { user } = useAuth();
+  const [data, setData] = useState<ProfileData>({
+    name: user?.name ?? '', email: user?.email ?? '',
+    designation: '', firmName: '', city: '', timezone: '',
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/settings/profile', { headers: buildHeaders() });
+      const body = await res.json();
+      if (body.profile) {
+        setData({
+          name: body.profile.name ?? user?.name ?? '',
+          email: user?.email ?? '',
+          designation: body.profile.designation ?? '',
+          firmName: body.profile.firmName ?? '',
+          city: body.profile.city ?? '',
+          timezone: body.profile.timezone ?? '',
+        });
+      }
+    } catch { /* ignore */ } finally { setLoading(false); }
+  }, [buildHeaders, user]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/settings/profile', {
+        method: 'PUT',
+        headers: buildHeaders(),
+        body: JSON.stringify({
+          name: data.name, designation: data.designation, firmName: data.firmName,
+          city: data.city, timezone: data.timezone,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      toast.success('Profile updated');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const initials = useMemo(() => {
+    const n = data.name || data.email;
+    if (!n) return '?';
+    const parts = n.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return parts[0]?.slice(0, 2).toUpperCase() ?? '?';
+  }, [data.name, data.email]);
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Profile" subtitle="Your personal account information." />
+
+      <SettingsCard title="Account" description="Update your name and professional details.">
+        <div className="flex items-center gap-5 mb-6">
+          <Avatar className="h-16 w-16 rounded-full bg-zinc-900 border border-zinc-800">
+            <AvatarFallback className="bg-zinc-900 text-blue-400 font-semibold">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <p className="text-white font-medium">{data.name || 'Your name'}</p>
+            <p className="text-sm text-zinc-500">{data.email}</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-2">
+              <FieldLabel>Full Name</FieldLabel>
+              <FieldInput value={data.name} onChange={(e) => setData(d => ({ ...d, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>Email</FieldLabel>
+              <FieldInput value={data.email} disabled className="opacity-60 cursor-not-allowed" />
+              <p className="text-xs text-zinc-500">Email is managed by your authentication provider.</p>
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>Designation</FieldLabel>
+              <FieldInput value={data.designation} onChange={(e) => setData(d => ({ ...d, designation: e.target.value }))} placeholder="e.g. Chartered Accountant" />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>Firm Name</FieldLabel>
+              <FieldInput value={data.firmName} onChange={(e) => setData(d => ({ ...d, firmName: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>City</FieldLabel>
+              <FieldInput value={data.city} onChange={(e) => setData(d => ({ ...d, city: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>Timezone</FieldLabel>
+              <FieldInput value={data.timezone} onChange={(e) => setData(d => ({ ...d, timezone: e.target.value }))} placeholder="Asia/Kolkata" />
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end mt-6">
+          <PrimaryButton onClick={handleSave} loading={saving}>
+            <Save className="h-4 w-4 mr-2" />
+            Update Profile
+          </PrimaryButton>
+        </div>
+      </SettingsCard>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 4. SECURITY SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface SessionInfo {
+  id: string;
+  device: string;
+  browser: string;
+  os: string;
+  location: string;
+  ip: string;
+  lastActive: string;
+  current: boolean;
+}
+
+function SecuritySection() {
+  const buildHeaders = useSettingsHeaders();
+  const { logout } = useAuth();
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [revokingOthers, setRevokingOthers] = useState(false);
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const res = await fetch('/api/settings/sessions', { headers: buildHeaders() });
+      const body = await res.json();
+      if (body.sessions) setSessions(body.sessions);
+    } catch { /* ignore */ } finally { setSessionsLoading(false); }
+  }, [buildHeaders]);
+
+  useEffect(() => { void loadSessions(); }, [loadSessions]);
+
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (!auth.currentUser) {
+      toast.error('You must be signed in to change your password');
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await updatePassword(auth.currentUser, newPassword);
+      await fetch('/api/settings/password', {
+        method: 'PUT', headers: buildHeaders(), body: JSON.stringify({}),
+      });
+      toast.success('Password changed successfully');
+      setNewPassword('');
+      setConfirmPassword('');
+      void loadSessions();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to change password';
+      toast.error(msg.includes('recent') ? 'Please log out and back in, then try again (re-authentication required).' : msg);
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  const handleSignOutOthers = async () => {
+    setRevokingOthers(true);
+    try {
+      const res = await fetch('/api/settings/sessions', { method: 'DELETE', headers: buildHeaders() });
+      if (!res.ok) throw new Error('Failed');
+      toast.success('Other devices signed out');
+      void loadSessions();
+    } catch {
+      toast.error('Failed to sign out other devices');
+    } finally {
+      setRevokingOthers(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Security" subtitle="Manage your password, active sessions, and account security." />
+
+      <SettingsCard title="Change Password" description="Use at least 6 characters. We recommend a mix of letters, numbers, and symbols.">
+        <div className="space-y-4 max-w-md">
+          <div className="space-y-2">
+            <FieldLabel>New Password</FieldLabel>
+            <div className="relative">
+              <FieldInput
+                type={showNew ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNew(s => !s)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+              >
+                {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <FieldLabel>Confirm New Password</FieldLabel>
+            <div className="relative">
+              <FieldInput
+                type={showConfirm ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm(s => !s)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+              >
+                {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <PrimaryButton onClick={handleChangePassword} loading={changingPassword}>
+            <Lock className="h-4 w-4 mr-2" />
+            Update Password
+          </PrimaryButton>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Two-Factor Authentication"
+        description="Add an extra layer of security with a one-time code from your authenticator app."
+        action={<ComingSoonBadge />}
+      >
+        <div className="flex items-center justify-between p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+          <div className="flex items-center gap-3">
+            <Shield className="h-5 w-5 text-zinc-500" />
+            <div>
+              <p className="text-sm font-medium text-white">Authenticator App (TOTP)</p>
+              <p className="text-xs text-zinc-500">2FA is not available yet. It will roll out in a future release.</p>
+            </div>
+          </div>
+          <Switch disabled />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Active Sessions"
+        description="Devices currently signed in to your account."
+        action={
+          <GhostButton onClick={handleSignOutOthers} disabled={revokingOthers || sessions.length <= 1}>
+            {revokingOthers ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+            Sign Out Other Devices
+          </GhostButton>
+        }
+      >
+        {sessionsLoading ? (
+          // POLISH-04: premium skeleton instead of bare spinner.
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 p-4 rounded-lg bg-zinc-900 border border-zinc-800"
+              >
+                <div className="h-9 w-9 rounded-md bg-white/[0.04] gst-shimmer-premium" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 w-1/3 rounded bg-white/[0.05] gst-shimmer-premium" />
+                  <div className="h-2.5 w-2/3 rounded bg-white/[0.04] gst-shimmer-premium" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-zinc-500 py-8 text-center">No active sessions found.</p>
+        ) : (
+          <div className="space-y-3">
+            {sessions.map((s) => (
+              <div key={s.id} className="flex items-center justify-between p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+                <div className="flex items-center gap-3">
+                  {s.device === 'Mobile' ? <Smartphone className="h-5 w-5 text-zinc-400" /> : <Monitor className="h-5 w-5 text-zinc-400" />}
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      {s.browser} on {s.os}
+                      {s.current && (
+                        <Badge className="ml-2 bg-blue-500/10 text-blue-400 border border-blue-500/20">This device</Badge>
+                      )}
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      {s.location} · IP {s.ip} · {new Date(s.lastActive).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SettingsCard>
+
+      <SettingsCard title="Recent Login History" description="Last 10 login events from your audit trail.">
+        <LoginHistory />
+      </SettingsCard>
+    </div>
+  );
+}
+
+function LoginHistory() {
+  const buildHeaders = useSettingsHeaders();
+  const [events, setEvents] = useState<Array<{ id: string; action: string; details: string | null; timestamp: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/settings/audit-log', { headers: buildHeaders() });
+        const body = await res.json();
+        if (body.events) {
+          setEvents(body.events.filter((e: { action: string }) => /login|sign.?in|sign.?out/i.test(e.action)));
+        }
+      } catch { /* ignore */ } finally { setLoading(false); }
+    })();
+  }, [buildHeaders]);
+
+  if (loading) return <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>;
+  if (events.length === 0) return <p className="text-sm text-zinc-500 py-6 text-center">No login events recorded yet.</p>;
+
+  return (
+    <div className="space-y-2">
+      {events.map((e) => (
+        <div key={e.id} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-zinc-900 transition-colors">
+          <div className="flex items-center gap-3">
+            <Activity className="h-4 w-4 text-zinc-500" />
+            <div>
+              <p className="text-sm text-white">{e.details || e.action}</p>
+              <p className="text-xs text-zinc-500">{new Date(e.timestamp).toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 5. INTEGRATIONS SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function IntegrationsSection() {
+  const buildHeaders = useSettingsHeaders();
+  const { organization } = useOrg();
+  const { user } = useAuth();
+  const orgId = organization?.id ?? '';
+  const userId = user?.id ?? '';
+  const [google, setGoogle] = useState<{ connected: boolean; userEmail: string | null; connectedAt: string | null } | null>(null);
+  const [zoho, setZoho] = useState<{ connected: boolean; organizationName: string | null; zohoOrgId: string | null; lastSync: string | null; lastSyncStatus: string | null } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    // Clear loading even when prerequisites are missing — never hang.
+    if (!orgId || !userId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const [g, z, zs] = await Promise.all([
+        fetch('/api/integrations/google/status', { headers: buildHeaders() }).then(r => r.json()).catch(() => ({ status: { connected: false } })),
+        fetch('/api/integrations/zoho/status', { headers: buildHeaders() }).then(r => r.json()).catch(() => ({ status: { connected: false } })),
+        fetch('/api/integrations/zoho/sync/status', { headers: buildHeaders() }).then(r => r.json()).catch(() => ({ status: null })),
+      ]);
+      setGoogle({
+        connected: g.status?.connected ?? false,
+        userEmail: g.status?.userEmail ?? null,
+        connectedAt: g.status?.connectedAt ?? null,
+      });
+      const lastSync = zs.status?.lastSync;
+      setZoho({
+        connected: z.status?.connected ?? false,
+        organizationName: z.status?.organizationName ?? null,
+        zohoOrgId: z.status?.zohoOrgId ?? null,
+        lastSync: lastSync?.completedAt ?? lastSync?.startedAt ?? null,
+        lastSyncStatus: lastSync?.status ?? null,
+      });
+    } catch { /* ignore */ } finally { setLoading(false); }
+  }, [orgId, userId, buildHeaders]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const connectGoogle = async () => {
+    setActionLoading('google');
+    try {
+      const res = await fetch('/api/integrations/google/connect?return=/settings', { headers: buildHeaders() });
+      const body = await res.json();
+      if (body.authUrl) window.location.href = body.authUrl;
+    } catch { toast.error('Failed to start Google connection'); }
+    finally { setActionLoading(null); }
+  };
+
+  const disconnectGoogle = async () => {
+    setActionLoading('google-disconnect');
+    try {
+      await fetch('/api/integrations/google/disconnect', { method: 'POST', headers: buildHeaders() });
+      toast.success('Google Workspace disconnected');
+      void load();
+    } catch { toast.error('Failed to disconnect'); }
+    finally { setActionLoading(null); }
+  };
+
+  const connectZoho = async () => {
+    setActionLoading('zoho');
+    try {
+      const res = await fetch('/api/integrations/zoho/connect?return=/settings', { headers: buildHeaders() });
+      const body = await res.json();
+      if (body.authUrl) window.location.href = body.authUrl;
+    } catch { toast.error('Failed to start Zoho connection'); }
+    finally { setActionLoading(null); }
+  };
+
+  const disconnectZoho = async () => {
+    setActionLoading('zoho-disconnect');
+    try {
+      await fetch('/api/integrations/zoho/disconnect', { method: 'POST', headers: buildHeaders() });
+      toast.success('Zoho Books disconnected');
+      void load();
+    } catch { toast.error('Failed to disconnect'); }
+    finally { setActionLoading(null); }
+  };
+
+  const syncZoho = async () => {
+    setActionLoading('zoho-sync');
+    try {
+      const res = await fetch('/api/integrations/zoho/sync', {
+        method: 'POST', headers: buildHeaders(),
+        body: JSON.stringify({ mode: 'incremental', resume: true }),
+      });
+      if (!res.ok) throw new Error('Sync failed to start');
+      toast.success('Zoho sync started');
+      void load();
+    } catch { toast.error('Failed to start sync'); }
+    finally { setActionLoading(null); }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Integrations" subtitle="Connect external services to sync data into GSTPilot." />
+
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+      ) : (
+        <>
+          {/* Google Workspace */}
+          <SettingsCard
+            title="Google Workspace"
+            description="Gmail, Drive, Calendar, and Sheets integration."
+            action={<StatusPill ok={google?.connected ?? false} />}
+          >
+            <div className="space-y-4">
+              {google?.connected && (
+                <div className="flex items-center gap-2 text-sm text-zinc-300">
+                  <Mail className="h-4 w-4 text-zinc-500" />
+                  <span>{google.userEmail}</span>
+                  {google.connectedAt && (
+                    <span className="text-zinc-500">· connected {new Date(google.connectedAt).toLocaleDateString()}</span>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-2">
+                {google?.connected ? (
+                  <>
+                    <GhostButton onClick={connectGoogle} disabled={actionLoading === 'google'}>
+                      {actionLoading === 'google' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                      Reconnect
+                    </GhostButton>
+                    <DangerButton onClick={disconnectGoogle} loading={actionLoading === 'google-disconnect'}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Disconnect
+                    </DangerButton>
+                  </>
+                ) : (
+                  <PrimaryButton onClick={connectGoogle} loading={actionLoading === 'google'}>
+                    <Globe className="h-4 w-4 mr-2" />
+                    Connect Google Workspace
+                  </PrimaryButton>
+                )}
+              </div>
+            </div>
+          </SettingsCard>
+
+          {/* Zoho Books */}
+          <SettingsCard
+            title="Zoho Books"
+            description="Sync customers, invoices, bills, payments, and items."
+            action={<StatusPill ok={zoho?.connected ?? false} />}
+          >
+            <div className="space-y-4">
+              {zoho?.connected && (
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex items-center gap-2 text-zinc-300">
+                    <Building2 className="h-4 w-4 text-zinc-500" />
+                    <span>{zoho.organizationName ?? 'Zoho Books'}</span>
+                    {zoho.zohoOrgId && <span className="text-zinc-500">· ID {zoho.zohoOrgId}</span>}
+                  </div>
+                  {zoho.lastSync && (
+                    <div className="flex items-center gap-2 text-zinc-500">
+                      <Clock className="h-4 w-4" />
+                      <span>Last sync: {new Date(zoho.lastSync).toLocaleString()}</span>
+                      {zoho.lastSyncStatus && (
+                        <Badge variant="outline" className={`ml-1 ${
+                          zoho.lastSyncStatus === 'completed' ? 'border-blue-500/30 text-blue-400' :
+                          zoho.lastSyncStatus === 'partial' ? 'border-amber-500/30 text-amber-400' :
+                          'border-red-500/30 text-red-400'
+                        }`}>{zoho.lastSyncStatus}</Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {zoho?.connected ? (
+                  <>
+                    <PrimaryButton onClick={syncZoho} loading={actionLoading === 'zoho-sync'}>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Sync Now
+                    </PrimaryButton>
+                    <GhostButton onClick={connectZoho} disabled={actionLoading === 'zoho'}>
+                      {actionLoading === 'zoho' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                      Reconnect
+                    </GhostButton>
+                    <DangerButton onClick={disconnectZoho} loading={actionLoading === 'zoho-disconnect'}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Disconnect
+                    </DangerButton>
+                  </>
+                ) : (
+                  <PrimaryButton onClick={connectZoho} loading={actionLoading === 'zoho'}>
+                    <Plug className="h-4 w-4 mr-2" />
+                    Connect Zoho Books
+                  </PrimaryButton>
+                )}
+              </div>
+            </div>
+          </SettingsCard>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. NOTIFICATIONS SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface NotificationPrefs {
+  emailNotifications: boolean;
+  browserNotifications: boolean;
+  invoiceAlerts: boolean;
+  syncAlerts: boolean;
+  securityAlerts: boolean;
+}
+
+function NotificationsSection() {
+  const buildHeaders = useSettingsHeaders();
+  const [prefs, setPrefs] = useState<NotificationPrefs>({
+    emailNotifications: true, browserNotifications: false,
+    invoiceAlerts: true, syncAlerts: true, securityAlerts: true,
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/settings/notifications', { headers: buildHeaders() });
+      const body = await res.json();
+      if (body.prefs) setPrefs(body.prefs);
+    } catch { /* ignore */ } finally { setLoading(false); }
+  }, [buildHeaders]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/settings/notifications', {
+        method: 'PUT', headers: buildHeaders(), body: JSON.stringify(prefs),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      toast.success('Notification preferences saved');
+    } catch {
+      toast.error('Failed to save preferences');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const items: { key: keyof NotificationPrefs; label: string; desc: string; icon: React.ReactNode }[] = [
+    { key: 'emailNotifications', label: 'Email Notifications', desc: 'Receive updates via email.', icon: <Mail className="h-4 w-4" /> },
+    { key: 'browserNotifications', label: 'Browser Notifications', desc: 'Show desktop notifications in your browser.', icon: <Monitor className="h-4 w-4" /> },
+    { key: 'invoiceAlerts', label: 'Invoice Alerts', desc: 'Get notified when invoices are created, paid, or overdue.', icon: <CreditCard className="h-4 w-4" /> },
+    { key: 'syncAlerts', label: 'Sync Alerts', desc: 'Get notified when a Zoho sync completes or fails.', icon: <RefreshCw className="h-4 w-4" /> },
+    { key: 'securityAlerts', label: 'Security Alerts', desc: 'Get notified about logins and password changes.', icon: <Shield className="h-4 w-4" /> },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Notifications" subtitle="Choose what updates you want to receive and how." />
+
+      <SettingsCard title="Preferences" description="Saved to your account and applied across all devices.">
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+        ) : (
+          <>
+            <div className="space-y-1">
+              {items.map((item) => (
+                <div key={item.key} className="flex items-center justify-between py-3.5 px-3 rounded-lg hover:bg-zinc-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="text-zinc-400">{item.icon}</span>
+                    <div>
+                      <p className="text-sm font-medium text-white">{item.label}</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">{item.desc}</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={prefs[item.key]}
+                    onCheckedChange={(v) => setPrefs(p => ({ ...p, [item.key]: v }))}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end mt-6">
+              <PrimaryButton onClick={handleSave} loading={saving}>
+                <Save className="h-4 w-4 mr-2" />
+                Save Preferences
+              </PrimaryButton>
+            </div>
+          </>
+        )}
+      </SettingsCard>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 7. TEAM SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function TeamSection() {
+  const { organization, membership } = useOrg();
+  const { user } = useAuth();
+  const orgId = organization?.id ?? '';
+  const { members, loading } = useOrgMembers();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<OrgRole>('accountant');
+  const [inviting, setInviting] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferTo, setTransferTo] = useState('');
+  const [transferring, setTransferring] = useState(false);
+
+  const isOwner = membership?.role === 'owner';
+
+  const uiRoles: { value: OrgRole; label: string }[] = [
+    { value: 'admin', label: 'Admin' },
+    { value: 'accountant', label: 'Manager' },
+    { value: 'employee', label: 'Employee' },
+    { value: 'viewer', label: 'Viewer' },
+  ];
+
+  const handleInvite = async () => {
+    if (!inviteEmail || !orgId) return;
+    setInviting(true);
+    try {
+      const result = await inviteMember(orgId, {
+        email: inviteEmail,
+        role: inviteRole,
+        invitedBy: user?.id ?? '',
+      });
+      if (result.error) throw new Error(result.error);
+      toast.success(`Invitation sent to ${inviteEmail}`);
+      setInviteEmail('');
+      setInviteOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to invite member');
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const [memberBusy, setMemberBusy] = useState<string | null>(null);
+
+  const handleRoleChange = async (memberUserId: string, newRole: OrgRole) => {
+    if (!orgId) return;
+    // Single-flight: prevent double-clicks on the same row.
+    if (memberBusy === memberUserId) return;
+    setMemberBusy(memberUserId);
+    try {
+      const result = await updateMemberRole(orgId, memberUserId, newRole);
+      if (result.error) throw new Error(result.error);
+      toast.success('Role updated');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to update role');
+    } finally {
+      setMemberBusy(null);
+    }
+  };
+
+  const handleRemove = async (memberUserId: string) => {
+    if (!orgId) return;
+    if (memberBusy === memberUserId) return;
+    setMemberBusy(memberUserId);
+    try {
+      const result = await removeMember(orgId, memberUserId);
+      if (result.error) throw new Error(result.error);
+      toast.success('Member removed');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to remove member');
+    } finally {
+      setMemberBusy(null);
+    }
+  };
+
+  const handleTransfer = async () => {
+    if (!transferTo || !orgId) return;
+    setTransferring(true);
+    try {
+      // Transfer ownership = promote the selected member to owner, demote self to admin.
+      const result = await updateMemberRole(orgId, transferTo, 'owner');
+      if (result.error) throw new Error(result.error);
+      toast.success('Ownership transfer initiated');
+      setTransferOpen(false);
+      setTransferTo('');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to transfer ownership');
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  const getInitials = (name: string, email: string) => {
+    const n = name || email;
+    if (!n) return '?';
+    const parts = n.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return parts[0]?.slice(0, 2).toUpperCase() ?? '?';
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Team" subtitle="Manage who has access to your organization." />
+
+      <SettingsCard
+        title="Members"
+        description={`${members.length} member${members.length === 1 ? '' : 's'} in this organization.`}
+        action={
+          isOwner ? (
+            <PrimaryButton onClick={() => setInviteOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Invite User
+            </PrimaryButton>
+          ) : undefined
+        }
+      >
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-blue-500" /></div>
+        ) : members.length === 0 ? (
+          <p className="text-sm text-zinc-500 py-8 text-center">No members found.</p>
+        ) : (
+          <div className="space-y-2">
+            {members.map((m: { userId: string; userEmail: string; userDisplayName: string | null; role: string; status: string }) => (
+              <div key={m.userId} className="flex items-center justify-between py-3 px-3 rounded-lg hover:bg-zinc-900 transition-colors">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar className="h-9 w-9 bg-zinc-800">
+                    <AvatarFallback className="bg-zinc-800 text-blue-400 text-xs font-medium">
+                      {getInitials(m.userDisplayName ?? '', m.userEmail)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white truncate">
+                      {m.userDisplayName || m.userEmail}
+                      {m.userId === user?.id && <span className="text-zinc-500 ml-1">(you)</span>}
+                    </p>
+                    <p className="text-xs text-zinc-500 truncate">{m.userEmail}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {m.role === 'owner' ? (
+                    <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20">Owner</Badge>
+                  ) : isOwner ? (
+                    <>
+                      <Select
+                        value={m.role}
+                        onValueChange={(v) => handleRoleChange(m.userId, v as OrgRole)}
+                        disabled={memberBusy === m.userId}
+                      >
+                        <SelectTrigger className="h-8 w-32 bg-zinc-900 border-zinc-800 text-xs text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-zinc-900 border-zinc-800">
+                          {uiRoles.map(r => <SelectItem key={r.value} value={r.value} className="text-white focus:bg-zinc-800">{r.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        onClick={() => handleRemove(m.userId)}
+                        disabled={memberBusy === m.userId}
+                        className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                        aria-label="Remove member"
+                      >
+                        {memberBusy === m.userId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </button>
+                    </>
+                  ) : (
+                    <Badge variant="outline" className="border-zinc-700 text-zinc-400">{m.role}</Badge>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {isOwner && members.length > 1 && (
+          <div className="mt-6 pt-6 border-t border-zinc-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-white">Transfer Ownership</p>
+                <p className="text-xs text-zinc-500 mt-0.5">Hand over organization ownership to another member.</p>
+              </div>
+              <GhostButton onClick={() => setTransferOpen(true)}>
+                <ChevronRight className="h-4 w-4" />
+                Transfer
+              </GhostButton>
+            </div>
+          </div>
+        )}
+      </SettingsCard>
+
+      {/* Invite Dialog */}
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="text-white">Invite Team Member</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <FieldLabel>Email Address</FieldLabel>
+              <FieldInput type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="colleague@firm.com" />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>Role</FieldLabel>
+              <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as OrgRole)}>
+                <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-800">
+                  {uiRoles.map(r => <SelectItem key={r.value} value={r.value} className="text-white focus:bg-zinc-800">{r.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <GhostButton onClick={() => setInviteOpen(false)}>Cancel</GhostButton>
+            <PrimaryButton onClick={handleInvite} loading={inviting}>Send Invitation</PrimaryButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Ownership Dialog */}
+      <AlertDialog open={transferOpen} onOpenChange={setTransferOpen}>
+        <AlertDialogContent className="bg-zinc-950 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Transfer Ownership</AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              Select a member to become the new owner. You will be demoted to Admin.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <Select value={transferTo} onValueChange={setTransferTo}>
+              <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white"><SelectValue placeholder="Select member" /></SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-zinc-800">
+                {members.filter((m: { userId: string; role: string }) => m.role !== 'owner').map((m: { userId: string; userDisplayName: string | null; userEmail: string }) => (
+                  <SelectItem key={m.userId} value={m.userId} className="text-white focus:bg-zinc-800">
+                    {m.userDisplayName || m.userEmail}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-zinc-700 text-zinc-200 hover:bg-zinc-900">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleTransfer} disabled={!transferTo || transferring} className="bg-blue-600 hover:bg-blue-500 text-white">
+              {transferring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Transfer Ownership
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 8. API KEYS SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface ApiKeyRow {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  scopes: string[];
+  status: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+}
+
+function ApiKeysSection() {
+  const buildHeaders = useSettingsHeaders();
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? '';
+  const [keys, setKeys] = useState<ApiKeyRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  // Per-row cosmetic show/hide of the key prefix in the list (independent of
+  // the one-shot "reveal on creation" dialog state above).
+  const [shownRowId, setShownRowId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/settings/api-keys?organizationId=${encodeURIComponent(orgId)}`, { headers: buildHeaders() });
+      const body = await res.json();
+      if (body.keys) setKeys(body.keys);
+    } catch { /* ignore */ } finally { setLoading(false); }
+  }, [orgId, buildHeaders]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleCreate = async () => {
+    if (!newKeyName || !orgId) return;
+    setCreating(true);
+    try {
+      const res = await fetch('/api/settings/api-keys', {
+        method: 'POST', headers: buildHeaders(),
+        body: JSON.stringify({ name: newKeyName, scopes: ['read'], organizationId: orgId, createdBy: 'settings-ui' }),
+      });
+      if (!res.ok) throw new Error('Failed to create key');
+      const body = await res.json();
+      setRevealedKey(body.key?.plainKey ?? body.key?.key ?? null);
+      setRevealedId(body.key?.id ?? null);
+      setCreateOpen(false);
+      setNewKeyName('');
+      toast.success("API key created — copy it now, you won't see it again.");
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to create key');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  const handleRevoke = async (id: string) => {
+    // Single-flight: prevent double-clicks on the same key.
+    if (revokingId === id) return;
+    setRevokingId(id);
+    try {
+      const res = await fetch(`/api/settings/api-keys/${id}?organizationId=${encodeURIComponent(orgId)}`, {
+        method: 'DELETE', headers: buildHeaders(),
+        body: JSON.stringify({ actor: 'settings-ui' }),
+      });
+      if (!res.ok) throw new Error('Failed to revoke');
+      toast.success('API key revoked');
+      void load();
+    } catch {
+      toast.error('Failed to revoke key');
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  // Track the copy-reset timeout so it can be cleared on unmount (no setState
+  // after unmount, no overlapping timeouts on rapid clicks).
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    setCopiedId(id);
+    copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="API Keys" subtitle="Generate keys to access the GSTPilot API programmatically." />
+
+      <SettingsCard
+        title="Your Keys"
+        description="Keys are shown once at creation. Store them securely."
+        action={
+          <PrimaryButton onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Generate API Key
+          </PrimaryButton>
+        }
+      >
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-[#3B82F6]" /></div>
+        ) : keys.length === 0 ? (
+          <p className="gst-description py-10 text-center text-zinc-500">No API keys yet. Generate one to get started.</p>
+        ) : (
+          <div className="space-y-3">
+            {keys.map((k) => {
+              const isActive = k.status === 'active';
+              const revealed = shownRowId === k.id;
+              const maskedValue = revealed
+                ? `${k.keyPrefix}────────`
+                : `${k.keyPrefix.slice(0, 4)}${'•'.repeat(12)}`;
+              return (
+                <div
+                  key={k.id}
+                  className="rounded-lg border border-[#1F1F1F] bg-[#0A0A0A] p-4 transition-colors hover:border-[#2A2A2A]"
+                >
+                  {/* Row 1: label + status + metadata */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Key className="h-4 w-4 text-zinc-500" />
+                      <p className="text-sm font-medium text-white">{k.name}</p>
+                      <span className={`gst-status ${isActive ? 'gst-status-success' : 'gst-status-danger'}`}>
+                        {isActive ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                        {k.status}
+                      </span>
+                    </div>
+                    <p className="gst-caption text-zinc-600">
+                      Created {new Date(k.createdAt).toLocaleDateString()}
+                      {k.lastUsedAt && ` · last used ${new Date(k.lastUsedAt).toLocaleDateString()}`}
+                    </p>
+                  </div>
+
+                  {/* Row 2: masked key field + actions */}
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative flex-1">
+                      <input
+                        readOnly
+                        value={maskedValue}
+                        aria-label={`API key ${k.name}`}
+                        className="h-9 w-full rounded-md border border-[#2A2A2A] bg-[#070707] pr-10 font-mono text-[13px] text-zinc-300 focus:border-[#2563EB] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShownRowId(revealed ? null : k.id)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 transition-colors hover:text-zinc-200"
+                        aria-label={revealed ? 'Hide key' : 'Show key'}
+                        title={revealed ? 'Hide' : 'Show'}
+                      >
+                        {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleCopy(`${k.keyPrefix}••••••`, k.id)}
+                        className="gst-btn gst-btn-ghost h-9 gap-1.5 px-2.5"
+                        aria-label="Copy key prefix"
+                        title="Copy"
+                      >
+                        {copiedId === k.id ? <Check className="h-4 w-4 text-blue-400" /> : <Copy className="h-4 w-4" />}
+                      </button>
+                      {isActive && (
+                        <button
+                          onClick={() => handleRevoke(k.id)}
+                          disabled={revokingId === k.id}
+                          className="gst-btn gst-btn-ghost h-9 gap-1.5 px-2.5 text-zinc-400 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40 disabled:pointer-events-none"
+                          aria-label="Revoke key"
+                          title="Revoke"
+                        >
+                          {revokingId === k.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Row 3: scopes (if any) */}
+                  {k.scopes?.length > 0 && (
+                    <div className="mt-2.5 flex items-center gap-1.5">
+                      <span className="gst-caption text-zinc-600">Scopes:</span>
+                      {k.scopes.map((sc) => (
+                        <span key={sc} className="rounded bg-[#181818] px-1.5 py-0.5 font-mono text-[11px] text-zinc-400">
+                          {sc}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SettingsCard>
+
+      {/* Create Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="text-white">Generate New API Key</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <FieldLabel>Key Name</FieldLabel>
+              <FieldInput value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} placeholder="e.g. Production Server" />
+            </div>
+            <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <p className="text-xs text-amber-400 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>The full key will be shown only once after creation. Copy and store it securely.</span>
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <GhostButton onClick={() => setCreateOpen(false)}>Cancel</GhostButton>
+            <PrimaryButton onClick={handleCreate} loading={creating}>Generate Key</PrimaryButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reveal Once Dialog */}
+      <AlertDialog open={!!revealedKey} onOpenChange={(o) => { if (!o) { setRevealedKey(null); setRevealedId(null); } }}>
+        <AlertDialogContent className="bg-zinc-950 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Your New API Key</AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              Copy this key now. For security, it will not be shown again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-zinc-900 border border-zinc-800">
+              <code className="text-sm text-blue-400 font-mono flex-1 break-all">{revealedKey}</code>
+              <button
+                onClick={() => revealedKey && handleCopy(revealedKey, revealedId ?? 'new')}
+                className="p-1.5 rounded-md text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors shrink-0"
+              >
+                {copiedId === (revealedId ?? 'new') ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogAction className="bg-blue-600 hover:bg-blue-500 text-white" onClick={() => { setRevealedKey(null); setRevealedId(null); }}>
+              I've copied it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 9. AUDIT LOG SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function AuditLogSection() {
+  const buildHeaders = useSettingsHeaders();
+  const [events, setEvents] = useState<Array<{ id: string; action: string; entity: string | null; details: string | null; timestamp: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/settings/audit-log', { headers: buildHeaders() });
+        const body = await res.json();
+        if (body.events) setEvents(body.events);
+      } catch { /* ignore */ } finally { setLoading(false); }
+    })();
+  }, [buildHeaders]);
+
+  const formatAction = (a: string) =>
+    a.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // Map an action string to a status color for the row badge.
+  const actionTone = (a: string): 'success' | 'info' | 'warning' | 'danger' | 'neutral' => {
+    const lower = a.toLowerCase();
+    if (/delete|remove|revoke|disconnect|sign.?out|fail|error/.test(lower)) return 'danger';
+    if (/create|generate|connect|invite|activate|enable/.test(lower)) return 'success';
+    if (/update|change|edit|rename|transfer|sync/.test(lower)) return 'info';
+    if (/login|sign.?in|auth/.test(lower)) return 'warning';
+    return 'neutral';
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Audit Logs" subtitle="A chronological record of actions taken in your account." />
+
+      <SettingsCard title="Recent Events" description="Last 50 actions recorded by the system.">
+        {loading ? (
+          <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-[#3B82F6]" /></div>
+        ) : events.length === 0 ? (
+          <p className="gst-description py-10 text-center text-zinc-500">No audit events recorded yet.</p>
+        ) : (
+          <div className="gst-table-wrap max-h-[600px] overflow-auto">
+            <table className="gst-table">
+              <thead>
+                <tr>
+                  <th className="w-[160px]">Timestamp</th>
+                  <th className="w-[180px]">Resource</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map((e) => {
+                  const tone = actionTone(e.action);
+                  return (
+                    <tr key={e.id}>
+                      <td className="whitespace-nowrap font-mono text-[12px] text-zinc-400">
+                        {new Date(e.timestamp).toLocaleString()}
+                      </td>
+                      <td>
+                        {e.entity ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Activity className="h-3.5 w-3.5 text-zinc-600" />
+                            <code className="font-mono text-[12px] text-zinc-400">{e.entity}</code>
+                          </span>
+                        ) : (
+                          <span className="text-zinc-600">&mdash;</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`gst-status gst-status-${tone}`}>{formatAction(e.action)}</span>
+                          </div>
+                          {e.details && (
+                            <p className="gst-caption text-zinc-500">{e.details}</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SettingsCard>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 10. BILLING SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function BillingSection() {
+  const buildHeaders = useSettingsHeaders();
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? '';
+  const [info, setInfo] = useState<{
+    plan: { id: string; label: string; price: number; maxClients: number };
+    usage: { clients: number; invoices: number; customers: number; maxClients: number };
+    availablePlans: Array<{ id: string; label: string; price: number; maxClients: number; current: boolean }>;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/settings/billing?organizationId=${encodeURIComponent(orgId)}`, { headers: buildHeaders() });
+      const body = await res.json();
+      if (body.plan) setInfo(body);
+    } catch { /* ignore */ } finally { setLoading(false); }
+  }, [orgId, buildHeaders]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const usagePercent = info ? Math.min(100, (info.usage.clients / info.usage.maxClients) * 100) : 0;
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Billing" subtitle="Manage your subscription, usage, and payment method." />
+
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
+      ) : info ? (
+        <>
+          <SettingsCard title="Current Plan" description="Your active subscription tier.">
+            <div className="flex items-center justify-between p-5 rounded-xl bg-gradient-to-br from-blue-600/10 to-zinc-900 border border-blue-500/20">
+              <div>
+                <p className="text-2xl font-bold text-white">{info.plan.label}</p>
+                <p className="text-sm text-zinc-400 mt-1">
+                  ₹{info.plan.price.toLocaleString('en-IN')}/month · up to {info.plan.maxClients.toLocaleString('en-IN')} clients
+                </p>
+              </div>
+              <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20">Active</Badge>
+            </div>
+          </SettingsCard>
+
+          <SettingsCard title="Usage" description="Real-time usage from your synced data.">
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-zinc-300">Clients</span>
+                  <span className="text-white font-medium">{info.usage.clients} / {info.usage.maxClients}</span>
+                </div>
+                <Progress value={usagePercent} className="h-2 bg-zinc-800 [&>div]:bg-blue-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider">Invoices</p>
+                  <p className="text-2xl font-bold text-white mt-1">{info.usage.invoices}</p>
+                </div>
+                <div className="p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider">Synced Customers</p>
+                  <p className="text-2xl font-bold text-white mt-1">{info.usage.customers}</p>
+                </div>
+              </div>
+            </div>
+          </SettingsCard>
+
+          <SettingsCard title="Available Plans" description="Upgrade or downgrade at any time.">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {info.availablePlans.map((p) => (
+                <div key={p.id} className={`p-5 rounded-xl border ${
+                  p.current ? 'border-blue-500 bg-blue-600/5' : 'border-zinc-800 bg-zinc-900'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-lg font-semibold text-white">{p.label}</p>
+                    {p.current && <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20">Current</Badge>}
+                  </div>
+                  <p className="text-2xl font-bold text-white">₹{p.price.toLocaleString('en-IN')}<span className="text-sm font-normal text-zinc-500">/mo</span></p>
+                  <p className="text-xs text-zinc-500 mt-2">Up to {p.maxClients.toLocaleString('en-IN')} clients</p>
+                  {!p.current && (
+                    <Button
+                      className="mt-4 w-full bg-transparent border border-zinc-700 text-zinc-200 hover:bg-zinc-800"
+                      onClick={() => toast.info('Online checkout is coming soon. Contact sales to upgrade.')}
+                    >
+                      Switch to {p.label}
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </SettingsCard>
+
+          <SettingsCard title="Invoices & Payment Method" description="Download past invoices and manage your payment method.">
+            <div className="flex items-center justify-between p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+              <div className="flex items-center gap-3">
+                <CreditCard className="h-5 w-5 text-zinc-500" />
+                <div>
+                  <p className="text-sm text-white">No payment method on file</p>
+                  <p className="text-xs text-zinc-500">Add a card to enable paid plans.</p>
+                </div>
+              </div>
+              <GhostButton onClick={() => toast.info('Payment method management is coming soon.')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Method
+              </GhostButton>
+            </div>
+            <div className="flex items-center justify-between p-4 rounded-lg bg-zinc-900 border border-zinc-800 mt-3">
+              <div className="flex items-center gap-3">
+                <Download className="h-5 w-5 text-zinc-500" />
+                <div>
+                  <p className="text-sm text-white">Download invoices</p>
+                  <p className="text-xs text-zinc-500">Export your billing history as CSV.</p>
+                </div>
+              </div>
+              <GhostButton
+                loading={exporting}
+                onClick={async () => {
+                  setExporting(true);
+                  try {
+                    const res = await fetch(`/api/settings/data-export?organizationId=${encodeURIComponent(orgId)}`, { method: 'POST', headers: buildHeaders() });
+                    if (!res.ok) throw new Error('Export failed');
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = `gstpilot-data-${orgId}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success('Data exported');
+                  } catch { toast.error('Export failed'); }
+                  finally { setExporting(false); }
+                }}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </GhostButton>
+            </div>
+          </SettingsCard>
+        </>
+      ) : (
+        <p className="text-sm text-zinc-500 py-12 text-center">Failed to load billing information.</p>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 11. DATA SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function DataSection() {
+  const buildHeaders = useSettingsHeaders();
+  const { organization } = useOrg();
+  const orgId = organization?.id ?? '';
+  const [exporting, setExporting] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmName, setConfirmName] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [firmName, setFirmName] = useState('');
+  const [firmNameError, setFirmNameError] = useState<string | null>(null);
+
+  // Load the firm name so we can show the user exactly what to type. If the
+  // fetch fails we surface an inline error AND fall back to a permissive
+  // empty-string check so the user can still delete their workspace.
+  useEffect(() => {
+    if (!orgId) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/settings/organization', { headers: buildHeaders() });
+        const body = await res.json();
+        if (!mounted) return;
+        if (body.organization?.name) {
+          setFirmName(body.organization.name);
+          setFirmNameError(null);
+        }
+      } catch {
+        if (!mounted) return;
+        // Don't block delete — the user can still type the name they remember.
+        setFirmNameError('Could not load your workspace name. Type it manually to confirm.');
+      }
+    })();
+    return () => { mounted = false; };
+  }, [orgId, buildHeaders]);
+
+  const handleExport = async () => {
+    if (!orgId) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/settings/data-export?organizationId=${encodeURIComponent(orgId)}`, {
+        method: 'POST', headers: buildHeaders(),
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gstpilot-export-${orgId}-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Data exported');
+    } catch {
+      toast.error('Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleBackup = async () => {
+    if (!orgId) return;
+    setBackingUp(true);
+    try {
+      const res = await fetch(`/api/settings/data-export?organizationId=${encodeURIComponent(orgId)}`, {
+        method: 'POST', headers: buildHeaders(),
+      });
+      if (!res.ok) throw new Error('Backup failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gstpilot-backup-${orgId}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Backup downloaded');
+    } catch {
+      toast.error('Backup failed');
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!orgId || !confirmName) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/settings/delete-workspace?organizationId=${encodeURIComponent(orgId)}`, {
+        method: 'POST', headers: buildHeaders(),
+        body: JSON.stringify({ confirmName }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? 'Failed to delete workspace');
+      toast.success(body.message ?? 'Workspace deleted');
+      setDeleteOpen(false);
+      setConfirmName('');
+      // Force a full reload so all cached org data is cleared.
+      if (typeof window !== 'undefined') {
+        setTimeout(() => { window.location.href = '/'; }, 1200);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete workspace');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Data & Backup" subtitle="Export, back up, or permanently delete your workspace data." />
+
+      <SettingsCard
+        title="Export Data"
+        description="Download all your organization's data as a JSON file. Includes firm details, clients, invoices, Zoho-synced records, and audit logs."
+        action={
+          <GhostButton onClick={handleExport} loading={exporting}>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </GhostButton>
+        }
+      >
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+          <Database className="h-5 w-5 text-zinc-500" />
+          <div>
+            <p className="text-sm text-white">Full data export</p>
+            <p className="text-xs text-zinc-500">JSON format. Contains every record scoped to this organization.</p>
+          </div>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Backup"
+        description="Download a timestamped snapshot of your workspace. Store it safely — it can be used to restore data manually."
+        action={
+          <GhostButton onClick={handleBackup} loading={backingUp}>
+            <Database className="h-4 w-4 mr-2" />
+            Download Backup
+          </GhostButton>
+        }
+      >
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+          <Shield className="h-5 w-5 text-zinc-500" />
+          <div>
+            <p className="text-sm text-white">Manual backup</p>
+            <p className="text-xs text-zinc-500">Automated scheduled backups are coming soon. For now, download a snapshot on demand.</p>
+          </div>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Delete Workspace"
+        description="Permanently delete this organization and ALL its data. This cannot be undone."
+      >
+        <div className="p-4 rounded-lg bg-red-500/5 border border-red-500/20">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-300">Dangerous action</p>
+              <p className="text-xs text-zinc-400 mt-1">
+                All clients, invoices, Zoho-synced records, firm settings, and the firm itself will be permanently removed.
+                Audit log entries (userId-scoped) are retained. Zoho Books tokens are revoked.
+              </p>
+              {firmNameError && (
+                <p className="text-xs text-amber-400 mt-2">{firmNameError}</p>
+              )}
+              <DangerButton
+                onClick={() => setDeleteOpen(true)}
+                className="mt-3"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Workspace
+              </DangerButton>
+            </div>
+          </div>
+        </div>
+      </SettingsCard>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteOpen} onOpenChange={(o) => { setDeleteOpen(o); if (!o) setConfirmName(''); }}>
+        <AlertDialogContent className="bg-zinc-950 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+              Delete Workspace
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              This action is permanent and cannot be undone. All data for <span className="text-white font-medium">{firmName || 'this organization'}</span> will be erased.
+              Type the firm name <span className="text-white font-mono">{firmName || 'firm name'}</span> to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <FieldInput
+              value={confirmName}
+              onChange={(e) => setConfirmName(e.target.value)}
+              placeholder={firmName || 'Type the firm name'}
+              className="border-red-500/30 focus:border-red-500"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-zinc-700 text-zinc-200 hover:bg-zinc-900">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={
+                deleting ||
+                // If we have the firm name, require an exact (case-insensitive) match.
+                // If we DON'T have it (firmNameError), require any non-empty confirm.
+                (firmNameError
+                  ? confirmName.trim().length === 0
+                  : confirmName.toLowerCase() !== firmName.toLowerCase())
+              }
+              className="bg-red-600 hover:bg-red-500 text-white border-0 disabled:opacity-50"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete Forever
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 12. DANGER ZONE SECTION (Working Logout)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function DangerZoneSection() {
+  const buildHeaders = useSettingsHeaders();
+  const { logout, user } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      // 1. Server-side audit log (records the sign-out event in AuditLog table).
+      await fetch('/api/settings/logout', {
+        method: 'POST', headers: buildHeaders(),
+        body: JSON.stringify({}),
+      }).catch(() => { /* non-fatal — we still clear local state */ });
+
+      // 2. Client-side Firebase signOut + clear all local state + session.
+      await logout();
+
+      toast.success('Signed out successfully');
+      // The app router will redirect to the login screen because `user` is now null.
+      setConfirmLogout(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to sign out');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Danger Zone" subtitle="Irreversible and destructive account actions." />
+
+      <SettingsCard
+        title="Sign Out"
+        description="Sign out of your account on this device. You will need to sign in again to access GSTPilot."
+      >
+        <div className="flex items-center justify-between p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center">
+              <Power className="h-5 w-5 text-zinc-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white">Sign out of GSTPilot</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {user?.email ? `Signed in as ${user.email}` : 'Clears your session and redirects to login.'}
+              </p>
+            </div>
+          </div>
+          <DangerButton onClick={() => setConfirmLogout(true)}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Log Out
+          </DangerButton>
+        </div>
+      </SettingsCard>
+
+      {/* Logout Confirmation */}
+      <AlertDialog open={confirmLogout} onOpenChange={setConfirmLogout}>
+        <AlertDialogContent className="bg-zinc-950 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <LogOut className="h-5 w-5 text-blue-400" />
+              Sign Out
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              You will be signed out of your account. Your data stays safe — sign back in anytime to resume.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-zinc-700 text-zinc-200 hover:bg-zinc-900">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="bg-red-600 hover:bg-red-500 text-white border-0 disabled:opacity-50"
+            >
+              {loggingOut ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogOut className="h-4 w-4 mr-2" />}
+              Sign Out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// Default export for dynamic(() => import('...')) in DashboardViews.tsx
+export default SettingsPage;

@@ -148,11 +148,11 @@ function Aurora({ className = '' }: { className?: string }) {
       <div className="aurora-blob absolute -left-32 top-0 h-[34rem] w-[34rem] rounded-full accent-gradient-soft blur-[120px] opacity-60" />
       <div
         className="aurora-blob absolute -right-24 top-40 h-[30rem] w-[30rem] rounded-full blur-[110px] opacity-50"
-        style={{ backgroundImage: 'linear-gradient(135deg, rgba(6,182,212,0.18), rgba(59,130,246,0.14))' }}
+        style={{ backgroundImage: 'linear-gradient(135deg, rgba(59,130,246,0.18), rgba(59,130,246,0.14))' }}
       />
       <div
         className="aurora-blob absolute left-1/3 bottom-0 h-[26rem] w-[26rem] rounded-full blur-[120px] opacity-40"
-        style={{ backgroundImage: 'linear-gradient(135deg, rgba(16,185,129,0.16), rgba(6,182,212,0.10))' }}
+        style={{ backgroundImage: 'linear-gradient(135deg, rgba(37,99,235,0.16), rgba(59,130,246,0.10))' }}
       />
     </div>
   );
@@ -184,7 +184,7 @@ function PrimaryButton({
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition-all hover:bg-white/90 hover:scale-[1.02] active:scale-95 ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-b from-white to-white/90 px-6 py-3 text-sm font-semibold text-black shadow-[0_8px_24px_-6px_rgba(255,255,255,0.25)] transition-all hover:from-white hover:to-white hover:scale-[1.02] active:scale-95 ${className}`}
     >
       {children}
     </button>
@@ -203,7 +203,7 @@ function GhostButton({
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center justify-center gap-2 rounded-full glass-surface px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-white/10 hover:scale-[1.02] active:scale-95 ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full glass-surface px-6 py-3 text-sm font-semibold text-white backdrop-blur-md transition-all hover:bg-white/10 hover:ring-1 hover:ring-white/20 hover:scale-[1.02] active:scale-95 ${className}`}
     >
       {children}
     </button>
@@ -227,7 +227,7 @@ function Navbar({ onGetStarted }: { onGetStarted: () => void }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 16);
+    const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -235,17 +235,19 @@ function Navbar({ onGetStarted }: { onGetStarted: () => void }) {
 
   const links = [
     { label: 'Features', href: '#features' },
-    { label: 'Oracle AI', href: '#oracle' },
+    { label: 'AI CFO', href: '#oracle' },
     { label: 'Pricing', href: '#pricing' },
     { label: 'Security', href: '#security' },
   ];
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 px-4 pt-3 sm:px-6">
+    <header
+      className={`fixed inset-x-0 top-0 z-50 px-4 pt-3 transition-colors duration-300 sm:px-6 ${
+        scrolled ? 'bg-black/80 backdrop-blur-xl border-b border-white/5' : 'bg-transparent'
+      }`}
+    >
       <nav
-        className={`mx-auto flex max-w-7xl items-center justify-between rounded-2xl px-4 py-2.5 transition-all duration-300 sm:px-5 ${
-          scrolled ? 'glass-surface-strong shadow-premium' : 'bg-transparent'
-        }`}
+        className="mx-auto flex max-w-7xl items-center justify-between rounded-2xl px-4 py-2.5 transition-all duration-300 sm:px-5"
       >
         <BrandLogo
           variant="horizontal"
@@ -262,7 +264,9 @@ function Navbar({ onGetStarted }: { onGetStarted: () => void }) {
             <a
               key={l.href}
               href={l.href}
-              className="rounded-lg px-3 py-1.5 text-sm text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+              className={`rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-white/5 hover:text-white ${
+                scrolled ? 'text-white/80' : 'text-white/60'
+              }`}
             >
               {l.label}
             </a>
@@ -272,7 +276,9 @@ function Navbar({ onGetStarted }: { onGetStarted: () => void }) {
         <div className="hidden items-center gap-2 md:flex">
           <button
             onClick={onGetStarted}
-            className="text-sm font-medium text-white/70 transition-colors hover:text-white"
+            className={`text-sm font-medium transition-colors hover:text-white ${
+              scrolled ? 'text-white/80' : 'text-white/60'
+            }`}
           >
             Sign in
           </button>
@@ -329,70 +335,137 @@ function Navbar({ onGetStarted }: { onGetStarted: () => void }) {
    ════════════════════════════════════════════════════════════════════════ */
 
 function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
+  const [persona, setPersona] = useState<'ca' | 'business'>('ca');
+
+  const copy = persona === 'ca'
+    ? {
+        headlineTop: 'Stop being a cost center.',
+        headlineAccent: 'Become the CFO your clients trust.',
+        sub: 'GSTPilot Infinity unifies GST, banking, invoicing and AI-driven insights into one compliance-grade system — so your firm shifts from filing returns to advising growth.',
+        primaryCta: 'Start Free — 14-day trial, no card',
+        secondaryCta: 'Book a 15-min demo for CA firms',
+        pricing: 'From ₹2,999/month for CA firms',
+      }
+    : {
+        headlineTop: 'Run finance like a',
+        headlineAccent: '100-crore company.',
+        sub: 'GST, banking, invoicing and an AI CFO that flags risks before they cost you — built for ambitious Indian businesses.',
+        primaryCta: 'Start Free — 14-day trial',
+        secondaryCta: 'Talk to sales',
+        pricing: 'From ₹1,499/month for businesses',
+      };
+
   return (
     <section id="top" className="relative flex min-h-screen items-center overflow-hidden px-4 pt-28 sm:px-6">
       <Aurora />
-      {/* subtle grid */}
+      {/* subtle grid — softened + masked harder behind the text for legibility */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.04]"
+        className="pointer-events-none absolute inset-0 opacity-[0.025]"
         style={{
           backgroundImage:
             'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
-          backgroundSize: '64px 64px',
-          maskImage: 'radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent)',
+          backgroundSize: '72px 72px',
+          maskImage:
+            'radial-gradient(ellipse 70% 55% at 50% 42%, black, transparent)',
+          WebkitMaskImage:
+            'radial-gradient(ellipse 70% 55% at 50% 42%, black, transparent)',
         }}
       />
 
       <div className="relative z-10 mx-auto w-full max-w-5xl text-center">
-        {/* Official GSTPilot™ logo — subtle, above headline */}
+        {/* Small brand mark — subtle, above the headline (no longer competing) */}
         <motion.div
-          initial={{ opacity: 0, y: 16, scale: 0.94 }}
+          initial={{ opacity: 0, y: 12, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.8, ease: EASE }}
-          className="mb-8 flex justify-center"
+          transition={{ duration: 0.7, ease: EASE }}
+          whileHover={{ scale: 1.08, rotate: -2, transition: { type: 'spring', stiffness: 300, damping: 15 } }}
+          className="mb-6 flex justify-center"
         >
           <BrandLogo
             variant="icon"
             theme="dark"
-            size={72}
-            className="drop-shadow-[0_0_24px_rgba(59,130,246,0.4)]"
+            size={52}
+            className="drop-shadow-[0_0_18px_rgba(59,130,246,0.35)]"
           />
         </motion.div>
 
+        {/* PERSONA TOGGLE — segmented control: CA Firms vs Businesses */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
+          transition={{ duration: 0.6, ease: EASE, delay: 0.05 }}
           className="flex justify-center"
         >
-          <SectionTag>
-            <Sparkles className="h-3 w-3" />
-            The Financial Brain of India™
-          </SectionTag>
+          <div
+            role="tablist"
+            aria-label="Choose your persona"
+            className="inline-flex items-center gap-1 rounded-full glass-surface p-1"
+          >
+            {([
+              { id: 'ca' as const, label: 'For CA Firms' },
+              { id: 'business' as const, label: 'For Businesses' },
+            ]).map((opt) => (
+              <button
+                key={opt.id}
+                role="tab"
+                aria-selected={persona === opt.id}
+                onClick={() => setPersona(opt.id)}
+                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all sm:text-[13px] ${
+                  persona === opt.id
+                    ? 'accent-gradient text-white shadow-[0_4px_14px_-3px_rgba(59,130,246,0.55)]'
+                    : 'text-white/60 hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </motion.div>
 
+        {/* OUTCOME-LED DUAL-LINE HEADLINE — persona-aware, AnimatePresence swap */}
         <motion.h1
           initial={{ opacity: 0, y: 24, filter: 'blur(14px)' }}
           animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.9, ease: EASE, delay: 0.08 }}
-          className="mt-6 text-5xl font-semibold leading-[1.03] tracking-tight text-white sm:text-6xl md:text-7xl lg:text-8xl"
+          transition={{ duration: 0.9, ease: EASE, delay: 0.1 }}
+          className="mt-6 text-4xl font-semibold leading-[1.05] tracking-tight text-white sm:text-5xl md:text-6xl lg:text-[4.25rem]"
         >
-          Run your entire
-          <br className="hidden sm:block" /> financial operation on{' '}
-          <span className="accent-text">one brain</span>.
+          <AnimatePresence mode="wait">
+            <motion.span
+              key={persona + '-headline'}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.35, ease: EASE }}
+              className="block"
+            >
+              <span className="block text-white">{copy.headlineTop}</span>
+              <span className="block accent-text">{copy.headlineAccent}</span>
+            </motion.span>
+          </AnimatePresence>
         </motion.h1>
 
-        <motion.p
+        {/* BENEFIT SUBHEADLINE — persona-aware, AnimatePresence swap */}
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: EASE, delay: 0.22 }}
-          className="mx-auto mt-6 max-w-2xl text-base text-white/65 sm:text-lg"
+          className="mx-auto mt-6 max-w-2xl"
         >
-          GSTPilot Infinity unifies GST, Banking, Invoicing, Reconciliation and an AI CFO into a
-          single, always-on operating system — purpose-built for India&apos;s Chartered Accountants
-          and ambitious businesses.
-        </motion.p>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={persona + '-sub'}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.35, ease: EASE }}
+              className="text-base text-white/75 sm:text-lg"
+            >
+              {copy.sub}
+            </motion.p>
+          </AnimatePresence>
+        </motion.div>
 
+        {/* CTAs — persona-aware labels */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -400,24 +473,85 @@ function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
           className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
         >
           <PrimaryButton onClick={onGetStarted} className="px-7 py-3.5 text-base">
-            Start Free
+            {copy.primaryCta}
             <ArrowRight className="h-4 w-4" />
           </PrimaryButton>
           <GhostButton onClick={onBookDemo} className="px-7 py-3.5 text-base">
-            Book a Demo
+            {copy.secondaryCta}
           </GhostButton>
         </motion.div>
 
+        {/* PRICING HINT — persona-aware, with ₹ icon prefix */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.7, delay: 0.40 }}
+          className="mt-3 inline-flex items-center justify-center gap-1.5 text-xs text-white/55"
+        >
+          <IndianRupee className="h-3 w-3 accent-text" />
+          {copy.pricing}
+        </motion.p>
+
+        {/* MICROCOPY — friction removal + scarcity pulse */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.5 }}
-          className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-white/45"
+          transition={{ duration: 0.7, delay: 0.44 }}
+          className="mt-3 flex flex-col items-center gap-1.5 text-xs text-white/50"
         >
-          <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> SOC 2 Type II</span>
-          <span className="inline-flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> GSTN Compliant</span>
-          <span className="inline-flex items-center gap-1.5"><Landmark className="h-3.5 w-3.5" /> RBI Aligned</span>
-          <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> India-hosted</span>
+          <span>No credit card required · Import your first invoice in 2 minutes</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+            Limited trial spots this week — claim yours
+          </span>
+        </motion.div>
+
+        {/* TRUST SIGNALS — number-led metric + case snippet + compact compliance row */}
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.52 }}
+          className="mt-10 flex flex-col items-center gap-3"
+        >
+          <div className="text-sm text-white/80">
+            Manages <span className="font-semibold accent-text">₹2,500+ crore</span> in monthly GST filings
+          </div>
+          <p className="text-sm italic text-white/55">
+            Reduced reconciliation time from{' '}
+            <span className="font-semibold accent-text not-italic">8 hours → 45 minutes</span>{' '}
+            for 200+ CA practices
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-[11px] text-white/45">
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> SOC 2 Type II</span>
+            <span className="inline-flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> GSTN Compliant</span>
+            <span className="inline-flex items-center gap-1.5"><Landmark className="h-3.5 w-3.5" /> RBI Aligned</span>
+            <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> 256-bit encryption</span>
+          </div>
+        </motion.div>
+
+        {/* 3-POINT PROOF ROW — quick orientation for the curious */}
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.64 }}
+          className="mx-auto mt-10 grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-3"
+        >
+          {[
+            { icon: FileText, label: 'Auto-file GST returns' },
+            { icon: Landmark, label: 'Bank reconciliation in 1 click' },
+            { icon: Brain, label: 'AI CFO insights & alerts' },
+          ].map((p) => {
+            const Icon = p.icon;
+            return (
+              <div
+                key={p.label}
+                className="flex items-center justify-center gap-2.5 rounded-xl glass-surface px-4 py-3 text-sm text-white/80"
+              >
+                <Icon className="h-4 w-4 accent-text shrink-0" />
+                <span className="font-medium">{p.label}</span>
+              </div>
+            );
+          })}
         </motion.div>
       </div>
 
@@ -432,6 +566,216 @@ function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
           <ChevronDown className="h-5 w-5" />
         </motion.div>
       </motion.div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   1b. WHY GSTPILOT — vs-competitor differentiators
+   ════════════════════════════════════════════════════════════════════════ */
+
+function WhyGSTPilotSection() {
+  const diffs = [
+    {
+      vs: 'vs ClearTax / Zoho Tax',
+      icon: ShieldCheck,
+      claim: 'ITC leakage detection',
+      support: 'No one else flags missing ITC before you file. We do.',
+    },
+    {
+      vs: 'vs Tally / Marg',
+      icon: Building2,
+      claim: 'Built for multi-entity CA firms',
+      support: 'Manage 200+ client firms in one workspace, not 200 logins.',
+    },
+    {
+      vs: 'vs generic SaaS',
+      icon: Server,
+      claim: 'India-hosted compliance-grade infra',
+      support: 'Data never leaves India. DPDP-aligned. GSTN-ready.',
+    },
+    {
+      vs: 'vs spreadsheets',
+      icon: Brain,
+      claim: 'Oracle AI CFO included',
+      support: 'Ask plain-English questions, get ranked actions — not just dashboards.',
+    },
+  ];
+
+  return (
+    <section className="relative section-gap px-4 py-20 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        <Reveal className="mx-auto max-w-2xl text-center">
+          <SectionTag><Target className="h-3 w-3" /> Why GSTPilot</SectionTag>
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+            Built different. <span className="accent-text">Built to win.</span>
+          </h2>
+          <p className="mt-4 text-white/60">
+            Four reasons CA firms switch from the usual suspects — and stay.
+          </p>
+        </Reveal>
+
+        <StaggerGroup className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.08}>
+          {diffs.map((d) => {
+            const Icon = d.icon;
+            return (
+              <StaggerItem key={d.vs}>
+                <div className="group h-full rounded-3xl glass-surface p-6 hover-lift">
+                  <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-white/40">
+                    {d.vs}
+                  </div>
+                  <div className="mt-4">
+                    <GlassIcon icon={Icon} />
+                  </div>
+                  <h3 className="mt-4 text-base font-semibold text-white">{d.claim}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-white/55">{d.support}</p>
+                </div>
+              </StaggerItem>
+            );
+          })}
+        </StaggerGroup>
+      </div>
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   1c. ORACLE HERO — elevated AI CFO showcase (below-the-fold hero card)
+   ════════════════════════════════════════════════════════════════════════ */
+
+function OracleHeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
+  return (
+    <section id="oracle-hero" className="relative section-gap px-4 py-20 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        <Reveal>
+          <div className="relative overflow-hidden rounded-[2rem] glass-surface-strong p-px">
+            {/* accent gradient ring border */}
+            <div className="pointer-events-none absolute inset-0 rounded-[2rem] accent-gradient opacity-40" aria-hidden />
+            <div className="relative rounded-[1.95rem] bg-black/50 p-6 sm:p-10 lg:p-14">
+              <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
+                {/* LEFT — copy + CTAs + footnote + testimonial */}
+                <div>
+                  <SectionTag>
+                    <Sparkles className="h-3 w-3" /> Meet Oracle
+                  </SectionTag>
+                  <h2 className="mt-5 text-3xl font-semibold leading-[1.1] tracking-tight text-white sm:text-4xl md:text-[2.75rem]">
+                    Your AI CFO. <span className="accent-text">Always on.</span>
+                  </h2>
+                  <p className="mt-5 text-base leading-relaxed text-white/65 sm:text-lg">
+                    Oracle reads your GST, banking and invoices in real time — then answers
+                    plain-English questions and ranks the next 3 actions you should take today.
+                  </p>
+
+                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                    <PrimaryButton onClick={onGetStarted} className="px-6 py-3 text-sm">
+                      Try Oracle free
+                      <ArrowRight className="h-4 w-4" />
+                    </PrimaryButton>
+                    <GhostButton onClick={onBookDemo} className="px-6 py-3 text-sm">
+                      Watch 2-min demo
+                    </GhostButton>
+                  </div>
+
+                  <p className="mt-4 text-xs text-white/45">
+                    Oracle is included on every paid plan — including the ₹2,999/mo CA firm plan.
+                  </p>
+
+                  {/* testimonial */}
+                  <figure className="mt-8 rounded-2xl glass-surface p-5">
+                    <Quote className="h-5 w-5 accent-text" />
+                    <blockquote className="mt-3 text-sm leading-relaxed text-white/85">
+                      &ldquo;Oracle flagged a ₹14L ITC mismatch 3 days before our filing. That single
+                      alert paid for the year.&rdquo;
+                    </blockquote>
+                    <figcaption className="mt-3 text-xs text-white/50">
+                      — VP Finance, listed fintech unicorn (name withheld on request)
+                    </figcaption>
+                  </figure>
+                </div>
+
+                {/* RIGHT — animated mock chat */}
+                <Reveal delay={0.12}>
+                  <div className="overflow-hidden rounded-3xl glass-surface-strong shadow-premium">
+                    <div className="flex items-center gap-2 border-b border-white/[0.06] px-5 py-3">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg accent-gradient">
+                        <Brain className="h-3.5 w-3.5 text-black" />
+                      </span>
+                      <span className="text-xs font-semibold text-white">Oracle</span>
+                      <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Live
+                      </span>
+                    </div>
+
+                    <div className="space-y-4 p-5">
+                      {/* user message */}
+                      <div className="flex justify-end">
+                        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-white px-4 py-2.5 text-sm font-medium text-black">
+                          Which clients have ITC at risk this month?
+                        </div>
+                      </div>
+
+                      {/* oracle response with typing dots */}
+                      <div className="flex gap-3">
+                        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg accent-gradient">
+                          <Brain className="h-3.5 w-3.5 text-black" />
+                        </span>
+                        <div className="max-w-[85%] rounded-2xl rounded-tl-sm glass-surface px-4 py-3">
+                          {/* typing dots — always animating, signals Oracle is live */}
+                          <div className="mb-2 flex items-center gap-1">
+                            {[0, 1, 2].map((i) => (
+                              <motion.span
+                                key={i}
+                                className="h-1.5 w-1.5 rounded-full bg-white/55"
+                                animate={{ y: [0, -3, 0], opacity: [0.4, 1, 0.4] }}
+                                transition={{ duration: 0.9, repeat: Infinity, ease: 'easeInOut', delay: i * 0.15 }}
+                              />
+                            ))}
+                          </div>
+                          <p className="text-sm leading-relaxed text-white/85">
+                            3 firms show ITC at risk:{' '}
+                            <strong className="text-white">Acme Pvt Ltd (₹4.2L)</strong>,{' '}
+                            <strong className="text-white">Bhanu Traders (₹1.1L)</strong>,{' '}
+                            <strong className="text-white">Crescent Exports (₹88K)</strong>. Want me to
+                            draft notices?
+                          </p>
+                          {/* action chips */}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {['Draft notice', 'Open client', 'Add to war room'].map((chip) => (
+                              <span
+                                key={chip}
+                                className="rounded-lg bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white/75 ring-1 ring-white/[0.08]"
+                              >
+                                {chip}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Reveal>
+              </div>
+
+              {/* INTEGRATIONS ROW — text pills, no external images */}
+              <div className="mt-10 border-t border-white/[0.06] pt-6">
+                <p className="text-center text-[11px] font-medium uppercase tracking-[0.18em] text-white/40">
+                  Integrates with
+                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+                  {['Zoho Books', 'Tally', 'Google Workspace', 'AWS', 'Slack', 'Razorpay'].map((name) => (
+                    <span
+                      key={name}
+                      className="rounded-full glass-surface px-3.5 py-1.5 text-xs font-semibold tracking-wide text-white/40"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </Reveal>
+      </div>
     </section>
   );
 }
@@ -1017,8 +1361,8 @@ function DashboardShowcaseSection() {
                               <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
                             </linearGradient>
                             <linearGradient id="showcaseLine" x1="0" y1="0" x2="1" y2="0">
-                              <stop offset="0%" stopColor="#10b981" />
-                              <stop offset="50%" stopColor="#06b6d4" />
+                              <stop offset="0%" stopColor="#2563EB" />
+                              <stop offset="50%" stopColor="#3B82F6" />
                               <stop offset="100%" stopColor="#3b82f6" />
                             </linearGradient>
                           </defs>
@@ -1704,6 +2048,8 @@ export default function LandingPage({ onGetStarted, onBookDemo }: LandingPagePro
       <Navbar onGetStarted={onGetStarted} />
       <div className="flex-1">
         <HeroSection onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
+        <WhyGSTPilotSection />
+        <OracleHeroSection onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
         <FeaturesSection />
         <CapabilitiesSection />
         <AIAgentsSection />

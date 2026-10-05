@@ -107,7 +107,7 @@ export function CommandBar() {
             className={cn(
               'flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl transition-all',
               hasText
-                ? 'accent-gradient text-white shadow-lg shadow-emerald-500/30'
+                ? 'accent-gradient text-white shadow-lg shadow-blue-500/30'
                 : 'bg-white/[0.05] text-muted-foreground/40'
             )}
           >

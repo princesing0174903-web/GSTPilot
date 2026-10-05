@@ -49,7 +49,7 @@ interface StatusGroupDef {
 }
 
 const STATUS_GROUPS: StatusGroupDef[] = [
-  { key: 'running', label: 'Running', icon: Loader2, iconClass: 'text-violet-500 animate-spin', emptyHint: 'Oracle is idle.' },
+  { key: 'running', label: 'Running', icon: Loader2, iconClass: 'text-cyan-500 animate-spin', emptyHint: 'Oracle is idle.' },
   { key: 'scheduled', label: 'Scheduled', icon: CalendarClock, iconClass: 'text-amber-500', emptyHint: 'No scheduled tasks.' },
   { key: 'completed', label: 'Completed', icon: CheckCircle2, iconClass: 'text-emerald-500', emptyHint: 'Nothing completed yet.' },
   { key: 'failed', label: 'Failed', icon: AlertTriangle, iconClass: 'text-red-500', emptyHint: 'No failures. Good.' },
@@ -223,7 +223,7 @@ function TaskCard({ task, onClick }: { task: OracleTask; onClick?: () => void })
           {/* Active step */}
           {task.steps.find((s) => s.state === 'active') && (
             <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
-              <Loader2 className="h-2 w-2 animate-spin text-violet-500" />
+              <Loader2 className="h-2 w-2 animate-spin text-cyan-500" />
               <span className="truncate">
                 {task.steps.find((s) => s.state === 'active')?.label}
               </span>
@@ -243,7 +243,7 @@ function TaskCard({ task, onClick }: { task: OracleTask; onClick?: () => void })
                 step.state === 'done'
                   ? 'bg-emerald-400'
                   : step.state === 'active'
-                    ? 'bg-violet-400'
+                    ? 'bg-cyan-400'
                     : 'bg-border',
               )}
               title={step.label}
@@ -298,7 +298,7 @@ function TaskCard({ task, onClick }: { task: OracleTask; onClick?: () => void })
 
 function StatusBadge({ status }: { status: OracleTaskStatus }) {
   const map: Record<OracleTaskStatus, { label: string; cls: string }> = {
-    running: { label: 'Running', cls: 'bg-violet-500/[0.12] text-violet-600 dark:text-violet-400' },
+    running: { label: 'Running', cls: 'bg-cyan-500/[0.12] text-cyan-600 dark:text-cyan-400' },
     scheduled: { label: 'Scheduled', cls: 'bg-amber-500/[0.12] text-amber-600 dark:text-amber-400' },
     completed: { label: 'Done', cls: 'bg-emerald-500/[0.12] text-emerald-600 dark:text-emerald-400' },
     failed: { label: 'Failed', cls: 'bg-red-500/[0.12] text-red-600 dark:text-red-400' },

@@ -63,7 +63,7 @@ function fmtMetric(value: number, isCurrency: boolean): string {
 }
 
 function companyColor(name: string): string {
-  return COMPANIES.find(c => c.name === name)?.color ?? '#10b981';
+  return COMPANIES.find(c => c.name === name)?.color ?? '#2563EB';
 }
 
 // ─── Metric Chip ──────────────────────────────────────────────────────────────

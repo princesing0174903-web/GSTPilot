@@ -20,6 +20,7 @@ import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptySta
 import { TrustBar } from '@/components/shared/TrustBar';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { useApp } from '@/contexts/AppContext';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -33,6 +34,7 @@ function sevText(s: string) {
 }
 
 export function PredictiveCompliancePage() {
+  const { setCurrentView } = useApp();
   const { data: returns, loading: retLoading } = useFireReturns();
   const { data: invoices } = useFireInvoices();
   const { data: bankTx } = useFireBankTransactions();
@@ -68,9 +70,9 @@ export function PredictiveCompliancePage() {
             <ProfessionalEmptyState
               icon={ShieldAlert}
               title="No compliance data yet"
-              description="Connect GSTN returns and tasks to unlock predictive compliance — late filing probability, GST mismatch risk, penalty prediction, cash shortage alerts, and proactive reminders weeks before deadlines."
+              description="Add GST returns or tasks to unlock predictive compliance — late filing probability, GST mismatch risk, penalty prediction, cash shortage alerts, and proactive reminders weeks before deadlines."
               accent="amber"
-              action={{ label: 'Connect GSTN', onClick: () => toast.info('Navigate to Settings → GST API Connections') }}
+              action={{ label: 'Go to Returns', onClick: () => setCurrentView('returns'), icon: Calendar }}
             />
           ) : (
             <>
@@ -104,7 +106,7 @@ export function PredictiveCompliancePage() {
                     { label: 'GST Mismatch Prob', value: `${Math.round(report.summary.gstMismatchProb * 100)}%`, accent: 'text-amber-300', icon: TrendingDown },
                     { label: 'Predicted Penalty', value: `₹${report.summary.predictedPenalty.toLocaleString('en-IN')}`, accent: 'text-rose-300', icon: AlertTriangle },
                     { label: 'Cash Shortage Risk', value: `${Math.round(report.summary.cashShortageRisk * 100)}%`, accent: 'text-amber-300', icon: ShieldAlert },
-                    { label: 'Filing Overload Risk', value: `${Math.round(report.summary.filingOverloadRisk * 100)}%`, accent: 'text-violet-300', icon: Calendar },
+                    { label: 'Filing Overload Risk', value: `${Math.round(report.summary.filingOverloadRisk * 100)}%`, accent: 'text-cyan-300', icon: Calendar },
                     { label: 'Missing Docs Risk', value: `${Math.round(report.summary.missingDocsRisk * 100)}%`, accent: 'text-amber-300', icon: AlertTriangle },
                   ].map((s) => (
                     <div key={s.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">

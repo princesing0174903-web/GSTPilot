@@ -47,7 +47,8 @@ import {
   Filter,
 } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
-import type { Invoice, Client, GSTR1Section } from '@/types/gst';
+import { useClients, type ClientOption } from '@/hooks/useClients';
+import type { Invoice, Client, GSTR1Section, ClientStatus } from '@/types/gst';
 import { GSTR1_SECTION_LABELS } from '@/types/gst';
 import { formatCurrency, formatNumber } from '@/lib/gst-utils';
 
@@ -76,400 +77,6 @@ interface SectionCardData {
   bgColor: string;
   borderColor: string;
 }
-
-// ──────────────────────────────────────────────
-// Mock Data
-// ──────────────────────────────────────────────
-const MOCK_CLIENTS: Client[] = [
-  {
-    id: 'cl-001',
-    gstin: '27AABCS1429B1Z5',
-    tradeName: 'Sharma Enterprises',
-    legalName: 'Sharma Enterprises Pvt Ltd',
-    address: '302, Laxmi Nagar, Andheri East, Mumbai',
-    state: 'Maharashtra',
-    stateCode: '27',
-    contactEmail: 'accounts@sharmaent.com',
-    contactPhone: '+91-22-2847-3001',
-    entityType: 'regular',
-    returnPeriod: '2025-06',
-    status: 'active',
-    healthScore: 92,
-    createdAt: '2025-01-15T00:00:00.000Z',
-    updatedAt: '2025-05-11T00:00:00.000Z',
-  },
-  {
-    id: 'cl-002',
-    gstin: '24AABCP5678G1Z3',
-    tradeName: 'Patel & Sons',
-    legalName: 'Patel & Sons Trading Co',
-    address: '15, CG Road, Navrangpura, Ahmedabad',
-    state: 'Gujarat',
-    stateCode: '24',
-    contactEmail: 'gst@patelsons.com',
-    contactPhone: '+91-79-6677-8888',
-    entityType: 'regular',
-    returnPeriod: '2025-06',
-    status: 'active',
-    healthScore: 88,
-    createdAt: '2025-02-10T00:00:00.000Z',
-    updatedAt: '2025-05-09T00:00:00.000Z',
-  },
-  {
-    id: 'cl-003',
-    gstin: '06AABCK9012H1Z1',
-    tradeName: 'Krishna Traders',
-    legalName: 'Krishna Traders Pvt Ltd',
-    address: 'Plot 45, Udyog Vihar, Phase III, Gurugram',
-    state: 'Haryana',
-    stateCode: '06',
-    contactEmail: 'gst@krishnatraders.in',
-    contactPhone: '+91-124-2852-0261',
-    entityType: 'regular',
-    returnPeriod: '2025-06',
-    status: 'active',
-    healthScore: 95,
-    createdAt: '2025-03-05T00:00:00.000Z',
-    updatedAt: '2025-05-11T00:00:00.000Z',
-  },
-  {
-    id: 'cl-004',
-    gstin: '09AABCG2345L1Z2',
-    tradeName: 'Gupta Manufacturing',
-    legalName: 'Gupta Manufacturing Co',
-    address: '12, Sector 62, Noida',
-    state: 'Uttar Pradesh',
-    stateCode: '09',
-    contactEmail: 'finance@guptamfg.com',
-    contactPhone: '+91-120-2345-6789',
-    entityType: 'composition',
-    returnPeriod: '2025-06',
-    status: 'active',
-    healthScore: 78,
-    createdAt: '2025-06-01T00:00:00.000Z',
-    updatedAt: '2025-04-18T00:00:00.000Z',
-  },
-];
-
-const MOCK_INVOICES: Invoice[] = [
-  {
-    id: 'inv-001',
-    clientId: 'cl-001',
-    invoiceNumber: 'SE/2025/05/0847',
-    invoiceDate: '2025-05-05',
-    sellerGstin: '27AABCS1429B1Z5',
-    buyerGstin: '24AABCP5678G1Z3',
-    buyerName: 'Patel & Sons',
-    invoiceType: 'B2B',
-    gstr1Section: 'b2b',
-    taxableValue: 850000,
-    cgst: 42500,
-    sgst: 42500,
-    igst: 0,
-    cess: 0,
-    totalAmount: 935000,
-    hsnCode: '8471',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'perfect_match',
-    riskLevel: 'low',
-    riskScore: 5,
-    createdAt: '2025-05-05T10:00:00.000Z',
-    updatedAt: '2025-05-05T10:00:00.000Z',
-    client: MOCK_CLIENTS[0],
-  },
-  {
-    id: 'inv-002',
-    clientId: 'cl-001',
-    invoiceNumber: 'SE/2025/05/0848',
-    invoiceDate: '2025-05-07',
-    sellerGstin: '27AABCS1429B1Z5',
-    buyerGstin: '06AABCK9012H1Z1',
-    buyerName: 'Krishna Traders',
-    invoiceType: 'B2B',
-    gstr1Section: 'b2b',
-    taxableValue: 1250000,
-    cgst: 62500,
-    sgst: 62500,
-    igst: 0,
-    cess: 0,
-    totalAmount: 1375000,
-    hsnCode: '2710',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'perfect_match',
-    riskLevel: 'low',
-    riskScore: 3,
-    createdAt: '2025-05-07T11:30:00.000Z',
-    updatedAt: '2025-05-07T11:30:00.000Z',
-    client: MOCK_CLIENTS[0],
-  },
-  {
-    id: 'inv-003',
-    clientId: 'cl-002',
-    invoiceNumber: 'PS/2025/05/1205',
-    invoiceDate: '2025-05-10',
-    sellerGstin: '24AABCP5678G1Z3',
-    buyerGstin: '09AABCG2345L1Z2',
-    buyerName: 'Gupta Manufacturing',
-    invoiceType: 'B2B',
-    gstr1Section: 'b2b',
-    taxableValue: 2340000,
-    cgst: 0,
-    sgst: 0,
-    igst: 280800,
-    cess: 0,
-    totalAmount: 2620800,
-    hsnCode: '9983',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'partial_match',
-    riskLevel: 'medium',
-    riskScore: 35,
-    aiExplanation: 'GST amount shows minor discrepancy with GSTR-2B data',
-    createdAt: '2025-05-10T09:15:00.000Z',
-    updatedAt: '2025-05-10T09:15:00.000Z',
-    client: MOCK_CLIENTS[1],
-  },
-  {
-    id: 'inv-004',
-    clientId: 'cl-001',
-    invoiceNumber: 'SE/2025/05/0849',
-    invoiceDate: '2025-05-12',
-    sellerGstin: '27AABCS1429B1Z5',
-    buyerGstin: undefined,
-    buyerName: 'Retail Customer',
-    invoiceType: 'B2C Large',
-    gstr1Section: 'b2cl',
-    taxableValue: 350000,
-    cgst: 17500,
-    sgst: 17500,
-    igst: 0,
-    cess: 0,
-    totalAmount: 385000,
-    hsnCode: '8471',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'perfect_match',
-    riskLevel: 'low',
-    riskScore: 8,
-    createdAt: '2025-05-12T14:20:00.000Z',
-    updatedAt: '2025-05-12T14:20:00.000Z',
-    client: MOCK_CLIENTS[0],
-  },
-  {
-    id: 'inv-005',
-    clientId: 'cl-002',
-    invoiceNumber: 'PS/2025/05/1206',
-    invoiceDate: '2025-05-14',
-    sellerGstin: '24AABCP5678G1Z3',
-    buyerGstin: undefined,
-    buyerName: 'Walk-in Customer',
-    invoiceType: 'B2C Small',
-    gstr1Section: 'b2cs',
-    taxableValue: 45000,
-    cgst: 2250,
-    sgst: 2250,
-    igst: 0,
-    cess: 0,
-    totalAmount: 49500,
-    hsnCode: '9983',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'perfect_match',
-    riskLevel: 'low',
-    riskScore: 2,
-    createdAt: '2025-05-14T16:45:00.000Z',
-    updatedAt: '2025-05-14T16:45:00.000Z',
-    client: MOCK_CLIENTS[1],
-  },
-  {
-    id: 'inv-006',
-    clientId: 'cl-003',
-    invoiceNumber: 'KT/2025/05/0312',
-    invoiceDate: '2025-05-15',
-    sellerGstin: '06AABCK9012H1Z1',
-    buyerGstin: '27AABCS1429B1Z5',
-    buyerName: 'Sharma Enterprises',
-    invoiceType: 'B2B',
-    gstr1Section: 'b2b',
-    taxableValue: 675000,
-    cgst: 33750,
-    sgst: 33750,
-    igst: 0,
-    cess: 0,
-    totalAmount: 742500,
-    hsnCode: '9983',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'mismatch',
-    riskLevel: 'high',
-    riskScore: 65,
-    aiExplanation: 'GSTIN of buyer does not match records in GSTR-2B',
-    createdAt: '2025-05-15T08:00:00.000Z',
-    updatedAt: '2025-05-15T08:00:00.000Z',
-    client: MOCK_CLIENTS[2],
-  },
-  {
-    id: 'inv-007',
-    clientId: 'cl-003',
-    invoiceNumber: 'KT/2025/05/CN-001',
-    invoiceDate: '2025-05-16',
-    sellerGstin: '06AABCK9012H1Z1',
-    buyerGstin: '27AABCS1429B1Z5',
-    buyerName: 'Sharma Enterprises',
-    invoiceType: 'Credit Note',
-    gstr1Section: 'cdnr',
-    taxableValue: -150000,
-    cgst: -7500,
-    sgst: -7500,
-    igst: 0,
-    cess: 0,
-    totalAmount: -165000,
-    hsnCode: '9983',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'perfect_match',
-    riskLevel: 'low',
-    riskScore: 4,
-    notes: 'Credit note for partial return of services in Apr 2025',
-    createdAt: '2025-05-16T10:30:00.000Z',
-    updatedAt: '2025-05-16T10:30:00.000Z',
-    client: MOCK_CLIENTS[2],
-  },
-  {
-    id: 'inv-008',
-    clientId: 'cl-004',
-    invoiceNumber: 'GM/2025/05/EXP-045',
-    invoiceDate: '2025-05-18',
-    sellerGstin: '09AABCG2345L1Z2',
-    buyerGstin: undefined,
-    buyerName: 'GlobalTech Ltd (USA)',
-    invoiceType: 'Export',
-    gstr1Section: 'exp',
-    taxableValue: 5600000,
-    cgst: 0,
-    sgst: 0,
-    igst: 672000,
-    cess: 0,
-    totalAmount: 6272000,
-    hsnCode: '8471',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'perfect_match',
-    riskLevel: 'low',
-    riskScore: 10,
-    createdAt: '2025-05-18T07:00:00.000Z',
-    updatedAt: '2025-05-18T07:00:00.000Z',
-    client: MOCK_CLIENTS[3],
-  },
-  {
-    id: 'inv-009',
-    clientId: 'cl-002',
-    invoiceNumber: 'PS/2025/05/1207',
-    invoiceDate: '2025-05-20',
-    sellerGstin: '24AABCP5678G1Z3',
-    buyerGstin: undefined,
-    buyerName: 'Retail Customer',
-    invoiceType: 'B2C Small',
-    gstr1Section: 'b2cs',
-    taxableValue: 18000,
-    cgst: 900,
-    sgst: 900,
-    igst: 0,
-    cess: 0,
-    totalAmount: 19800,
-    hsnCode: '9983',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'missing_in_gstr',
-    riskLevel: 'critical',
-    riskScore: 80,
-    aiExplanation: 'Invoice found in books but not reflected in GSTR-2B',
-    createdAt: '2025-05-20T12:00:00.000Z',
-    updatedAt: '2025-05-20T12:00:00.000Z',
-    client: MOCK_CLIENTS[1],
-  },
-  {
-    id: 'inv-010',
-    clientId: 'cl-004',
-    invoiceNumber: 'GM/2025/05/DN-012',
-    invoiceDate: '2025-05-22',
-    sellerGstin: '09AABCG2345L1Z2',
-    buyerGstin: '27AABCS1429B1Z5',
-    buyerName: 'Sharma Enterprises',
-    invoiceType: 'Debit Note',
-    gstr1Section: 'cdnur',
-    taxableValue: 95000,
-    cgst: 4750,
-    sgst: 4750,
-    igst: 0,
-    cess: 0,
-    totalAmount: 104500,
-    hsnCode: '8471',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'duplicate',
-    riskLevel: 'high',
-    riskScore: 70,
-    aiExplanation: 'Duplicate debit note detected - same amount and buyer GSTIN',
-    createdAt: '2025-05-22T15:30:00.000Z',
-    updatedAt: '2025-05-22T15:30:00.000Z',
-    client: MOCK_CLIENTS[3],
-  },
-  {
-    id: 'inv-011',
-    clientId: 'cl-001',
-    invoiceNumber: 'SE/2025/05/0850',
-    invoiceDate: '2025-05-24',
-    sellerGstin: '27AABCS1429B1Z5',
-    buyerGstin: '24AABCP5678G1Z3',
-    buyerName: 'Patel & Sons',
-    invoiceType: 'B2B',
-    gstr1Section: 'b2b',
-    taxableValue: 520000,
-    cgst: 26000,
-    sgst: 26000,
-    igst: 0,
-    cess: 0,
-    totalAmount: 572000,
-    hsnCode: '2710',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'perfect_match',
-    riskLevel: 'low',
-    riskScore: 6,
-    createdAt: '2025-05-24T09:00:00.000Z',
-    updatedAt: '2025-05-24T09:00:00.000Z',
-    client: MOCK_CLIENTS[0],
-  },
-  {
-    id: 'inv-012',
-    clientId: 'cl-004',
-    invoiceNumber: 'GM/2025/05/EXP-046',
-    invoiceDate: '2025-05-25',
-    sellerGstin: '09AABCG2345L1Z2',
-    buyerGstin: undefined,
-    buyerName: 'GlobalTech Ltd (UK)',
-    invoiceType: 'Export',
-    gstr1Section: 'exp',
-    taxableValue: 3200000,
-    cgst: 0,
-    sgst: 0,
-    igst: 384000,
-    cess: 0,
-    totalAmount: 3584000,
-    hsnCode: '8471',
-    reverseCharge: false,
-    status: 'draft',
-    matchStatus: 'perfect_match',
-    riskLevel: 'low',
-    riskScore: 7,
-    createdAt: '2025-05-25T11:00:00.000Z',
-    updatedAt: '2025-05-25T11:00:00.000Z',
-    client: MOCK_CLIENTS[3],
-  },
-];
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -572,7 +179,43 @@ export default function ReviewPage() {
 
   // ── Data ──
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
+
+  // ── Clients (tenant-scoped via shared hook) ──
+  const {
+    clients: rawClients,
+    loading: clientsLoading,
+    error: clientsError,
+    empty: clientsEmpty,
+  } = useClients();
+
+  const clients = useMemo<Client[]>(() => {
+    return rawClients.map((c: ClientOption): Client => {
+      const status: ClientStatus =
+        c.status === 'active' || c.status === 'inactive' || c.status === 'suspended'
+          ? c.status
+          : 'active';
+      return {
+        id: c.id,
+        gstin: c.gstin,
+        tradeName: c.tradeName,
+        legalName: c.legalName ?? undefined,
+        address: c.address ?? undefined,
+        state: c.state ?? undefined,
+        stateCode: c.stateCode ?? undefined,
+        contactEmail: c.contactEmail ?? undefined,
+        contactPhone: c.contactPhone ?? undefined,
+        // ClientOption doesn't expose entityType / returnPeriod / lastFilingDate.
+        // Use sensible defaults — do NOT fabricate business data.
+        entityType: 'regular',
+        returnPeriod: undefined,
+        lastFilingDate: undefined,
+        status,
+        healthScore: c.healthScore,
+        createdAt: c.createdAt ?? '',
+        updatedAt: c.updatedAt ?? '',
+      };
+    });
+  }, [rawClients]);
 
   // ── Loading ──
   const [loading, setLoading] = useState(true);
@@ -614,30 +257,14 @@ export default function ReviewPage() {
     }
   }, [selectedClientId]);
 
-  const fetchClients = useCallback(async () => {
-    try {
-      const res = await fetch('/api/clients');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.clients && data.clients.length > 0) {
-          setClients(data.clients);
-          return;
-        }
-      }
-      setClients([]);
-    } catch {
-      setClients([]);
-    }
-  }, []);
-
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
-      await Promise.all([fetchInvoices(), fetchClients()]);
+      await fetchInvoices();
       setLoading(false);
     }
     loadAll();
-  }, [fetchInvoices, fetchClients]);
+  }, [fetchInvoices]);
 
   // ──────────────────────────────────────────
   // Computed Values
@@ -950,6 +577,21 @@ export default function ReviewPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Clients</SelectItem>
+            {clientsLoading && (
+              <SelectItem value="__clients_loading" disabled>
+                Loading clients…
+              </SelectItem>
+            )}
+            {clientsError && (
+              <SelectItem value="__clients_error" disabled className="text-red-600">
+                {clientsError}
+              </SelectItem>
+            )}
+            {!clientsLoading && !clientsError && clientsEmpty && (
+              <SelectItem value="__clients_empty" disabled>
+                No clients found — add clients in Client Registry
+              </SelectItem>
+            )}
             {clients.map(c => (
               <SelectItem key={c.id} value={c.id}>
                 {c.tradeName}

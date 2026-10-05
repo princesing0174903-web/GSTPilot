@@ -89,15 +89,21 @@ export function detectLanguagePreference(text: string): string | undefined {
 }
 
 // ─── Public: read the full memory snapshot ────────────────────────────────────
+//
+// ORG-SCOPED (ORACLE-SECURITY-FIX): Previously this function read ALL OracleMemory
+// rows globally — a critical cross-tenant data leak. Now it requires an orgId
+// and filters by firmId. Callers MUST pass the orgId.
 
-export async function loadMemorySnapshot(): Promise<MemorySnapshot> {
+export async function loadMemorySnapshot(orgId: string): Promise<MemorySnapshot> {
   const rows = await db.oracleMemory.findMany({
+    where: { firmId: orgId },
     orderBy: { updatedAt: 'asc' },
   });
 
-  const facts = rows.map((r) => ({ category: r.category, key: r.key, value: r.value }));
+  // The OracleMemory schema uses entityId/summary (not key/value). Map them.
+  const facts = rows.map((r) => ({ category: r.category, key: r.entityId ?? r.title, value: r.summary ?? r.payload }));
   const get = (cat: MemoryCategory, key: string) =>
-    rows.find((r) => r.category === cat && r.key === key)?.value;
+    rows.find((r) => r.category === cat && (r.entityId ?? r.title) === key)?.summary;
 
   return {
     firmName: get('firm', 'name'),
@@ -107,35 +113,64 @@ export async function loadMemorySnapshot(): Promise<MemorySnapshot> {
     preferredLanguage: get('preference', 'preferredLanguage'),
     connectedServices: rows
       .filter((r) => r.category === 'connection')
-      .map((r) => r.key),
+      .map((r) => r.entityId ?? r.title),
     reportsGenerated: rows
       .filter((r) => r.category === 'report')
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-      .map((r) => r.value),
+      .map((r) => r.summary ?? ''),
     recentTopics: rows
       .filter((r) => r.category === 'history')
       .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
       .slice(0, 6)
-      .map((r) => r.value),
+      .map((r) => r.summary ?? ''),
     facts,
   };
 }
 
 // ─── Public: persist a single fact (upsert) ───────────────────────────────────
+//
+// ORG-SCOPED (ORACLE-SECURITY-FIX): Previously this function wrote all facts with
+// firmId='oracle-global' — a critical cross-tenant data leak where every org's
+// extracted GSTINs, preferences, and topics were co-mingled in one bucket.
+// Now it requires an orgId and writes with firmId=orgId. Callers MUST pass orgId.
 
 export async function rememberFact(
+  orgId: string,
   category: MemoryCategory,
   key: string,
   value: string,
   source: 'user' | 'oracle_inferred' | 'system' = 'oracle_inferred',
   confidence = 1,
 ): Promise<void> {
+  if (!orgId) {
+    console.warn('[memory-store] rememberFact called without orgId — refusing to write to global bucket.');
+    return;
+  }
   if (!value || !value.trim()) return;
-  await db.oracleMemory.upsert({
-    where: { category_key: { category, key } },
-    create: { category, key, value: value.trim(), source, confidence },
-    update: { value: value.trim(), source, confidence },
+  const existing = await db.oracleMemory.findFirst({
+    where: { firmId: orgId, category, entityId: key },
+    select: { id: true },
   });
+  const title = `${category}:${key}`;
+  const importance = Math.round(confidence * 100);
+  if (existing) {
+    await db.oracleMemory.update({
+      where: { id: existing.id },
+      data: { summary: value.trim(), source, importance },
+    });
+  } else {
+    await db.oracleMemory.create({
+      data: {
+        firmId: orgId,
+        category,
+        entityId: key,
+        title,
+        summary: value.trim(),
+        source,
+        importance,
+      },
+    });
+  }
 }
 
 // ─── Public: scan an exchange and persist durable facts ───────────────────────
@@ -153,27 +188,34 @@ export interface ExchangeContext {
  * Scan a user/oracle exchange and persist any durable facts worth remembering
  * permanently: GSTIN, industry, language preference, firm name, user name.
  * Also pushes the user's topic into the rolling "history" list.
+ *
+ * ORG-SCOPED (ORACLE-SECURITY-FIX): now requires orgId so facts are written to
+ * the caller's org, not a global bucket.
  */
-export async function extractAndPersistFacts(ctx: ExchangeContext): Promise<void> {
+export async function extractAndPersistFacts(orgId: string, ctx: ExchangeContext): Promise<void> {
+  if (!orgId) {
+    console.warn('[memory-store] extractAndPersistFacts called without orgId — skipping.');
+    return;
+  }
   const text = `${ctx.userMessage ?? ''}\n${ctx.oracleResponse ?? ''}`;
 
   const tasks: Promise<void>[] = [];
 
   // GSTIN — anywhere in the exchange.
   const gstin = extractGstin(text) ?? ctx.knownGstin;
-  if (gstin) tasks.push(rememberFact('gst', 'gstin', gstin, 'user', 1));
+  if (gstin) tasks.push(rememberFact(orgId, 'gst', 'gstin', gstin, 'user', 1));
 
   // Industry.
   const industry = detectIndustry(text);
-  if (industry) tasks.push(rememberFact('industry', 'industry', industry, 'oracle_inferred', 0.85));
+  if (industry) tasks.push(rememberFact(orgId, 'industry', 'industry', industry, 'oracle_inferred', 0.85));
 
   // Preferred language.
   const lang = detectLanguagePreference(ctx.userMessage ?? '');
-  if (lang) tasks.push(rememberFact('preference', 'preferredLanguage', lang, 'user', 1));
+  if (lang) tasks.push(rememberFact(orgId, 'preference', 'preferredLanguage', lang, 'user', 1));
 
   // User name / firm name (from workspace, if provided).
-  if (ctx.knownUserName) tasks.push(rememberFact('preference', 'userName', ctx.knownUserName, 'user', 1));
-  if (ctx.knownFirmName) tasks.push(rememberFact('firm', 'name', ctx.knownFirmName, 'user', 1));
+  if (ctx.knownUserName) tasks.push(rememberFact(orgId, 'preference', 'userName', ctx.knownUserName, 'user', 1));
+  if (ctx.knownFirmName) tasks.push(rememberFact(orgId, 'firm', 'name', ctx.knownFirmName, 'user', 1));
 
   // Rolling topic history — keep last 12, dedupe.
   const topic = (ctx.userMessage ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
@@ -181,10 +223,10 @@ export async function extractAndPersistFacts(ctx: ExchangeContext): Promise<void
     tasks.push(
       (async () => {
         const key = `topic-${Date.now()}`;
-        await rememberFact('history', key, topic, 'user', 1);
-        // Trim to last 12 topics.
+        await rememberFact(orgId, 'history', key, topic, 'user', 1);
+        // Trim to last 12 topics (org-scoped).
         const history = await db.oracleMemory.findMany({
-          where: { category: 'history' },
+          where: { firmId: orgId, category: 'history' },
           orderBy: { updatedAt: 'desc' },
         });
         if (history.length > 12) {

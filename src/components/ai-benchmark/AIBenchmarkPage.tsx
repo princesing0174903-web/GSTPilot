@@ -36,6 +36,7 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowUpDown,
+  Loader2,
 } from 'lucide-react';
 import {
   BarChart,
@@ -52,11 +53,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency } from '@/lib/gst-utils';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Inbox } from 'lucide-react';
+import { useClients } from '@/hooks/useClients';
 
 // ─── Color Palette ─────────────────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   teal: '#14b8a6',
   purple: '#8b5cf6',
   amber: '#f59e0b',
@@ -229,37 +231,31 @@ function getPerformanceBorder(percentile: number): string {
 export default function AIBenchmarkPage() {
   // ── State ────────────────────────────────────────────────────────────────
   const [selectedClient, setSelectedClient] = useState<string>('all');
-  const [clients, setClients] = useState<ClientBenchmark[]>([]);
+  const { clients: rawClients, loading: clientsLoading, error: clientsError } = useClients();
   const [metrics, setMetrics] = useState<BenchmarkMetric[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortColumn, setSortColumn] = useState<string>('overallPercentile');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
+  // Map tenant-scoped clients (from useClients hook) to the ClientBenchmark
+  // shape used by the table + dropdown. Per-client benchmark fields default to
+  // 0 — the firm-wide aggregates from /api/ai-benchmark populate the metrics
+  // array below.
+  const clients: ClientBenchmark[] = useMemo(() => rawClients.map((c) => ({
+    id: String(c.id ?? ''),
+    name: String(c.tradeName ?? c.legalName ?? 'Client'),
+    complianceScore: Number(c.healthScore ?? 0),
+    filingTimeliness: 0,
+    gstVolume: 0,
+    riskScore: 0,
+    overallPercentile: 0,
+  })), [rawClients]);
+
   // ── Fetch data ───────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [clientsRes, benchmarkRes] = await Promise.all([
-        fetch('/api/clients'),
-        fetch('/api/ai-benchmark'),
-      ]);
-      const mappedClients: ClientBenchmark[] = [];
-      if (clientsRes.ok) {
-        const clientsData = await clientsRes.json();
-        const list = Array.isArray(clientsData) ? clientsData : Array.isArray(clientsData.clients) ? clientsData.clients : [];
-        for (const c of list) {
-          mappedClients.push({
-            id: String(c.id ?? ''),
-            name: String(c.tradeName ?? c.legalName ?? c.name ?? 'Client'),
-            complianceScore: Number(c.complianceScore ?? c.healthScore ?? 0),
-            filingTimeliness: Number(c.filingTimeliness ?? 0),
-            gstVolume: Number(c.gstVolume ?? 0),
-            riskScore: Number(c.riskScore ?? 0),
-            overallPercentile: Number(c.overallPercentile ?? 0),
-          });
-        }
-      }
-      setClients(mappedClients);
+      const benchmarkRes = await fetch('/api/ai-benchmark');
       if (benchmarkRes.ok) {
         const data = await benchmarkRes.json();
         if (Array.isArray(data.aggregateMetrics)) {
@@ -284,7 +280,6 @@ export default function AIBenchmarkPage() {
         setMetrics([]);
       }
     } catch {
-      setClients([]);
       setMetrics([]);
     } finally {
       setLoading(false);
@@ -404,11 +399,21 @@ export default function AIBenchmarkPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Clients (Firm Average)</SelectItem>
-                {clients.map(client => (
-                  <SelectItem key={client.id} value={client.id}>
-                    {client.name}
-                  </SelectItem>
-                ))}
+                {clientsLoading ? (
+                  <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading clients…
+                  </div>
+                ) : clientsError ? (
+                  <div className="px-2 py-3 text-xs text-red-600">{clientsError}</div>
+                ) : clients.length === 0 ? (
+                  <div className="px-2 py-3 text-xs text-muted-foreground">No clients found</div>
+                ) : (
+                  clients.map(client => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
             {selectedClient !== 'all' && (

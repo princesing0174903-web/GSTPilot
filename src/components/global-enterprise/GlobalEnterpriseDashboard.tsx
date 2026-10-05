@@ -38,6 +38,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PremiumPageLoader } from '@/components/ui/premium-loading';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -391,12 +392,7 @@ function ScoreBadge({ score, suffix = '/100' }: { score: number; suffix?: string
 }
 
 function LoadingState({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-      <Loader2 className="h-8 w-8 animate-spin mb-3 text-emerald-500" />
-      <p className="text-sm">{label}…</p>
-    </div>
-  );
+  return <PremiumPageLoader label={label} />;
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {

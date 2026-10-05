@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot AI Production Pipeline™ — useGenerationJobs() Hook
@@ -347,7 +348,7 @@ function simUpdateDraft(draftId: string, patch: UpdateDraftInput): boolean {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useGenerationJobs(draftIdFilter?: string | null): UseGenerationJobsResult {
-  const { organization, profile } = useOrg();
+  const { organization, profile, isPreviewMode } = useOrg();
   const { user } = useAuth();
   const orgId = organization?.id ?? null;
 
@@ -370,11 +371,12 @@ export function useGenerationJobs(draftIdFilter?: string | null): UseGenerationJ
     setLoading(true);
     setError(null);
 
-    if (!orgId) {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setJobs([]);
       setDrafts([]);
       setVersions([]);
       setLoading(false);
+      setPreviewMode(true);
       return;
     }
 
@@ -438,11 +440,11 @@ export function useGenerationJobs(draftIdFilter?: string | null): UseGenerationJ
       unsubJobsRef.current = null;
       simUnsubRef.current = null;
     };
-  }, [orgId, retryNonce]);
+  }, [orgId, isPreviewMode, retryNonce]);
 
   // ─── Subscribe to drafts ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!orgId) {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setDrafts([]);
       return;
     }
@@ -461,11 +463,11 @@ export function useGenerationJobs(draftIdFilter?: string | null): UseGenerationJ
       setDrafts([]);
       return;
     }
-  }, [orgId, previewMode, retryNonce]);
+  }, [orgId, isPreviewMode, previewMode, retryNonce]);
 
   // ─── Subscribe to versions ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!orgId) {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setVersions([]);
       return;
     }
@@ -484,7 +486,7 @@ export function useGenerationJobs(draftIdFilter?: string | null): UseGenerationJ
       setVersions([]);
       return;
     }
-  }, [orgId, previewMode, draftIdFilter, retryNonce]);
+  }, [orgId, isPreviewMode, previewMode, draftIdFilter, retryNonce]);
 
   // ─── Stats (recomputed on every jobs change) ────────────────────────────────
   const stats = useMemo(() => computeStatsFromJobs(jobs), [jobs]);

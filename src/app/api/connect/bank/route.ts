@@ -99,34 +99,44 @@ export async function POST(request: NextRequest) {
       connectionId = conn.id;
     }
 
-    // Store transactions as bank_tx records
-    for (const tx of transactions) {
-      await db.syncedRecord.create({
-        data: {
-          connectionId,
-          userId,
-          sourceType: 'bank_tx',
-          externalId: tx.transactionId,
-          title: tx.description,
-          amount: tx.amount,
-          date: tx.date,
-          rawData: JSON.stringify({
-            type: tx.type,
-            balanceAfter: tx.balanceAfter,
-            category: tx.category,
-            description: tx.description,
-          }),
-          category: tx.type === 'credit' ? 'credit' : 'debit',
-          processed: true,
-        },
-      }).catch(() => {});
+    // Store transactions as bank_tx records.
+    // (Was N+1: sequential create per transaction. Now batched via createMany
+    // with chunking — the graph-event side-effect loop is kept separate.)
+    if (transactions.length > 0) {
+      const txRows = transactions.map((tx) => ({
+        connectionId,
+        userId,
+        sourceType: 'bank_tx',
+        externalId: tx.transactionId,
+        title: tx.description,
+        amount: tx.amount,
+        date: tx.date,
+        rawData: JSON.stringify({
+          type: tx.type,
+          balanceAfter: tx.balanceAfter,
+          category: tx.category,
+          description: tx.description,
+        }),
+        category: tx.type === 'credit' ? 'credit' : 'debit',
+        processed: true,
+      }));
+      for (let i = 0; i < txRows.length; i += 100) {
+        try {
+          await db.syncedRecord.createMany({
+            data: txRows.slice(i, i + 100),
+            skipDuplicates: true,
+          });
+        } catch { /* non-fatal per-row errors swallowed */ }
+      }
       // ── Real Business Graph Engine™ — live event per bank transaction ──
-      graphEvents.transactionRecorded(
-        tx.transactionId || `banktx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        tx.description,
-        tx.amount,
-        tx.type === 'credit' ? 'credit' : 'debit',
-      );
+      for (const tx of transactions) {
+        graphEvents.transactionRecorded(
+          tx.transactionId || `banktx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          tx.description,
+          tx.amount,
+          tx.type === 'credit' ? 'credit' : 'debit',
+        );
+      }
     }
 
     // ── Real Business Graph Engine™ — bank connection builds graph; log + refresh ──

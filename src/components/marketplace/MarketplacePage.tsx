@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import {
   Store, Search, Star, Download, FileText, Workflow,
   BarChart3, Check, ChevronRight, Shield, Clock,
@@ -152,341 +153,34 @@ function getIcon(name: string): React.ElementType {
 // SAMPLE DATA — 36 Marketplace Items
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const MARKETPLACE_ITEMS: MarketplaceItem[] = [
-  // Templates (6)
-  {
-    id: 'tpl-1', name: 'GSTR-3B Auto-Fill Template', description: 'Pre-formatted GSTR-3B with auto-calculation of tax liability and ITC.',
-    longDescription: 'Comprehensive GSTR-3B template with built-in formulas for auto-calculating tax liability, Input Tax Credit, and net payable amount. Includes validation checks, month-over-month comparison, and export to JSON format for portal upload. Trusted by 5000+ CAs across India.',
-    category: 'templates', icon: 'FileText', rating: 4.8, reviewCount: 342, downloads: 5840, price: 'Free',
-    version: '3.2.1', author: 'Sharma & Associates', authorType: 'CA Firm', lastUpdated: '2025-12-15',
-    tags: ['GSTR-3B', 'ITC', 'Auto-fill'], installed: true, featured: true,
-    subscriptionPrice: 0, annualPrice: 0, sellerVerified: true, totalRevenue: 0, monthlyViews: 8200,
-  },
-  {
-    id: 'tpl-2', name: 'GST Notice Response Kit', description: 'Professional response templates for all GST notice types.',
-    longDescription: 'Complete kit with 25+ professionally drafted response templates covering SCN, Assessment Notice, Demand Notice, and more. Each template includes legal references, formatting guidelines, and filling instructions. Updated for 2025 GST amendments.',
-    category: 'templates', icon: 'FileText', rating: 4.6, reviewCount: 198, downloads: 3210, price: 'Pro',
-    version: '2.1.0', author: 'Patel Tax Solutions', authorType: 'Tax Consultant', lastUpdated: '2026-01-08',
-    tags: ['Notices', 'Response', 'Legal'], installed: false, featured: true,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 845000, monthlyViews: 5600,
-  },
-  {
-    id: 'tpl-3', name: 'E-Way Bill Formatter', description: 'Auto-format e-way bill data with distance calculation and validity tracker.',
-    longDescription: 'Smart e-way bill template that auto-calculates distance between pin codes, tracks validity period, and formats data for bulk generation. Includes state-specific compliance checks and transporter assignment templates.',
-    category: 'templates', icon: 'Package', rating: 4.3, reviewCount: 87, downloads: 1920, price: 'Free',
-    version: '1.8.4', author: 'Mehta Accounting Services', authorType: 'Accountant', lastUpdated: '2025-11-20',
-    tags: ['E-Way Bill', 'Transport', 'Distance'], installed: false, featured: false,
-    subscriptionPrice: 0, annualPrice: 0, sellerVerified: true, totalRevenue: 0, monthlyViews: 2400,
-  },
-  {
-    id: 'tpl-4', name: 'GST Audit Report Template', description: 'Comprehensive audit report format compliant with GST Audit provisions.',
-    longDescription: 'Professional GST audit report template following Section 2(13) and Rule 80(3) format. Includes reconciliation statements, ITC verification sections, and certified true copy format. Approved by ICAI standards.',
-    category: 'templates', icon: 'FileText', rating: 4.7, reviewCount: 156, downloads: 2890, price: 'Pro',
-    version: '4.0.2', author: 'Kumar GST Consultancy', authorType: 'GST Expert', lastUpdated: '2026-02-01',
-    tags: ['Audit', 'Reconciliation', 'ICAI'], installed: true, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 620000, monthlyViews: 4100,
-  },
-  {
-    id: 'tpl-5', name: 'Annual Return GSTR-9 Pack', description: 'All GSTR-9 variants with auto-population from GSTR-1 and GSTR-3B data.',
-    longDescription: 'Complete annual return package covering GSTR-9, GSTR-9A, and GSTR-9C. Auto-populates from GSTR-1 and GSTR-3B data, cross-validates figures, and highlights discrepancies. Includes HSN-wise summary and ITC reversal worksheets.',
-    category: 'templates', icon: 'FileText', rating: 4.5, reviewCount: 221, downloads: 4100, price: 'Pro',
-    version: '3.1.0', author: 'Singh Legal Associates', authorType: 'Lawyer', lastUpdated: '2025-12-28',
-    tags: ['GSTR-9', 'Annual Return', 'HSN'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 540000, monthlyViews: 3800,
-  },
-  {
-    id: 'tpl-6', name: 'LUT & Bond Template Kit', description: 'Ready-to-use LUT and Bond templates for exporters under GST.',
-    longDescription: 'Complete set of Letter of Undertaking (LUT) and Bond templates for exporters. Covers all categories of exports, including deemed exports and SEZ supplies. Auto-fills entity details from GSTIN lookup.',
-    category: 'templates', icon: 'Globe', rating: 4.2, reviewCount: 64, downloads: 980, price: 'Free',
-    version: '1.5.3', author: 'Agarwal & Co', authorType: 'CA Firm', lastUpdated: '2025-10-05',
-    tags: ['LUT', 'Export', 'Bond'], installed: false, featured: false,
-    subscriptionPrice: 0, annualPrice: 0, sellerVerified: false, totalRevenue: 0, monthlyViews: 1200,
-  },
-
-  // Automations (6)
-  {
-    id: 'aut-1', name: 'GSTR-1 Filing Automation', description: 'End-to-end automation from sales data to GSTR-1 filing with error checks.',
-    longDescription: 'Fully automated workflow that extracts sales data, validates against GST rules, generates GSTR-1 JSON, and pre-fills the portal. Includes error detection for duplicate invoices, rate mismatches, and HSN validation. Supports bulk filing for multiple GSTINs.',
-    category: 'automations', icon: 'Workflow', rating: 4.9, reviewCount: 487, downloads: 7200, price: 'Enterprise',
-    version: '5.0.1', author: 'Sharma & Associates', authorType: 'CA Firm', lastUpdated: '2026-02-20',
-    tags: ['GSTR-1', 'Automation', 'Bulk Filing'], installed: true, featured: true,
-    subscriptionPrice: 1999, annualPrice: 19990, sellerVerified: true, totalRevenue: 2850000, monthlyViews: 12000,
-  },
-  {
-    id: 'aut-2', name: 'ITC Reconciliation Engine', description: 'Auto-match ITC claims with GSTR-2B and flag discrepancies.',
-    longDescription: 'Powerful reconciliation engine that matches purchase register ITC claims with GSTR-2B data. Automatically identifies unmatched, matched, and partially matched entries. Generates discrepancy reports and suggests corrective actions. Saves 15+ hours per month.',
-    category: 'automations', icon: 'Workflow', rating: 4.7, reviewCount: 298, downloads: 4560, price: 'Pro',
-    version: '3.4.0', author: 'Patel Tax Solutions', authorType: 'Tax Consultant', lastUpdated: '2026-01-15',
-    tags: ['ITC', 'Reconciliation', 'GSTR-2B'], installed: false, featured: true,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 980000, monthlyViews: 7500,
-  },
-  {
-    id: 'aut-3', name: 'E-Invoice Bulk Generator', description: 'Generate e-invoices in bulk with IRN validation and auto-cancel.',
-    longDescription: 'Bulk e-invoice generation tool with direct NIC API integration. Supports auto-generation on invoice creation, bulk upload via CSV, IRN validation, and auto-cancellation within 24 hours. Handles B2B, SEZ, and deemed export invoices.',
-    category: 'automations', icon: 'Zap', rating: 4.6, reviewCount: 176, downloads: 3400, price: 'Pro',
-    version: '2.8.3', author: 'Mehta Accounting Services', authorType: 'Accountant', lastUpdated: '2026-01-22',
-    tags: ['E-Invoice', 'IRN', 'NIC API'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 720000, monthlyViews: 5200,
-  },
-  {
-    id: 'aut-4', name: 'Payment Reminder Bot', description: 'Automated payment reminders with GST impact calculations.',
-    longDescription: 'Smart payment reminder system that sends automated emails and SMS to clients based on invoice aging. Calculates interest under Section 50, shows GST impact of delayed payments, and escalates reminders automatically.',
-    category: 'automations', icon: 'Workflow', rating: 4.1, reviewCount: 92, downloads: 1680, price: 'Free',
-    version: '1.3.7', author: 'Reddy Tax Advisors', authorType: 'Tax Consultant', lastUpdated: '2025-09-14',
-    tags: ['Payment', 'Reminder', 'Interest'], installed: false, featured: false,
-    subscriptionPrice: 0, annualPrice: 0, sellerVerified: false, totalRevenue: 0, monthlyViews: 1800,
-  },
-  {
-    id: 'aut-5', name: 'Return Deadline Tracker', description: 'Auto-track all GST return deadlines with client-wise calendar.',
-    longDescription: 'Comprehensive deadline tracking system that monitors all GST return due dates, generates client-wise calendars, sends advance notifications, and highlights missed filings. Supports composite and regular taxpayers.',
-    category: 'automations', icon: 'CreditCard', rating: 4.4, reviewCount: 134, downloads: 2240, price: 'Free',
-    version: '2.0.5', author: 'Kumar GST Consultancy', authorType: 'GST Expert', lastUpdated: '2025-12-10',
-    tags: ['Deadline', 'Calendar', 'Tracking'], installed: true, featured: false,
-    subscriptionPrice: 0, annualPrice: 0, sellerVerified: true, totalRevenue: 0, monthlyViews: 3200,
-  },
-  {
-    id: 'aut-6', name: 'GST Refund Workflow', description: 'Automated refund application workflow with document checklist and tracking.',
-    longDescription: 'Complete refund workflow automation from eligibility check to ARN generation. Includes document checklist, auto-filling of RFD-01 through RFD-11, status tracking, and deficiency letter management. Supports all refund categories.',
-    category: 'automations', icon: 'Workflow', rating: 4.5, reviewCount: 108, downloads: 1890, price: 'Pro',
-    version: '2.3.1', author: 'Singh Legal Associates', authorType: 'Lawyer', lastUpdated: '2025-11-30',
-    tags: ['Refund', 'RFD-01', 'Workflow'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 410000, monthlyViews: 2900,
-  },
-
-  // AI Agents (6)
-  {
-    id: 'ai-1', name: 'GST Query Resolver', description: 'AI assistant trained on GST law, rulings, and circulars for instant answers.',
-    longDescription: 'Advanced AI agent trained on 5000+ GST circulars, notifications, advance rulings, and case laws. Provides instant, citation-backed answers to GST queries. Supports natural language questions and gives relevant section references. Updated monthly with latest amendments.',
-    category: 'ai-agents', icon: 'Bot', rating: 4.9, reviewCount: 612, downloads: 8900, price: 'Enterprise',
-    version: '6.1.0', author: 'Sharma & Associates', authorType: 'CA Firm', lastUpdated: '2026-02-25',
-    tags: ['AI', 'GST Law', 'Circulars'], installed: true, featured: true,
-    subscriptionPrice: 1999, annualPrice: 19990, sellerVerified: true, totalRevenue: 4200000, monthlyViews: 15000,
-  },
-  {
-    id: 'ai-2', name: 'HSN Code Finder', description: 'AI-powered HSN/SAC code lookup with rate recommendation.',
-    longDescription: 'Intelligent HSN/SAC code finder that suggests the correct code based on product/service description. Shows applicable GST rates, related HSN codes, and common classification disputes. Covers 18,000+ HSN codes and 3,000+ SAC codes.',
-    category: 'ai-agents', icon: 'Bot', rating: 4.7, reviewCount: 389, downloads: 6100, price: 'Pro',
-    version: '4.2.0', author: 'Patel Tax Solutions', authorType: 'Tax Consultant', lastUpdated: '2026-02-10',
-    tags: ['HSN', 'SAC', 'Classification'], installed: false, featured: true,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 1850000, monthlyViews: 9800,
-  },
-  {
-    id: 'ai-3', name: 'Invoice Validator AI', description: 'AI that validates GST invoices for compliance before filing.',
-    longDescription: 'Smart invoice validator that checks every GST invoice against 50+ compliance parameters. Detects rate errors, missing fields, incorrect calculations, and potential fraud markers. Provides fix suggestions and confidence scores for each validation.',
-    category: 'ai-agents', icon: 'Bot', rating: 4.6, reviewCount: 234, downloads: 3800, price: 'Pro',
-    version: '3.0.4', author: 'Kumar GST Consultancy', authorType: 'GST Expert', lastUpdated: '2026-01-28',
-    tags: ['Invoice', 'Validation', 'Compliance'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 890000, monthlyViews: 6000,
-  },
-  {
-    id: 'ai-4', name: 'Notice Analysis Agent', description: 'AI-powered analysis of GST notices with recommended response strategy.',
-    longDescription: 'Specialized AI agent that analyzes GST notices, identifies the core issue, relevant legal provisions, and generates a recommended response strategy. Cross-references with similar case outcomes and circulars. Reduces notice response time by 70%.',
-    category: 'ai-agents', icon: 'Bot', rating: 4.8, reviewCount: 167, downloads: 2400, price: 'Enterprise',
-    version: '2.5.1', author: 'Singh Legal Associates', authorType: 'Lawyer', lastUpdated: '2026-02-05',
-    tags: ['Notice', 'Analysis', 'Legal'], installed: false, featured: false,
-    subscriptionPrice: 1999, annualPrice: 19990, sellerVerified: true, totalRevenue: 1350000, monthlyViews: 4500,
-  },
-  {
-    id: 'ai-5', name: 'GST Return Reviewer', description: 'AI that reviews filed returns for errors and optimization opportunities.',
-    longDescription: 'Intelligent return reviewer that analyzes filed GST returns for errors, missed ITC claims, and optimization opportunities. Provides a health score, identifies high-risk areas, and suggests corrective actions. Supports all return types.',
-    category: 'ai-agents', icon: 'Sparkles', rating: 4.5, reviewCount: 143, downloads: 2100, price: 'Pro',
-    version: '2.1.3', author: 'Agarwal & Co', authorType: 'CA Firm', lastUpdated: '2025-12-18',
-    tags: ['Review', 'Optimization', 'ITC'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 560000, monthlyViews: 3400,
-  },
-  {
-    id: 'ai-6', name: 'Tax Planning Advisor', description: 'AI advisor for GST tax planning and structure optimization.',
-    longDescription: 'Strategic AI advisor that analyzes business structures for GST optimization. Provides recommendations on registration type, composition vs regular scheme, ITC eligibility, and supply chain restructuring. Updated for 2026 budget changes.',
-    category: 'ai-agents', icon: 'Bot', rating: 4.4, reviewCount: 98, downloads: 1450, price: 'Enterprise',
-    version: '1.8.0', author: 'Joshi Financial Services', authorType: 'Accountant', lastUpdated: '2026-01-05',
-    tags: ['Planning', 'Optimization', 'Structure'], installed: false, featured: false,
-    subscriptionPrice: 1999, annualPrice: 19990, sellerVerified: false, totalRevenue: 780000, monthlyViews: 2200,
-  },
-
-  // Compliance Packs (6)
-  {
-    id: 'cmp-1', name: 'Complete Compliance Suite', description: 'All-in-one compliance package for regular taxpayers with monthly tracking.',
-    longDescription: 'Comprehensive compliance package covering all monthly, quarterly, and annual filing requirements. Includes return filing checklists, document management, deadline tracking, penalty calculator, and compliance score dashboard. Suitable for businesses with turnover up to ₹5 Cr.',
-    category: 'compliance-packs', icon: 'ShieldCheck', rating: 4.8, reviewCount: 421, downloads: 6300, price: 'Enterprise',
-    version: '5.2.0', author: 'Sharma & Associates', authorType: 'CA Firm', lastUpdated: '2026-02-18',
-    tags: ['Compliance', 'Monthly', 'Tracking'], installed: true, featured: true,
-    subscriptionPrice: 1999, annualPrice: 19990, sellerVerified: true, totalRevenue: 3600000, monthlyViews: 11000,
-  },
-  {
-    id: 'cmp-2', name: 'E-Commerce Compliance Pack', description: 'Compliance toolkit for e-commerce operators and marketplace sellers.',
-    longDescription: 'Specialized compliance package for e-commerce businesses. Covers TCS compliance, GSTR-8 filing, marketplace fee reconciliation, multi-state registration management, and quarterly return reconciliation. Includes Flipkart, Amazon, and Meesho integrations.',
-    category: 'compliance-packs', icon: 'ShieldCheck', rating: 4.5, reviewCount: 178, downloads: 2890, price: 'Pro',
-    version: '3.1.2', author: 'Patel Tax Solutions', authorType: 'Tax Consultant', lastUpdated: '2026-01-20',
-    tags: ['E-Commerce', 'TCS', 'GSTR-8'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 670000, monthlyViews: 4200,
-  },
-  {
-    id: 'cmp-3', name: 'Importer Compliance Kit', description: 'GST compliance package for importers with customs integration.',
-    longDescription: 'Complete compliance solution for importers. Covers IGST payment on imports, customs duty reconciliation, import invoice matching, refund of IGST paid on exports, and compliance with customs-billed GST. Includes AD Code and ICEGATE integration.',
-    category: 'compliance-packs', icon: 'Globe', rating: 4.3, reviewCount: 96, downloads: 1340, price: 'Pro',
-    version: '2.4.0', author: 'Mehta Accounting Services', authorType: 'Accountant', lastUpdated: '2025-11-25',
-    tags: ['Import', 'IGST', 'Customs'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 380000, monthlyViews: 1900,
-  },
-  {
-    id: 'cmp-4', name: 'SEZ Compliance Bundle', description: 'Compliance tools for Special Economic Zone units and developers.',
-    longDescription: 'Tailored compliance package for SEZ units and developers. Covers inter-SEZ supplies, DTA sales, LUT management, refund claims, and SEZ-specific return filing requirements. Includes monthly compliance calendar and LOI tracking.',
-    category: 'compliance-packs', icon: 'ShieldCheck', rating: 4.2, reviewCount: 72, downloads: 980, price: 'Enterprise',
-    version: '1.9.1', author: 'Kumar GST Consultancy', authorType: 'GST Expert', lastUpdated: '2025-12-05',
-    tags: ['SEZ', 'DTA', 'LUT'], installed: false, featured: false,
-    subscriptionPrice: 1999, annualPrice: 19990, sellerVerified: true, totalRevenue: 490000, monthlyViews: 1500,
-  },
-  {
-    id: 'cmp-5', name: 'Composition Scheme Pack', description: 'Simplified compliance tools for composition scheme taxpayers.',
-    longDescription: 'Easy-to-use compliance package for composition dealers. Covers CMP-08 quarterly payment, GSTR-4 annual return, turnover tracking, and scheme eligibility checker. Includes transition tools for switching between regular and composition schemes.',
-    category: 'compliance-packs', icon: 'ShieldCheck', rating: 4.4, reviewCount: 112, downloads: 1780, price: 'Free',
-    version: '2.0.3', author: 'Reddy Tax Advisors', authorType: 'Tax Consultant', lastUpdated: '2025-10-20',
-    tags: ['Composition', 'CMP-08', 'GSTR-4'], installed: false, featured: false,
-    subscriptionPrice: 0, annualPrice: 0, sellerVerified: false, totalRevenue: 0, monthlyViews: 2300,
-  },
-  {
-    id: 'cmp-6', name: 'RCM Compliance Tracker', description: 'Track and manage all Reverse Charge Mechanism obligations.',
-    longDescription: 'Dedicated RCM compliance tracker covering all 15+ RCM categories. Auto-detects RCM applicability based on supplier and service type, generates payment schedules, and tracks ITC eligibility on RCM paid. Includes GTA, legal services, and director remuneration modules.',
-    category: 'compliance-packs', icon: 'ShieldCheck', rating: 4.6, reviewCount: 145, downloads: 2060, price: 'Pro',
-    version: '2.6.0', author: 'Singh Legal Associates', authorType: 'Lawyer', lastUpdated: '2026-02-02',
-    tags: ['RCM', 'Reverse Charge', 'GTA'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 520000, monthlyViews: 3100,
-  },
-
-  // Dashboards (6)
-  {
-    id: 'dsh-1', name: 'GST Analytics Dashboard', description: 'Real-time GST analytics with revenue trends and compliance scoring.',
-    longDescription: 'Comprehensive analytics dashboard showing real-time GST revenue trends, compliance scores, filing status across all GSTINs, and industry benchmarking. Includes customizable widgets, PDF export, and email scheduling for weekly reports.',
-    category: 'dashboards', icon: 'BarChart3', rating: 4.7, reviewCount: 356, downloads: 5200, price: 'Pro',
-    version: '4.5.0', author: 'Sharma & Associates', authorType: 'CA Firm', lastUpdated: '2026-02-22',
-    tags: ['Analytics', 'Revenue', 'Scoring'], installed: true, featured: true,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 1580000, monthlyViews: 8500,
-  },
-  {
-    id: 'dsh-2', name: 'ITC Dashboard Pro', description: 'Track ITC claims, utilization, and blocked credits visually.',
-    longDescription: 'Visual ITC management dashboard showing claimed vs available ITC, utilization trends across CGST/SGST/IGST, blocked credit analysis under Section 17(5), and ITC reversal tracking. Includes monthly ITC optimization recommendations.',
-    category: 'dashboards', icon: 'BarChart3', rating: 4.5, reviewCount: 189, downloads: 3100, price: 'Pro',
-    version: '3.2.1', author: 'Patel Tax Solutions', authorType: 'Tax Consultant', lastUpdated: '2026-01-12',
-    tags: ['ITC', 'Utilization', 'Blocked Credit'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 820000, monthlyViews: 4800,
-  },
-  {
-    id: 'dsh-3', name: 'Multi-GSTIN Control Panel', description: 'Centralized dashboard for managing compliance across multiple GSTINs.',
-    longDescription: 'Enterprise-grade dashboard for businesses with multiple GSTINs. Shows compliance status across all registrations, consolidated revenue view, inter-unit transfer tracking, and unified return filing calendar. Supports up to 100 GSTINs.',
-    category: 'dashboards', icon: 'LayoutDashboard', rating: 4.8, reviewCount: 234, downloads: 2800, price: 'Enterprise',
-    version: '3.8.0', author: 'Agarwal & Co', authorType: 'CA Firm', lastUpdated: '2026-02-08',
-    tags: ['Multi-GSTIN', 'Enterprise', 'Centralized'], installed: false, featured: false,
-    subscriptionPrice: 1999, annualPrice: 19990, sellerVerified: true, totalRevenue: 1100000, monthlyViews: 3800,
-  },
-  {
-    id: 'dsh-4', name: 'Vendor Compliance View', description: 'Monitor vendor GST compliance and ITC risk in real-time.',
-    longDescription: 'Vendor-focused dashboard that tracks supplier GST registration status, filing regularity, and ITC risk levels. Shows potential ITC loss due to vendor non-compliance and sends alerts when vendor registration is cancelled or suspended.',
-    category: 'dashboards', icon: 'Eye', rating: 4.3, reviewCount: 98, downloads: 1560, price: 'Pro',
-    version: '2.1.4', author: 'Mehta Accounting Services', authorType: 'Accountant', lastUpdated: '2025-12-22',
-    tags: ['Vendor', 'ITC Risk', 'Monitoring'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 430000, monthlyViews: 2100,
-  },
-  {
-    id: 'dsh-5', name: 'Cash Flow GST View', description: 'GST impact on cash flow with payment scheduling and forecasting.',
-    longDescription: 'Financial planning dashboard showing GST cash flow impact. Includes tax liability forecasting, payment scheduling, working capital impact analysis, and seasonal trend visualization. Helps businesses plan for GST payments and optimize cash flow.',
-    category: 'dashboards', icon: 'CreditCard', rating: 4.4, reviewCount: 121, downloads: 1980, price: 'Pro',
-    version: '2.5.2', author: 'Joshi Financial Services', authorType: 'Accountant', lastUpdated: '2026-01-18',
-    tags: ['Cash Flow', 'Forecasting', 'Payment'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: false, totalRevenue: 350000, monthlyViews: 2600,
-  },
-  {
-    id: 'dsh-6', name: 'Audit Readiness Dashboard', description: 'Pre-audit compliance score with gap analysis and remediation tracking.',
-    longDescription: 'Audit preparation dashboard that provides a comprehensive readiness score. Identifies compliance gaps, tracks remediation progress, and generates audit-ready documentation. Includes department-specific checklists and AAR references.',
-    category: 'dashboards', icon: 'BarChart3', rating: 4.6, reviewCount: 155, downloads: 2340, price: 'Enterprise',
-    version: '3.0.0', author: 'Kumar GST Consultancy', authorType: 'GST Expert', lastUpdated: '2026-02-15',
-    tags: ['Audit', 'Readiness', 'Gap Analysis'], installed: false, featured: false,
-    subscriptionPrice: 1999, annualPrice: 19990, sellerVerified: true, totalRevenue: 710000, monthlyViews: 3500,
-  },
-
-  // Custom Reports (6)
-  {
-    id: 'rpt-1', name: 'ITC Reconciliation Report', description: 'Detailed ITC mismatch report with auto-classification and fix suggestions.',
-    longDescription: 'Comprehensive ITC reconciliation report generator that compares GSTR-2B with purchase register. Auto-classifies mismatches into categories (duplicate, rate difference, missing in GSTR-2B, etc.) and provides suggested corrective actions with timelines.',
-    category: 'custom-reports', icon: 'FileSpreadsheet', rating: 4.7, reviewCount: 267, downloads: 4200, price: 'Pro',
-    version: '4.1.0', author: 'Sharma & Associates', authorType: 'CA Firm', lastUpdated: '2026-02-12',
-    tags: ['ITC', 'Reconciliation', 'Mismatch'], installed: false, featured: true,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 1250000, monthlyViews: 6800,
-  },
-  {
-    id: 'rpt-2', name: 'GSTR-1 vs 3B Variance', description: 'Identify and explain variances between GSTR-1 and GSTR-3B filings.',
-    longDescription: 'Automated variance analysis report between GSTR-1 and GSTR-3B data. Highlights discrepancies in taxable value, tax amounts, and ITC claims. Provides explanations for common variance patterns and generates summary for department review.',
-    category: 'custom-reports', icon: 'FileSpreadsheet', rating: 4.5, reviewCount: 178, downloads: 3100, price: 'Pro',
-    version: '3.0.2', author: 'Patel Tax Solutions', authorType: 'Tax Consultant', lastUpdated: '2026-01-25',
-    tags: ['Variance', 'GSTR-1', 'GSTR-3B'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 680000, monthlyViews: 4500,
-  },
-  {
-    id: 'rpt-3', name: 'HSN Summary Generator', description: 'Auto-generate HSN-wise summary for returns and audit purposes.',
-    longDescription: 'Automated HSN summary generator that aggregates invoice data by HSN code, creates rate-wise summaries, and formats output for GSTR-1 and GSTR-9 HSN tables. Validates HSN code lengths and flags potential classification issues.',
-    category: 'custom-reports', icon: 'FileSpreadsheet', rating: 4.3, reviewCount: 94, downloads: 1890, price: 'Free',
-    version: '2.2.1', author: 'Mehta Accounting Services', authorType: 'Accountant', lastUpdated: '2025-11-15',
-    tags: ['HSN', 'Summary', 'Audit'], installed: false, featured: false,
-    subscriptionPrice: 0, annualPrice: 0, sellerVerified: true, totalRevenue: 0, monthlyViews: 2200,
-  },
-  {
-    id: 'rpt-4', name: 'Tax Liability Forecast', description: 'Projected GST liability based on sales pipeline and historical data.',
-    longDescription: 'Predictive report that forecasts upcoming GST liability based on current sales pipeline, historical filing patterns, and seasonal trends. Includes scenario analysis for best/worst case and recommended tax planning strategies.',
-    category: 'custom-reports', icon: 'FileSpreadsheet', rating: 4.6, reviewCount: 132, downloads: 2100, price: 'Enterprise',
-    version: '2.7.0', author: 'Kumar GST Consultancy', authorType: 'GST Expert', lastUpdated: '2026-02-20',
-    tags: ['Forecast', 'Liability', 'Planning'], installed: false, featured: false,
-    subscriptionPrice: 1999, annualPrice: 19990, sellerVerified: true, totalRevenue: 590000, monthlyViews: 3200,
-  },
-  {
-    id: 'rpt-5', name: 'Annual Compliance Report', description: 'Year-end compliance summary with filing history and penalty analysis.',
-    longDescription: 'Comprehensive annual compliance report covering all return filing history, late filing penalties, ITC utilization summary, and compliance score trend. Includes peer comparison and recommendations for the next fiscal year. Board-ready format.',
-    category: 'custom-reports', icon: 'FileSpreadsheet', rating: 4.4, reviewCount: 108, downloads: 1780, price: 'Pro',
-    version: '3.3.1', author: 'Singh Legal Associates', authorType: 'Lawyer', lastUpdated: '2025-12-30',
-    tags: ['Annual', 'Compliance', 'Penalty'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: true, totalRevenue: 470000, monthlyViews: 2700,
-  },
-  {
-    id: 'rpt-6', name: 'State-Wise GST Report', description: 'Breakdown of GST liability and collections by state for multi-state businesses.',
-    longDescription: 'State-wise GST analysis report for businesses operating across multiple states. Shows CGST, SGST, and IGST breakdown by state, inter-state supply analysis, and state-specific compliance requirements. Essential for pan-India businesses.',
-    category: 'custom-reports', icon: 'FileSpreadsheet', rating: 4.2, reviewCount: 76, downloads: 1200, price: 'Pro',
-    version: '1.6.0', author: 'Reddy Tax Advisors', authorType: 'Tax Consultant', lastUpdated: '2025-10-30',
-    tags: ['State-wise', 'Multi-state', 'IGST'], installed: false, featured: false,
-    subscriptionPrice: 499, annualPrice: 4990, sellerVerified: false, totalRevenue: 290000, monthlyViews: 1600,
-  },
-];
+// MARKETPLACE_ITEMS — previously a 300-line hardcoded mock catalog of 30+ fake
+// marketplace items (templates, automations, AI agents, reports) with fabricated
+// ratings / downloads / revenue. Removed during mock-data audit (Task 7).
+// The marketplace grid now renders an empty state until a real marketplace
+// catalog API is wired.
+const MARKETPLACE_ITEMS: MarketplaceItem[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SAMPLE REVIEWS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SAMPLE_REVIEWS: Review[] = [
-  { id: 'r1', author: 'Rajesh Gupta', rating: 5, comment: 'Excellent tool! Saved me hours of manual work every month. The auto-calculation is spot-on and the validation checks are very thorough.', date: '15/02/2026', helpful: 24 },
-  { id: 'r2', author: 'Priya Sharma', rating: 4, comment: 'Very useful for our practice. Would love to see more customization options for the output format. Overall a great product.', date: '10/02/2026', helpful: 18 },
-  { id: 'r3', author: 'Anand Patel', rating: 5, comment: 'Best GST tool in the market. We have been using it for 6 months and the accuracy is impressive. Customer support is also very responsive.', date: '05/02/2026', helpful: 31 },
-  { id: 'r4', author: 'Kavitha Nair', rating: 4, comment: 'Good product with solid features. The learning curve is minimal and the interface is intuitive. Some edge cases could be handled better.', date: '28/01/2026', helpful: 12 },
-  { id: 'r5', author: 'Suresh Reddy', rating: 3, comment: 'Decent tool but needs improvement in bulk processing. Works well for individual filings but struggles with large datasets.', date: '20/01/2026', helpful: 8 },
-  { id: 'r6', author: 'Deepa Iyer', rating: 5, comment: 'A must-have for every CA firm. The automation features are incredible and the accuracy rate is above 99%. Highly recommend!', date: '12/01/2026', helpful: 42 },
-];
+// SAMPLE_REVIEWS — previously 6 hardcoded mock reviews by "Rajesh Gupta",
+// "Priya Sharma", "Anand Patel", "Kavitha Nair", "Suresh Reddy", "Deepa Iyer"
+// with fabricated ratings and comments. Removed during mock-data audit (Task 7).
+const SAMPLE_REVIEWS: Review[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SELLER DATA
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const SELLER_PRODUCTS = MARKETPLACE_ITEMS.filter(i => i.author === 'Sharma & Associates');
-const PAYOUT_HISTORY = [
-  { id: 'p1', date: '01/02/2026', amount: 142000, status: 'paid' as const, period: 'January 2026' },
-  { id: 'p2', date: '01/01/2026', amount: 128000, status: 'paid' as const, period: 'December 2025' },
-  { id: 'p3', date: '01/12/2025', amount: 115000, status: 'paid' as const, period: 'November 2025' },
-  { id: 'p4', date: '01/03/2026', amount: 156000, status: 'pending' as const, period: 'February 2026' },
-];
+// PAYOUT_HISTORY — previously 4 hardcoded mock payouts. Removed during mock-data
+// audit (Task 7). Empty until a real seller-payouts API is wired.
+const PAYOUT_HISTORY: { id: string; date: string; amount: number; status: 'paid' | 'pending'; period: string }[] = [];
 
-const REVENUE_DATA = [
-  { month: 'Sep', revenue: 98000 },
-  { month: 'Oct', revenue: 105000 },
-  { month: 'Nov', revenue: 115000 },
-  { month: 'Dec', revenue: 128000 },
-  { month: 'Jan', revenue: 142000 },
-  { month: 'Feb', revenue: 156000 },
-];
+// REVENUE_DATA — previously 6 hardcoded mock monthly revenue figures. Removed
+// during mock-data audit (Task 7). Empty until a real seller-revenue API is wired.
+const REVENUE_DATA: { month: string; revenue: number }[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SUB-COMPONENTS
@@ -579,7 +273,7 @@ function RevenueBarChart({ data, height = 200 }: { data: { month: string; revenu
           <g key={i}>
             <defs>
               <linearGradient id={`bar-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#059669" />
+                <stop offset="0%" stopColor="#1D4ED8" />
                 <stop offset="100%" stopColor="#34d399" />
               </linearGradient>
             </defs>
@@ -634,8 +328,8 @@ function RevenueTrendChart({ height = 180 }: { height?: number }) {
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ minHeight: height }}>
       <defs>
         <linearGradient id="area-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#059669" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#059669" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#1D4ED8" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#1D4ED8" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
@@ -643,10 +337,10 @@ function RevenueTrendChart({ height = 180 }: { height?: number }) {
         return <line key={i} x1={30} y1={y} x2={width - 30} y2={y} stroke="#e2e8f0" strokeDasharray="4,4" />;
       })}
       <path d={areaD} fill="url(#area-grad)" />
-      <path d={pathD} fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={pathD} fill="none" stroke="#1D4ED8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       {points.map((p, i) => (
         <g key={i}>
-          <circle cx={p.x} cy={p.y} r={4} fill="#059669" stroke="white" strokeWidth={2} />
+          <circle cx={p.x} cy={p.y} r={4} fill="#1D4ED8" stroke="white" strokeWidth={2} />
           <text x={p.x} y={p.y - 10} textAnchor="middle" className="fill-slate-600" fontSize="9" fontWeight="500">
             {formatINR(p.value * 20000)}
           </text>
@@ -659,7 +353,7 @@ function RevenueTrendChart({ height = 180 }: { height?: number }) {
   );
 }
 
-function DonutChart({ percentage, size = 120, color = '#059669' }: { percentage: number; size?: number; color?: string }) {
+function DonutChart({ percentage, size = 120, color = '#1D4ED8' }: { percentage: number; size?: number; color?: string }) {
   const radius = (size - 20) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - percentage / 100);
@@ -997,10 +691,10 @@ function ProductDetailDialog({ item, open, onClose, onInstall }: { item: Marketp
                   <><Download size={16} className="mr-2" /> Install {item.price !== 'Free' ? `— ${formatINRFull(item.subscriptionPrice)}/mo` : ''}</>
                 )}
               </Button>
-              <Button variant="outline" size="icon" className="h-10 w-10 border-slate-200">
+              <Button variant="outline" size="icon" className="h-10 w-10 border-slate-200" onClick={() => toast.info('Added to favorites', { description: `${item.name} saved to your watchlist.` })} aria-label="Add to favorites">
                 <Heart size={16} />
               </Button>
-              <Button variant="outline" size="icon" className="h-10 w-10 border-slate-200">
+              <Button variant="outline" size="icon" className="h-10 w-10 border-slate-200" onClick={() => toast.info('Share link copied', { description: `Share ${item.name} with your team.` })} aria-label="Share">
                 <Share2 size={16} />
               </Button>
             </div>
@@ -1317,10 +1011,10 @@ function MyAppsTab({ items, onProductClick, onInstall }: { items: MarketplaceIte
                         <span className="text-[10px] text-slate-400">Next billing: 01/04/2026</span>
                       </div>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-500 hover:text-emerald-600">
+                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-500 hover:text-emerald-600" onClick={() => toast.info('Manage coming soon', { description: 'Open the integration’s settings panel from here.' })}>
                           Manage
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-500 hover:text-rose-600">
+                        <Button variant="ghost" size="sm" className="h-7 text-[10px] text-slate-500 hover:text-rose-600" onClick={() => toast.info('Cancel subscription?', { description: 'Subscription cancellation flow will land here shortly.' })}>
                           Cancel
                         </Button>
                       </div>
@@ -1581,7 +1275,7 @@ function SellTab({ items, onProductClick, onInstall }: { items: MarketplaceItem[
         </CardHeader>
         <CardContent>
           <div className="flex flex-col md:flex-row items-center gap-6">
-            <DonutChart percentage={70} size={130} color="#059669" />
+            <DonutChart percentage={70} size={130} color="#1D4ED8" />
             <div className="flex-1 space-y-3">
               <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3 border border-emerald-100">
                 <div className="flex items-center gap-2">
@@ -1707,7 +1401,9 @@ function AnalyticsTab({ items }: { items: MarketplaceItem[] }) {
   const totalSellers = new Set(items.map(i => i.author)).size;
   const totalRevenue = items.reduce((s, i) => s + i.totalRevenue, 0);
   const totalDownloads = items.reduce((s, i) => s + i.downloads, 0);
-  const avgRating = items.reduce((s, i) => s + i.rating, 0) / items.length;
+  const avgRating = items.length > 0
+    ? items.reduce((s, i) => s + i.rating, 0) / items.length
+    : 0;
 
   const categoryStats = (Object.entries(CATEGORY_CONFIG) as [MarketplaceCategory, typeof CATEGORY_CONFIG[MarketplaceCategory]][]).map(([cat, config]) => {
     const catItems = items.filter(i => i.category === cat);

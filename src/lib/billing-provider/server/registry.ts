@@ -93,3 +93,27 @@ export function describePaymentProvider(): {
     configured: true,
   };
 }
+
+/**
+ * For diagnostics — returns a billing-provider descriptor with the four fields
+ * the /api/billing/provider route reads: `name`, `provider`, `isLive`, `mode`.
+ *
+ * `mode` is `'live'` when the active provider makes real network calls to a
+ * payment gateway, otherwise `'mock'`. Mirrors {@link describePaymentProvider}
+ * (which exposes the same data plus a `configured` flag) and is the
+ * billing-side alias the diagnostics route imports.
+ */
+export function describeBillingProvider(): {
+  name: string;
+  provider: string;
+  isLive: boolean;
+  mode: string;
+} {
+  const desc = describePaymentProvider();
+  return {
+    name: desc.name,
+    provider: desc.provider,
+    isLive: desc.isLive,
+    mode: desc.isLive ? 'live' : 'mock',
+  };
+}

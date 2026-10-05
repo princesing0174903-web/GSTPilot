@@ -4,16 +4,29 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { buildRealDataSnapshot, formatRealDataContextBlock } from '@/lib/oracle/real-data';
 
 export async function GET(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const userId = request.nextUrl.searchParams.get('userId');
   if (!userId) {
     return NextResponse.json({ error: 'userId is required' }, { status: 400 });
   }
+  // AUDIT-DUP-1 fix: pass organizationId through so buildRealDataSnapshot can
+  // attach the canonical Business Snapshot (cash/revenue/expenses/ITC) and
+  // avoid duplicating those aggregates from connector data.
+  const organizationId = request.nextUrl.searchParams.get('organizationId') ?? request.nextUrl.searchParams.get('orgId') ?? request.nextUrl.searchParams.get('firmId') ?? undefined;
+
+  const orgResult = await requireOrgMembership(uid, organizationId ?? '');
+  if (orgResult instanceof NextResponse) return orgResult;
 
   try {
-    const snapshot = await buildRealDataSnapshot(userId);
+    const snapshot = await buildRealDataSnapshot(userId, organizationId);
     const contextBlock = formatRealDataContextBlock(snapshot);
     return NextResponse.json({ snapshot, contextBlock });
   } catch (err) {

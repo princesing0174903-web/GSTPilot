@@ -206,14 +206,51 @@ async function safeAsync<T>(label: string, fn: () => Promise<T>, fallback: T): P
   }
 }
 
-// ─── Main orchestrator ────────────────────────────────────────────────────────
+// ─── Main orchestrator (TENANT-SCOPED) ────────────────────────────────────────
 
-export async function computeFinancialIntelligence(): Promise<FinancialIntelligenceBundle> {
-  const data: RawCFOData = await safeAsync('fetchRawCFOData', fetchRawCFOData, {
-    invoices: [], expenses: [], payments: [], purchaseBills: [], clients: [],
-    filings: [], notices: [], employees: [], syncedRecords: [], dataConnections: [],
-    fetchedAt: new Date().toISOString(), hasLiveData: false, dataSources: [],
-  });
+/**
+ * Compute the full Financial Intelligence bundle for a SINGLE organization.
+ *
+ * 🔒 SECURITY: `organizationId` is REQUIRED. An empty string returns a valid
+ * but empty bundle (never global/cross-tenant data). Every downstream engine
+ * (revenue, profitability, cash flow, risk, health, recommendations) operates
+ * ONLY on the tenant-scoped RawCFOData returned by fetchRawCFOData.
+ *
+ * 🎯 CANONICAL DELEGATION: When `organizationId` is provided, the canonical
+ * Business Snapshot (`getBusinessSnapshot(orgId)`) is fetched in parallel and
+ * its headline aggregates OVERRIDE the bundle's headline numbers — so every
+ * consumer of Phase 1 (Oracle chat, /api/ai-cfo/intelligence, ceo/data.ts,
+ * autonomous/self-healing.ts) sees the exact same Revenue / Cash / Profit /
+ * GST / Health Score / Risk Score as the Home Dashboard. The Phase 1 record-
+ * level detail (top clients, by-category breakdown, monthly trends, late
+ * payments, recovery strategy, filing history) still comes from the
+ * org-scoped RawCFOData — the snapshot doesn't expose those breakdowns.
+ *
+ * @param organizationId The org/firm id from OrgContext. REQUIRED for any data.
+ *   For backward compat, an empty/undefined value returns an empty bundle
+ *   (legacy callers were silently broken; this preserves that behavior
+ *   without leaking cross-tenant data).
+ */
+export async function computeFinancialIntelligence(
+  organizationId?: string,
+): Promise<FinancialIntelligenceBundle> {
+  // 🔒 Hard tenant gate: no orgId → no data. Never fall through to a global query.
+  if (!organizationId) {
+    return emptyBundle();
+  }
+
+  // Fetch RawCFOData + the canonical Business Snapshot in parallel.
+  const [data, snapshot] = await Promise.all([
+    safeAsync('fetchRawCFOData', () => fetchRawCFOData(organizationId), {
+      invoices: [], expenses: [], payments: [], purchaseBills: [], clients: [],
+      filings: [], notices: [], employees: [], syncedRecords: [], dataConnections: [],
+      fetchedAt: new Date().toISOString(), hasLiveData: false, dataSources: [],
+    }),
+    safeAsync('getBusinessSnapshot', async () => {
+      const { getBusinessSnapshot } = await import('@/lib/business/snapshot');
+      return await getBusinessSnapshot(organizationId);
+    }, null),
+  ]);
 
   // Compute independent engines in parallel-safe sequence
   const revenue = safe('revenue', () => computeRevenueAnalytics(data), emptyRevenue());
@@ -232,6 +269,69 @@ export async function computeFinancialIntelligence(): Promise<FinancialIntellige
 
   const executiveSummary = safe('executiveSummary', () => buildExecutiveSummary(data, revenue, profitability, cashFlow, healthScore, risks, recommendations), emptyExec());
 
+  // ── Override headline aggregates with the canonical Business Snapshot ──
+  // The snapshot is the single source of truth. The local engines still run
+  // for record-level detail (top clients, monthly trends, late payments,
+  // recovery strategy, filing history) that the snapshot doesn't expose.
+  // Only override when the snapshot has real data — otherwise we'd clobber
+  // legacy heuristic values with zeros.
+  if (snapshot && (snapshot.healthScore > 0 || snapshot.revenue > 0 || snapshot.cash > 0 || snapshot.receivables > 0)) {
+    if (snapshot.revenueThisMonth > 0) revenue.thisMonth = snapshot.revenueThisMonth;
+    if (snapshot.revenueLastMonth > 0) revenue.lastMonth = snapshot.revenueLastMonth;
+    if (snapshot.revenue > 0) revenue.thisYear = snapshot.revenue;
+    if (revenue.lastMonth > 0) {
+      revenue.growthPct = Math.round(((revenue.thisMonth - revenue.lastMonth) / revenue.lastMonth) * 1000) / 10;
+    }
+
+    profitability.netProfit = snapshot.profit;
+    profitability.netMarginPct = Math.round(snapshot.profitMargin * 1000) / 10;
+    profitability.revenue = snapshot.revenue;
+
+    cashFlow.currentCash = snapshot.cash;
+    cashFlow.availableCash = snapshot.cash;
+    if (Number.isFinite(snapshot.runwayDays) && snapshot.runwayDays > 0) {
+      cashFlow.runwayDays = Math.round(snapshot.runwayDays);
+    }
+
+    workingCapital.accountsReceivable = snapshot.receivables;
+    workingCapital.accountsPayable = snapshot.payables;
+    workingCapital.workingCapital = snapshot.receivables - snapshot.payables;
+
+    collections.totalOutstanding = snapshot.receivables;
+    if (snapshot.overdueReceivables > 0) collections.overdueAmount = snapshot.overdueReceivables;
+    if (snapshot.overdueInvoiceCount > 0) collections.overdueCount = snapshot.overdueInvoiceCount;
+    if (snapshot.avgDaysToPay > 0) collections.averageDaysToPay = Math.round(snapshot.avgDaysToPay);
+    if (snapshot.collectionRate > 0) {
+      collections.collectionEfficiencyPct = Math.round(snapshot.collectionRate * 100);
+    }
+
+    gst.outputLiability = snapshot.outputTax;
+    gst.inputTaxCredit = snapshot.itcAvailable;
+    gst.netGSTPayable = snapshot.gstLiability;
+
+    healthScore.overall = snapshot.healthScore;
+    healthScore.tier =
+      snapshot.healthScore >= 80 ? 'excellent' :
+      snapshot.healthScore >= 65 ? 'healthy' :
+      snapshot.healthScore >= 45 ? 'attention' :
+      snapshot.healthScore >= 25 ? 'at_risk' : 'critical';
+
+    risks.overallRiskScore = snapshot.riskScore;
+    risks.overallRiskLevel =
+      snapshot.riskScore >= 60 ? 'critical' :
+      snapshot.riskScore >= 40 ? 'high' :
+      snapshot.riskScore >= 20 ? 'medium' : 'low';
+
+    executiveSummary.healthScore = snapshot.healthScore;
+    executiveSummary.healthTier = healthScore.tier;
+    executiveSummary.revenueThisMonth = Math.round(revenue.thisMonth);
+    executiveSummary.revenueGrowthPct = revenue.growthPct;
+    executiveSummary.netProfit = Math.round(snapshot.profit);
+    executiveSummary.netMarginPct = profitability.netMarginPct;
+    executiveSummary.cashPosition = Math.round(snapshot.cash);
+    executiveSummary.runwayDays = cashFlow.runwayDays;
+  }
+
   return {
     executiveSummary,
     healthScore,
@@ -246,10 +346,35 @@ export async function computeFinancialIntelligence(): Promise<FinancialIntellige
     risks,
     recommendations,
     generatedAt: new Date().toISOString(),
-    hasLiveData: data.hasLiveData,
+    hasLiveData: data.hasLiveData || (snapshot !== null && (snapshot.revenue > 0 || snapshot.cash > 0)),
     dataSources: data.dataSources,
     clientCount: data.clients.length,
     invoiceCount: data.invoices.length,
+    tagline: TAGLINE,
+  };
+}
+
+// ─── Empty bundle (used by both the tenant-gate AND engine-failure fallback) ──
+
+function emptyBundle(): FinancialIntelligenceBundle {
+  return {
+    executiveSummary: emptyExec(),
+    healthScore: emptyHealth(),
+    revenue: emptyRevenue(),
+    profitability: emptyProfitability(),
+    cashFlow: emptyCashFlow(),
+    workingCapital: emptyWorkingCapital(),
+    expenses: emptyExpenses(),
+    collections: emptyCollections(),
+    gst: emptyGST(),
+    forecast: emptyForecast(),
+    risks: emptyRisks(),
+    recommendations: { recommendations: [], totalImpactValue: 0, criticalCount: 0, generatedAt: new Date().toISOString() },
+    generatedAt: new Date().toISOString(),
+    hasLiveData: false,
+    dataSources: [],
+    clientCount: 0,
+    invoiceCount: 0,
     tagline: TAGLINE,
   };
 }

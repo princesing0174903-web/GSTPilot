@@ -328,10 +328,14 @@ export function inrShort(n: number): string {
 export interface CreateInvoiceLineItem {
   description?: string;
   hsnCode?: string;
+  quantity?: number;
+  unit?: string;
+  unitPrice?: number;
   taxableValue: number;
   cgstRate?: number;
   sgstRate?: number;
   igstRate?: number;
+  cessRate?: number;
 }
 
 export interface CreateInvoiceInput {
@@ -467,6 +471,9 @@ export interface ExpenseListResult {
 }
 
 // ─── Receivables DTO ────────────────────────────────────────────────────────────
+
+/** Risk bucket assigned to an outstanding receivable based on days overdue. */
+export type ReceivableRisk = 'high' | 'medium' | 'low';
 
 export interface ReceivableDTO {
   id: string;

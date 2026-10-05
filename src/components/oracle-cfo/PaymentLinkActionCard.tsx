@@ -232,15 +232,15 @@ export function PaymentLinkActionCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className="mt-3 rounded-xl border overflow-hidden"
-      style={{ borderColor: 'rgba(16,185,129,0.2)', background: '#0a0a0a' }}
+      style={{ borderColor: 'rgba(37,99,235,0.2)', background: '#0a0a0a' }}
     >
       {/* Header */}
       <div
         className="flex items-center justify-between gap-3 px-4 py-3"
-        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(20,184,166,0.04) 100%)' }}
+        style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(59,130,246,0.04) 100%)' }}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <CreditCard className="h-4 w-4 shrink-0" style={{ color: '#10b981' }} />
+          <CreditCard className="h-4 w-4 shrink-0" style={{ color: '#2563EB' }} />
           <div className="min-w-0">
             <div className="text-sm font-semibold text-white">Payment Link Creation</div>
             <div className="text-xs text-white/50">
@@ -265,7 +265,7 @@ export function PaymentLinkActionCard({
         {/* ── ANALYZING ── */}
         {phase === 'analyzing' && (
           <div className="flex items-center gap-3 py-4">
-            <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#10b981' }} />
+            <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2563EB' }} />
             <div className="text-sm text-white/70">
               Looking up the invoice, checking the connected payment provider, and building the approval summary…
             </div>
@@ -348,7 +348,7 @@ export function PaymentLinkActionCard({
 
             {/* Payment Details */}
             <section>
-              <SectionLabel icon={<CreditCard className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="Payment Details" />
+              <SectionLabel icon={<CreditCard className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />} label="Payment Details" />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <InfoCell
                   label="Payment Amount"
@@ -393,7 +393,7 @@ export function PaymentLinkActionCard({
 
             {/* Delivery */}
             <section>
-              <SectionLabel icon={<Mail className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Delivery Channels" />
+              <SectionLabel icon={<Mail className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />} label="Delivery Channels" />
               <div className="space-y-1.5">
                 <DeliveryRow
                   icon={<Mail className="h-3.5 w-3.5" />}
@@ -428,7 +428,7 @@ export function PaymentLinkActionCard({
                 type="button"
                 onClick={handleApprove}
                 className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110"
-                style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
               >
                 <Check className="h-4 w-4" />
                 Approve & Create Link
@@ -454,7 +454,7 @@ export function PaymentLinkActionCard({
         {phase === 'executing' && (
           <div className="space-y-3">
             <div className="flex items-center gap-3 py-2">
-              <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#10b981' }} />
+              <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2563EB' }} />
               <div className="text-sm text-white/70">
                 Calling the payment provider API, persisting the payment record, and queuing email + WhatsApp delivery…
               </div>
@@ -473,9 +473,9 @@ export function PaymentLinkActionCard({
           <div className="space-y-4">
             <div
               className="rounded-lg border px-3 py-2.5 flex items-start gap-2"
-              style={{ borderColor: 'rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.05)' }}
+              style={{ borderColor: 'rgba(37,99,235,0.3)', background: 'rgba(37,99,235,0.05)' }}
             >
-              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#10b981' }} />
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#2563EB' }} />
               <div className="text-sm">
                 <div className="font-semibold text-white">Payment link created</div>
                 <div className="text-white/60 text-xs mt-0.5">{executeResult.message}</div>
@@ -485,10 +485,10 @@ export function PaymentLinkActionCard({
             {/* Link URL with copy + open */}
             {executeResult.linkUrl && (
               <section>
-                <SectionLabel icon={<ExternalLink className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="Payment Link URL" />
+                <SectionLabel icon={<ExternalLink className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />} label="Payment Link URL" />
                 <div
                   className="rounded-lg border px-3 py-2.5 flex items-center gap-2"
-                  style={{ borderColor: 'rgba(16,185,129,0.2)', background: 'rgba(16,185,129,0.03)' }}
+                  style={{ borderColor: 'rgba(37,99,235,0.2)', background: 'rgba(37,99,235,0.03)' }}
                 >
                   <code className="text-xs text-white/80 flex-1 truncate font-mono">{executeResult.linkUrl}</code>
                   <button
@@ -497,7 +497,7 @@ export function PaymentLinkActionCard({
                     className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium text-white/70 hover:text-white"
                     style={{ borderColor: 'rgba(255,255,255,0.1)' }}
                   >
-                    {copied ? <Check className="h-3 w-3" style={{ color: '#10b981' }} /> : <Copy className="h-3 w-3" />}
+                    {copied ? <Check className="h-3 w-3" style={{ color: '#2563EB' }} /> : <Copy className="h-3 w-3" />}
                   </button>
                   <a
                     href={executeResult.linkUrl}
@@ -518,7 +518,7 @@ export function PaymentLinkActionCard({
 
             {/* Delivery status */}
             <section>
-              <SectionLabel icon={<Mail className="h-3.5 w-3.5" style={{ color: '#14b8a6' }} />} label="Delivery Status" />
+              <SectionLabel icon={<Mail className="h-3.5 w-3.5" style={{ color: '#3B82F6' }} />} label="Delivery Status" />
               <div className="space-y-1.5">
                 <DeliveryStatusRow
                   icon={<Mail className="h-3.5 w-3.5" />}
@@ -538,11 +538,11 @@ export function PaymentLinkActionCard({
             {/* Records affected */}
             {executeResult.recordsAffected.length > 0 && (
               <section>
-                <SectionLabel icon={<ShieldCheck className="h-3.5 w-3.5" style={{ color: '#10b981' }} />} label="Database Changes" />
+                <SectionLabel icon={<ShieldCheck className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />} label="Database Changes" />
                 <div className="space-y-1">
                   {executeResult.recordsAffected.map((r, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs text-white/50">
-                      <Check className="h-3 w-3" style={{ color: '#10b981' }} />
+                      <Check className="h-3 w-3" style={{ color: '#2563EB' }} />
                       <code className="font-mono">{r.collection}/{r.id.slice(-12)}</code>
                       <span className="text-white/30">·</span>
                       <span>{r.action}</span>
@@ -645,8 +645,8 @@ function InfoCell({ label, value, highlight }: { label: string; value: string; h
     <div
       className="rounded-lg border px-3 py-2"
       style={{
-        borderColor: highlight ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.06)',
-        background: highlight ? 'rgba(16,185,129,0.04)' : 'transparent',
+        borderColor: highlight ? 'rgba(37,99,235,0.25)' : 'rgba(255,255,255,0.06)',
+        background: highlight ? 'rgba(37,99,235,0.04)' : 'transparent',
       }}
     >
       <div className="text-[10px] text-white/40 uppercase tracking-wide">{label}</div>
@@ -669,11 +669,11 @@ function DeliveryRow({ icon, channel, note, ready }: { icon: React.ReactNode; ch
     <div
       className="flex items-start gap-2 rounded-lg border px-3 py-2"
       style={{
-        borderColor: ready ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.06)',
-        background: ready ? 'rgba(16,185,129,0.03)' : 'transparent',
+        borderColor: ready ? 'rgba(37,99,235,0.2)' : 'rgba(255,255,255,0.06)',
+        background: ready ? 'rgba(37,99,235,0.03)' : 'transparent',
       }}
     >
-      <span style={{ color: ready ? '#10b981' : '#666' }}>{icon}</span>
+      <span style={{ color: ready ? '#2563EB' : '#666' }}>{icon}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-white/80">{channel}</span>
@@ -694,11 +694,11 @@ function DeliveryStatusRow({ icon, channel, sent, message }: { icon: React.React
     <div
       className="flex items-start gap-2 rounded-lg border px-3 py-2"
       style={{
-        borderColor: sent ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.06)',
-        background: sent ? 'rgba(16,185,129,0.03)' : 'transparent',
+        borderColor: sent ? 'rgba(37,99,235,0.2)' : 'rgba(255,255,255,0.06)',
+        background: sent ? 'rgba(37,99,235,0.03)' : 'transparent',
       }}
     >
-      <span style={{ color: sent ? '#10b981' : '#666' }}>{icon}</span>
+      <span style={{ color: sent ? '#2563EB' : '#666' }}>{icon}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-white/80">{channel}</span>
@@ -717,5 +717,5 @@ function DeliveryStatusRow({ icon, channel, sent, message }: { icon: React.React
 }
 
 function Building2Icon() {
-  return <Sparkles className="h-3.5 w-3.5" style={{ color: '#10b981' }} />;
+  return <Sparkles className="h-3.5 w-3.5" style={{ color: '#2563EB' }} />;
 }

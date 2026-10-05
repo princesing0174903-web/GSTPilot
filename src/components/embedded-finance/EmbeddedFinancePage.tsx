@@ -254,8 +254,8 @@ function CollectionTrendChart({ data }: { data: CollectionTrendPoint[] }) {
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
       <defs>
         <linearGradient id="collectedGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
         <linearGradient id="pendingGrad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.2" />
@@ -297,7 +297,7 @@ function CollectionTrendChart({ data }: { data: CollectionTrendPoint[] }) {
       {hasData && <path d={collectedArea} fill="url(#collectedGrad)" />}
 
       {/* Collected line */}
-      {hasData && <path d={collectedPath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+      {hasData && <path d={collectedPath} fill="none" stroke="#2563EB" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
 
       {/* Pending area */}
       {hasData && <path d={data.map((d, i) =>
@@ -316,7 +316,7 @@ function CollectionTrendChart({ data }: { data: CollectionTrendPoint[] }) {
           cy={yScale(d.collected) + padding.top}
           r="3.5"
           fill="white"
-          stroke="#10b981"
+          stroke="#2563EB"
           strokeWidth="2"
         />
       ))}
@@ -363,7 +363,7 @@ function PaymentMethodDonut() {
   }, [invoicesResp]);
 
   const data = [
-    { label: 'UPI', value: 58, color: '#10b981' },
+    { label: 'UPI', value: 58, color: '#2563EB' },
     { label: 'Bank Transfer', value: 28, color: '#64748b' },
     { label: 'Card', value: 14, color: '#f59e0b' },
   ];
@@ -470,8 +470,8 @@ function CashFlowForecastChart({ data }: { data: CashFlowForecastPoint[] }) {
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
       <defs>
         <linearGradient id="netFlowGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
-          <stop offset="50%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.25" />
+          <stop offset="50%" stopColor="#2563EB" stopOpacity="0.02" />
           <stop offset="100%" stopColor="#ef4444" stopOpacity="0.1" />
         </linearGradient>
       </defs>
@@ -494,14 +494,14 @@ function CashFlowForecastChart({ data }: { data: CashFlowForecastPoint[] }) {
       {hasData && <path d={netAreaPath} fill="url(#netFlowGrad)" />}
 
       {/* Inflow line */}
-      {hasData && <path d={inflowPath} fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
+      {hasData && <path d={inflowPath} fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
 
       {/* Outflow line */}
       {hasData && <path d={outflowPath} fill="none" stroke="#ef4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4,3" />}
 
       {/* Inflow dots */}
       {data.map((d, i) => (
-        <circle key={`in-${i}`} cx={xScale(i) + padding.left} cy={yScale(d.inflow) + padding.top} r="2.5" fill="white" stroke="#10b981" strokeWidth="1.5" />
+        <circle key={`in-${i}`} cx={xScale(i) + padding.left} cy={yScale(d.inflow) + padding.top} r="2.5" fill="white" stroke="#2563EB" strokeWidth="1.5" />
       ))}
 
       {/* X axis */}

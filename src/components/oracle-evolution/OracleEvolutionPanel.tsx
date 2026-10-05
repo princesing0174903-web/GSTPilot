@@ -22,7 +22,7 @@ import {
 import type {
   ForecastBundle, ForecastPoint, ForecastMetric,
 } from '@/lib/oracle-evolution/forecasting';
-import { formatForecastCurrency } from '@/lib/oracle-evolution/forecasting';
+import { formatForecastCurrency } from '@/lib/oracle-evolution/forecasting-format';
 import type { AgentId } from '@/lib/oracle-evolution/agents';
 import type { DiagnosticResult, ChainId } from '@/lib/oracle-evolution/diagnostic';
 import type { ValidationResult } from '@/lib/oracle-evolution/validation';
@@ -84,7 +84,7 @@ function ConfidenceRing({ value, size = 40 }: { value: number; size?: number }) 
   const radius = (size - 6) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - value);
-  const color = pct >= 70 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
+  const color = pct >= 70 ? '#2563EB' : pct >= 40 ? '#f59e0b' : '#ef4444';
   return (
     <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
@@ -132,7 +132,7 @@ export function OracleEvolutionPanel({ open, onClose }: Props) {
             {/* Header */}
             <header className="flex shrink-0 items-center justify-between border-b px-5 py-4" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(20,184,166,0.15))' }}>
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.15), rgba(59,130,246,0.15))' }}>
                   <Sparkles className="h-5 w-5 text-emerald-400" />
                 </div>
                 <div>

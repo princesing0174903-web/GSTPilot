@@ -59,10 +59,13 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
     const anchorName = firm?.name || 'GSTPilot Demo Firm';
     const anchorDomain = firm?.website || 'gstpilot.ai';
 
-    const realClientCount = await db.client.count();
-    const realInvoiceCount = await db.invoice.count();
-    const realUserCount = await db.user.count();
-    const realTeamMembers = await db.teamMember.count();
+    // ── Real-platform anchor counts (was 4 sequential counts — now parallel) ──
+    const [realClientCount, realInvoiceCount, realUserCount, realTeamMembers] = await Promise.all([
+      db.client.count(),
+      db.invoice.count(),
+      db.user.count(),
+      db.teamMember.count(),
+    ]);
 
     // ── Org 1: the host firm (Enterprise plan) ──
     const hostOrg = await db.platformOrganization.create({
@@ -80,7 +83,7 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
         status: 'active',
         industry: 'Chartered Accountancy',
         employeeCount: Math.max(realTeamMembers, realUserCount, 1),
-        monthlyRevenue: 49999,
+        monthlyRevenue: 0,
         seatsUsed: Math.max(realUserCount, 1),
         seatsLimit: 250,
         storageUsedMb: Math.min(1024 * 8, realInvoiceCount * 0.5 + 200),
@@ -88,8 +91,11 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
         apiCallsMonth: realClientCount * 120 + 5000,
         aiCreditsUsed: realClientCount * 8 + 200,
         aiCreditsLimit: 1000000,
-        healthScore: 88,
-        churnRisk: 0.05,
+        // Health/risk scores set to 0 — no real per-org health metric is
+        // computed here. The Business Snapshot service is the single source
+        // of truth for health scores.
+        healthScore: 0,
+        churnRisk: 0,
         branding: JSON.stringify({
           logoUrl: firm?.logoUrl ?? null,
           primaryColor: '#0ea5e9',
@@ -170,7 +176,9 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
           code: cc.code,
           name: cc.name,
           budget: cc.budget,
-          spent: Math.round(cc.budget * (0.4 + Math.random() * 0.3)),
+          // Spent is a real financial KPI — never fabricate via Math.random.
+          // Stays 0 until real cost-center accounting is wired.
+          spent: 0,
           currency: 'INR',
         },
       });
@@ -269,12 +277,15 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
           status: env.status,
           strategy: env.strategy,
           replicas: env.replicas,
-          uptimePct: 99.9 + Math.random() * 0.09,
-          latencyMs: 80 + Math.random() * 60,
-          errorRatePct: Math.random() * 0.4,
-          cpuUsagePct: 25 + Math.random() * 35,
-          memUsageMb: 400 + Math.random() * 600,
-          lastDeployAt: new Date(Date.now() - Math.random() * 86400000 * 3),
+          // DevOps KPIs (uptime / latency / error rate / CPU / mem) must be
+          // sourced from real telemetry — never fabricated via Math.random.
+          // Stays at 0 until a real metrics collector is wired.
+          uptimePct: 0,
+          latencyMs: 0,
+          errorRatePct: 0,
+          cpuUsagePct: 0,
+          memUsageMb: 0,
+          lastDeployAt: null,
           lastDeployBy: 'oracle',
         },
       });
@@ -299,7 +310,8 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
           rateLimitPerDay: 100000,
           callsTotal: k.calls,
           callsToday: Math.round(k.calls / 30),
-          lastUsedAt: new Date(Date.now() - Math.random() * 86400000),
+          // lastUsedAt left null — never fabricated via Math.random.
+          lastUsedAt: null,
           status: 'active',
           createdBy: 'platform-owner',
         },
@@ -390,7 +402,8 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
             role: i === 0 ? 'owner' : i === 1 ? 'admin' : 'member',
             status: 'active',
             mfaEnabled: i < 2,
-            lastActiveAt: new Date(Date.now() - Math.random() * 86400000 * 7),
+            // lastActiveAt left null — never fabricated via Math.random.
+            lastActiveAt: null,
             joinedAt: new Date(Date.now() - demo.ageDays * 86400000),
           },
         });
@@ -430,7 +443,8 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
           rateLimitPerDay: 100000,
           callsTotal: demo.apiCalls,
           callsToday: Math.round(demo.apiCalls / 30),
-          lastUsedAt: new Date(Date.now() - Math.random() * 86400000),
+          // lastUsedAt left null — never fabricated via Math.random.
+          lastUsedAt: null,
           status: 'active',
           createdBy: 'owner',
         },
@@ -440,13 +454,16 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
         data: {
           organizationId: childOrg.id,
           score: demo.healthScore,
-          adoptionPct: Math.min(100, 40 + Math.random() * 55),
+          // adoptionPct is a real KPI — never fabricated via Math.random.
+          adoptionPct: 0,
           featureUsage: JSON.stringify({ gst: 0.9, ai: 0.6, banking: 0.4, marketplace: 0.3 }),
           churnRisk: demo.churnRisk,
           expansionScore: demo.healthScore > 80 ? 0.7 : 0.3,
-          openTickets: demo.healthScore < 60 ? Math.round(Math.random() * 3) : 0,
+          // openTickets stays 0 — never fabricated via Math.random.
+          openTickets: 0,
           satisfaction: 3.5 + (demo.healthScore / 100) * 1.5,
-          lastContactAt: new Date(Date.now() - Math.random() * 86400000 * 14),
+          // lastContactAt left null — never fabricated via Math.random.
+          lastContactAt: null,
           recommendedActions: JSON.stringify(demo.recommendedActions),
         },
       });
@@ -536,68 +553,21 @@ interface DemoOrgSpec {
   recommendedActions: string[];
 }
 
-function buildDemoCustomerOrgs(realClientCount: number, realInvoiceCount: number): DemoOrgSpec[] {
-  // The number of demo customers scales with the real firm's client base — so a
-  // bigger real firm is modelled as serving a bigger SaaS customer roster.
-  const base = Math.max(6, Math.min(14, Math.round(realClientCount / 4) + 6));
-  const industries = ['Manufacturing', 'Healthcare', 'Retail', 'Logistics', 'Real Estate', 'IT Services', 'Education', 'Hospitality'];
-  const cities: Array<[string, string]> = [['Mumbai', 'Maharashtra'], ['Bengaluru', 'Karnataka'], ['Delhi', 'Delhi'], ['Chennai', 'Tamil Nadu'], ['Hyderabad', 'Telangana'], ['Pune', 'Maharashtra'], ['Ahmedabad', 'Gujarat'], ['Kolkata', 'West Bengal']];
-  const plans: PlanKey[] = ['starter', 'professional', 'business', 'enterprise'];
-  const orgs: DemoOrgSpec[] = [];
-  const companyNames = ['Acme Industries', 'Bharat Textiles', 'Cloud Nine Retail', 'Dharma Healthcare', 'Everest Logistics', 'Fortune Foods', 'Greenfield Realty', 'Helix IT Services', 'Ivy Education', 'Jaipur Hospitality', 'Kohinoor Manufacturing', 'Lakshmi Exports'];
-
-  for (let i = 0; i < base; i++) {
-    const name = companyNames[i % companyNames.length];
-    const plan = plans[i % plans.length];
-    const city = cities[i % cities.length];
-    const isActive = i % 5 !== 4;       // 80% active, 20% trial
-    const planStatus: 'trial' | 'active' | 'past_due' = isActive ? 'active' : i % 7 === 6 ? 'past_due' : 'trial';
-    const billingCycle: 'monthly' | 'annual' = i % 3 === 0 ? 'annual' : 'monthly';
-    const seatsUsed = plan === 'starter' ? 2 + (i % 3) : plan === 'professional' ? 6 + (i % 8) : plan === 'business' ? 18 + (i % 30) : 60 + (i % 150);
-    const mrr = plan === 'starter' ? 2999 : plan === 'professional' ? 7999 : plan === 'business' ? 19999 : 49999;
-    const storageMb = Math.min(seatsUsed * 80 + (realInvoiceCount * 0.3), 500000);
-    const apiCalls = seatsUsed * 1200 + realClientCount * 30;
-    const aiCredits = seatsUsed * 80 + realClientCount * 4;
-    const healthScore = planStatus === 'past_due' ? 55 : planStatus === 'trial' ? 70 : 78 + (i % 20);
-    const churnRisk = planStatus === 'past_due' ? 0.65 : planStatus === 'trial' ? 0.35 : Math.max(0.02, 0.15 - (healthScore - 80) * 0.01);
-
-    orgs.push({
-      name,
-      legalName: `${name} Pvt Ltd`,
-      domain: name.toLowerCase().split(' ')[0] + '.in',
-      country: 'IN',
-      timezone: 'Asia/Kolkata',
-      city: city[0],
-      state: city[1],
-      region: 'ap-south-1',
-      industry: industries[i % industries.length],
-      orgType: i % 4 === 0 ? 'parent' : 'standalone',
-      isSubsidiary: false,
-      plan,
-      planStatus,
-      billingCycle,
-      employeeCount: seatsUsed * 4,
-      mrr: planStatus === 'trial' ? 0 : mrr,
-      seatsUsed,
-      seatsLimit: plan === 'starter' ? 3 : plan === 'professional' ? 10 : plan === 'business' ? 50 : 250,
-      storageMb,
-      storageLimitMb: (plan === 'starter' ? 5 : plan === 'professional' ? 50 : plan === 'business' ? 250 : 1024) * 1024,
-      apiCalls,
-      aiCredits,
-      aiCreditsLimit: plan === 'starter' ? 1000 : plan === 'professional' ? 10000 : plan === 'business' ? 100000 : 1000000,
-      healthScore,
-      churnRisk,
-      brandColor: ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'][i % 6],
-      accentColor: '#14b8a6',
-      ageDays: 30 + i * 17,
-      recommendedActions:
-        planStatus === 'past_due' ? ['Send payment reminder', 'Offer 10% goodwill discount', 'Schedule recovery call'] :
-        planStatus === 'trial' ? ['Schedule onboarding call', 'Show AI CFO demo', 'Offer annual discount'] :
-        healthScore > 85 ? ['Propose seat expansion', 'Introduce AGI module', 'Invite to case study'] :
-        ['Check feature adoption', 'Send product update', 'Schedule QBR'],
-    });
-  }
-  return orgs;
+// Demo customer orgs removed — platform dashboard shows real orgs only.
+// Previously generated 6-14 fake SaaS customer orgs (Acme Industries, Bharat
+// Textiles, Cloud Nine Retail, Dharma Healthcare, Everest Logistics, Fortune
+// Foods, Greenfield Realty, Helix IT Services, Ivy Education, Jaipur
+// Hospitality, Kohinoor Manufacturing, Lakshmi Exports) with fake MRR / seats
+// / health / churn. These synthetic rows polluted the PlatformOrganization
+// table on first seed. The function now returns `[]` so the demo-org loop in
+// `ensurePlatformOrganizationsSeeded()` does nothing — the platform dashboard
+// shows the host firm + any real orgs only.
+function buildDemoCustomerOrgs(_realClientCount: number, _realInvoiceCount: number): DemoOrgSpec[] {
+  // Demo customer orgs removed — platform dashboard shows real orgs only.
+  // TODO: wire to real platform customer onboarding flow.
+  void _realClientCount;
+  void _realInvoiceCount;
+  return [];
 }
 
 // ─── Mapper: Prisma → domain Organization ────────────────────────────────────

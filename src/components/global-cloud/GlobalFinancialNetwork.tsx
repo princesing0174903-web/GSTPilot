@@ -297,8 +297,8 @@ export default function GlobalFinancialNetwork() {
                   })}
 
                   {/* Central hub node — large glowing emerald */}
-                  <circle cx={CENTER.x} cy={CENTER.y} r="46" fill="rgba(16,185,129,0.18)" />
-                  <circle cx={CENTER.x} cy={CENTER.y} r="38" fill="rgba(16,185,129,0.28)" />
+                  <circle cx={CENTER.x} cy={CENTER.y} r="46" fill="rgba(37,99,235,0.18)" />
+                  <circle cx={CENTER.x} cy={CENTER.y} r="38" fill="rgba(37,99,235,0.28)" />
                   <circle cx={CENTER.x} cy={CENTER.y} r="30" fill={ACCENT_HEX.emerald}>
                     <animate attributeName="r" values="30;32;30" dur="2.4s" repeatCount="indefinite" />
                   </circle>

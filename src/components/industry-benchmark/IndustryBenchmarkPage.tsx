@@ -54,14 +54,14 @@ import { useFireClients, useFireInvoices, useFireReturns } from '@/hooks/use-fir
 // ═══════════════════════════════════════════════════════════════════════════════
 const C = {
   emerald50: '#ecfdf5', emerald100: '#d1fae5', emerald200: '#a7f3d0',
-  emerald300: '#6ee7b7', emerald400: '#34d399', emerald500: '#10b981',
-  emerald600: '#059669', emerald700: '#047857', emerald800: '#065f46',
+  emerald300: '#6ee7b7', emerald400: '#34d399', emerald500: '#2563EB',
+  emerald600: '#1D4ED8', emerald700: '#047857', emerald800: '#065f46',
   slate50: '#f8fafc', slate100: '#f1f5f9', slate200: '#e2e8f0',
   slate300: '#cbd5e1', slate400: '#94a3b8', slate500: '#64748b',
   slate600: '#475569', slate700: '#334155', slate800: '#1e293b',
   amber400: '#fbbf24', amber500: '#f59e0b',
   red400: '#f87171', red500: '#ef4444',
-  teal500: '#14b8a6', teal600: '#0d9488',
+  teal500: '#14b8a6', teal600: '#2563EB',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════

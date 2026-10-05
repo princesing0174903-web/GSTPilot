@@ -1,9 +1,15 @@
 // POST /api/oracle/learn — Record a learning signal for the Self-Improvement Engine
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { recordLearning } from '@/lib/oracle-core/learning';
 import { auditLog } from '@/lib/oracle-core/security';
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const startedAt = Date.now();
   let body: any = {};
   try {
@@ -24,6 +30,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const orgId0 = body.firmId || body.orgId || body.organizationId || '';
+    if (orgId0) {
+      const orgResult = await requireOrgMembership(uid, orgId0);
+      if (orgResult instanceof NextResponse) return orgResult;
+    }
+
     const record = await recordLearning({
       firmId: body.firmId,
       category,

@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import {
   extractInvoiceIntent,
   lookupCustomer,
@@ -33,11 +34,17 @@ import { writeCfoAudit } from '@/lib/oracle-cfo/approval';
 import { getDocs, query, where, collection, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { COLLECTIONS, type FirestoreClient } from '@/lib/firestore-schema';
+import { logActivity } from '@/lib/activity-logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const startedAt = Date.now();
   let body: any = {};
   try {
@@ -58,6 +65,10 @@ export async function POST(request: NextRequest) {
     userEmail: String(body.userEmail ?? 'preview@gstpilot.in'),
     userRole: (body.userRole as string) ?? 'manager',
   };
+
+  const orgId0 = String(body.organizationId ?? body.orgId ?? body.firmId ?? '');
+  const orgResult = await requireOrgMembership(uid, orgId0);
+  if (orgResult instanceof NextResponse) return orgResult;
 
   try {
     // ─── STEP 1: Extract all 9 fields from the message ──────────────────
@@ -230,6 +241,36 @@ export async function POST(request: NextRequest) {
       aiProvider: 'oracle-cfo-invoice-engine',
       executionMs: Date.now() - startedAt,
     }).catch(() => {});
+
+    // ─── Business Timeline event — "Invoice Created" ──────────────────
+    // Logged when Oracle finishes analyzing the natural-language request
+    // and produces the invoice approval summary (step==='review'). The
+    // actual DB write happens in /api/oracle/cfo/invoice/execute after the
+    // user approves — but from the user's perspective, Oracle has "created"
+    // the invoice at this point. The description reflects that this is a
+    // draft awaiting approval.
+    await logActivity({
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      type: 'invoice_created',
+      title: 'Invoice Created',
+      description: `Invoice ${invoiceNumberResult.invoiceNumber} prepared for ${summary.customer.name} — ₹${gst.grandTotal.toLocaleString('en-IN')} (incl. GST ${intent.gstRate}%). Awaiting your approval.`,
+      entityType: 'invoice',
+      entityId: approvalId,
+      clientId: matchedClient?.clientId ?? null,
+      metadata: {
+        invoiceNumber: invoiceNumberResult.invoiceNumber,
+        customerName: summary.customer.name,
+        customerGstin: customerGstin ?? null,
+        grandTotal: gst.grandTotal,
+        gstRate: intent.gstRate ?? 0,
+        gstAmount: gst.gstAmount,
+        taxableValue: gst.taxableValue,
+        isInterState: interState,
+        currency: summary.invoice.currency,
+        source: 'oracle-cfo',
+      },
+    });
 
     // ─── Return the full approval summary ──────────────────────────────
     return NextResponse.json({

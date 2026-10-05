@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot Real Banking Foundation™ — useBanking() Hook
@@ -108,7 +109,7 @@ export interface UseBankingResult {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useBanking(): UseBankingResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const { user } = useAuth();
   const orgId = organization?.id ?? null;
 
@@ -133,7 +134,7 @@ export function useBanking(): UseBankingResult {
     unsubTxRef.current?.();
     unsubJobsRef.current?.();
 
-    if (!orgId) {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setConnections([]);
       setTransactions([]);
       setSyncJobs([]);
@@ -183,7 +184,7 @@ export function useBanking(): UseBankingResult {
       unsubTxRef.current?.();
       unsubJobsRef.current?.();
     };
-  }, [orgId, retryTick]);
+  }, [orgId, isPreviewMode, retryTick]);
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -227,7 +228,24 @@ export function useBanking(): UseBankingResult {
           throw new Error(data.error ?? 'Failed to connect bank account.');
         }
 
-        const { connectionRef, accountNumberMasked, accountSnapshot } = data.result;
+        const { connectionRef, accountNumberMasked, accountSnapshot, redirectUrl } = data.result;
+
+        // AA provider flow (Setu): if a redirectUrl is present, the connection
+        // is NOT complete yet. Open the Setu consent webview in a new tab so
+        // the user can approve data sharing. Do NOT persist a connection doc
+        // locally — the connection finalizes after the user returns from Setu
+        // (via /banking/consent/return → /api/banking/complete).
+        if (redirectUrl) {
+          window.open(redirectUrl, '_blank', 'noopener,noreferrer');
+          setError(null);
+          // Use a non-error informational signal — the caller can show a toast.
+          // We return true so the UI knows the connect call succeeded (the
+          // consent webview is now open).
+          void connectionRef;
+          return true;
+        }
+
+        // Instant-complete flow (Mock / direct providers): persist immediately.
         const { encryptedConnection, consentExpiry, accountSnapshot: completedSnapshot } = data.complete;
 
         // Persist a connection doc with status='connected'.

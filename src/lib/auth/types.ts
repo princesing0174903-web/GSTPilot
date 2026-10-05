@@ -14,6 +14,7 @@
  *
  * - `owner`      — Full control. Billing, delete org, transfer ownership. (1 per org)
  * - `admin`      — Manage members, settings, and all data. Cannot delete org / transfer ownership.
+ * - `manager`    — Team lead / department head. Manages members (no owner/billing changes), all operational data.
  * - `accountant` — Create / edit financial data (invoices, returns, expenses, payments).
  * - `employee`   — Day-to-day operational access (own tasks, assigned clients). No settings.
  * - `auditor`    — Read-only across the org. Cannot mutate anything.
@@ -22,6 +23,7 @@
 export type OrgRole =
   | 'owner'
   | 'admin'
+  | 'manager'
   | 'accountant'
   | 'employee'
   | 'auditor'
@@ -73,7 +75,18 @@ export type Permission =
   | 'ai.cfo'
   | 'ai.oracle'
   | 'documents.upload'
-  | 'documents.view';
+  | 'documents.view'
+  // ── Enterprise RBAC extensions (Phase 1) ──
+  | 'payroll.view'
+  | 'payroll.manage'
+  | 'integrations.view'
+  | 'integrations.manage'
+  | 'admin.view'
+  | 'admin.manage'
+  | 'apikeys.view'
+  | 'apikeys.manage'
+  | 'ai.settings'
+  | 'audit.view';
 
 /**
  * The membership status of a user within an organization.
@@ -129,6 +142,60 @@ export interface OrganizationDoc {
     customDomain?: string | null;
   } | null;
   integrations?: Record<string, { connected: boolean; connectedAt?: string | null }> | null;
+  // ── Enterprise Organization extensions (Phase 1) ──
+  industry?: string | null;
+  companySize?: string | null;
+  timezone?: string | null;
+  currency?: string | null;
+  country?: string | null;
+  pan?: string | null;
+  billing?: OrganizationBilling | null;
+  subscription?: OrganizationSubscription | null;
+  apiKeys?: OrgApiKey[] | null;
+}
+
+/**
+ * Structured billing contact information for an organization.
+ */
+export interface OrganizationBilling {
+  contactName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  taxId?: string | null;
+  gstNumber?: string | null;
+}
+
+/**
+ * Structured subscription information for an organization.
+ */
+export interface OrganizationSubscription {
+  plan: 'free' | 'pro' | 'enterprise';
+  status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete';
+  seats?: number | null;
+  renewalDate?: string | null;
+  trialEndsAt?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+  interval?: 'monthly' | 'yearly' | null;
+  paymentMethod?: string | null;
+}
+
+/**
+ * A scoped API key for programmatic access to the organization's data.
+ */
+export interface OrgApiKey {
+  id: string;
+  label: string;
+  prefix: string;
+  scopes: string[];
+  createdAt: string;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
 }
 
 /**
@@ -221,6 +288,7 @@ export interface ResolvedOrgContext {
 export const ALL_ROLES: OrgRole[] = [
   'owner',
   'admin',
+  'manager',
   'accountant',
   'employee',
   'auditor',
@@ -230,6 +298,7 @@ export const ALL_ROLES: OrgRole[] = [
 export const ROLE_LABELS: Record<OrgRole, string> = {
   owner: 'Owner',
   admin: 'Admin',
+  manager: 'Manager',
   accountant: 'Accountant',
   employee: 'Employee',
   auditor: 'Auditor',
@@ -239,8 +308,23 @@ export const ROLE_LABELS: Record<OrgRole, string> = {
 export const ROLE_DESCRIPTIONS: Record<OrgRole, string> = {
   owner: 'Full control. Billing, members, settings, and deletion.',
   admin: 'Manage members, settings, and all organization data.',
+  manager: 'Team lead. Manages members and all operational data. No billing or owner changes.',
   accountant: 'Create and edit invoices, returns, expenses, and payments.',
   employee: 'Operational access — assigned tasks and clients.',
   auditor: 'Read-only access across the entire organization.',
   viewer: 'Read-only access to dashboards and reports.',
+};
+
+/**
+ * Privilege ranking (higher = more powerful). Used to prevent a user from
+ * assigning or demoting to a role equal-to-or-higher than their own.
+ */
+export const ROLE_RANK: Record<OrgRole, number> = {
+  owner: 100,
+  admin: 80,
+  manager: 60,
+  accountant: 40,
+  employee: 20,
+  auditor: 10,
+  viewer: 5,
 };

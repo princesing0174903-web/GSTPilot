@@ -1,13 +1,38 @@
 #!/bin/bash
-# Webpack edition — lower memory peak for the large root page.
-trap '' SIGHUP SIGTERM SIGINT SIGPIPE
+# GSTPilot webpack dev-server watchdog
+# Restarts the Next.js dev server (webpack mode) whenever it dies.
+# The 4GB sandbox OOM-kills next-server during heavy compiles; this script
+# keeps it alive so webpack's .next cache eventually warms up and compiles
+# become fast + low-memory.
 cd /home/z/my-project
-echo "[watchdog $(date +%H:%M:%S)] started (webpack, heap=2000m)" >> dev.log
+
+HEAP=2048
+PORT=3000
+LOG=dev.log
+PIDFILE=.dev-server.pid
+
 while true; do
-  NODE_OPTIONS="--max-old-space-size=2000 --max-semi-space-size=48" \
-    node node_modules/.bin/next dev -p 3000 --webpack >> dev.log 2>&1
-  EC=$?
-  echo "[watchdog $(date +%H:%M:%S)] next dev exited code=$EC — restarting in 4s..." >> dev.log
-  sync 2>/dev/null || true
-  sleep 4
+  echo "[$(date '+%H:%M:%S')] ▶ starting dev server (heap=${HEAP}MB)..."
+  NODE_OPTIONS="--max-old-space-size=${HEAP}" node node_modules/next/dist/bin/next dev --webpack -p $PORT > $LOG 2>&1 &
+  SERVER_PID=$!
+  echo $SERVER_PID > $PIDFILE
+  echo "[$(date '+%H:%M:%S')] ✓ server PID $SERVER_PID"
+
+  # Wait for "Ready"
+  for i in $(seq 1 20); do
+    sleep 1
+    if grep -q "Ready" $LOG 2>/dev/null; then
+      echo "[$(date '+%H:%M:%S')] ✓ server ready"
+      break
+    fi
+  done
+
+  # Keep alive: poll every 8s, restart on death
+  while true; do
+    sleep 8
+    if ! kill -0 $SERVER_PID 2>/dev/null; then
+      echo "[$(date '+%H:%M:%S')] ✗ server died — restarting..."
+      break
+    fi
+  done
 done

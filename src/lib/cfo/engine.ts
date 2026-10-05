@@ -381,6 +381,18 @@ function computeHealthScore(
   cash: CFODashboard['cash'],
   filings: FilingRow[],
   risks: RiskAssessment[],
+  /**
+   * Optional canonical Health Score from the centralized Business Snapshot
+   * (see `src/lib/business/snapshot.ts`). When provided, this OVERRIDES the
+   * legacy heuristic `overall` value so every consumer of CFO insights shows
+   * the exact same Health Score as the Home Dashboard / Oracle / Run Business.
+   *
+   * The legacy per-component breakdown (compliance / cashFlow / growth / etc.)
+   * is still computed locally for backward compatibility with the
+   * `HealthScoreSnapshot` type, but `overall` is now sourced from the
+   * canonical engine.
+   */
+  canonicalOverallHealthScore?: number,
 ): CFODashboard['healthScore'] {
   // Compliance: % of filed returns
   const totalFilings = filings.length || 1;
@@ -403,9 +415,14 @@ function computeHealthScore(
   // Collections: collection efficiency
   const collections = receivables.collectionEfficiencyPct;
 
-  const overall = Math.round(
+  // Overall — CANONICAL when available, otherwise mean of legacy components.
+  const legacyOverall = Math.round(
     mean([compliance, cashFlow, growth, profitability, risk, collections]),
   );
+  const overall =
+    typeof canonicalOverallHealthScore === 'number'
+      ? clamp(Math.round(canonicalOverallHealthScore), 0, 100)
+      : legacyOverall;
 
   return { overall, compliance, cashFlow, growth, profitability, risk, collections };
 }
@@ -414,6 +431,34 @@ function buildDashboard(
   invoices: InvoiceRow[],
   filings: FilingRow[],
   risks: RiskAssessment[],
+  canonicalOverallHealthScore?: number,
+  /**
+   * Optional canonical Business Snapshot from
+   * `src/lib/business/snapshot.ts`. When provided, the headline aggregate
+   * fields of every dashboard sub-section are OVERRIDDEN with snapshot
+   * values (revenue / cash / receivables / payables / GST / profit /
+   * healthScore). The legacy `computeRevenue`/`computeCash`/etc. helpers
+   * still run for sparkline + filing-due-date detail that the snapshot
+   * doesn't expose — but they no longer DETERMINE the headline numbers.
+   *
+   * See AUDIT-DUP-1 + task DUP-CLEANUP in worklog.md.
+   */
+  snapshot?: {
+    revenue: number;
+    revenueThisMonth?: number;
+    revenueLastMonth?: number;
+    profit: number;
+    profitMargin: number;
+    cash: number;
+    runwayDays: number;
+    receivables: number;
+    overdueReceivables?: number;
+    overdueInvoiceCount?: number;
+    collectionRate?: number;
+    payables: number;
+    gstLiability?: number;
+    itcAvailable?: number;
+  },
 ): CFODashboard {
   const revenue = computeRevenue(invoices);
   const receivables = computeReceivables(invoices);
@@ -421,7 +466,59 @@ function buildDashboard(
   const payables = computePayables(revenue, gst.liability);
   const cash = computeCash(revenue, receivables, payables);
   const profit = computeProfit(revenue);
-  const healthScore = computeHealthScore(receivables, revenue, cash, filings, risks);
+  const healthScore = computeHealthScore(
+    receivables, revenue, cash, filings, risks, canonicalOverallHealthScore,
+  );
+
+  // ── Override headline aggregates with the canonical Business Snapshot ──
+  // Values are only overridden when the snapshot actually carries data
+  // (i.e. snapshot.revenue > 0 || snapshot.cash > 0 || snapshot.receivables > 0)
+  // so legacy callers without an orgId keep the local heuristic intact.
+  if (snapshot && (snapshot.revenue > 0 || snapshot.cash > 0 || snapshot.receivables > 0)) {
+    if (typeof snapshot.revenueThisMonth === 'number') {
+      revenue.thisMonth = Math.round(snapshot.revenueThisMonth);
+    }
+    if (typeof snapshot.revenueLastMonth === 'number') {
+      revenue.lastMonth = Math.round(snapshot.revenueLastMonth);
+    }
+    if (revenue.lastMonth > 0) {
+      revenue.growthPct =
+        Math.round(((revenue.thisMonth - revenue.lastMonth) / revenue.lastMonth) * 1000) / 10;
+    } else if (revenue.thisMonth > 0) {
+      revenue.growthPct = 100;
+    } else {
+      revenue.growthPct = 0;
+    }
+
+    profit.netProfit = Math.round(snapshot.profit);
+    profit.marginPct = Math.round(snapshot.profitMargin * 100);
+
+    cash.currentBalance = Math.round(snapshot.cash);
+    if (Number.isFinite(snapshot.runwayDays) && snapshot.runwayDays > 0) {
+      cash.runwayDays = Math.round(snapshot.runwayDays);
+    }
+
+    receivables.pendingCollections = Math.round(snapshot.receivables);
+    if (typeof snapshot.overdueReceivables === 'number') {
+      receivables.overdueCollections = Math.round(snapshot.overdueReceivables);
+    }
+    if (typeof snapshot.overdueInvoiceCount === 'number') {
+      receivables.overdueCount = snapshot.overdueInvoiceCount;
+    }
+    if (typeof snapshot.collectionRate === 'number' && snapshot.collectionRate > 0) {
+      receivables.collectionEfficiencyPct = clamp(Math.round(snapshot.collectionRate * 100), 0, 100);
+    }
+
+    payables.upcomingPayments = Math.round(snapshot.payables);
+
+    if (typeof snapshot.gstLiability === 'number') {
+      gst.liability = Math.round(snapshot.gstLiability);
+    }
+    if (typeof snapshot.itcAvailable === 'number') {
+      gst.itcAvailable = Math.round(snapshot.itcAvailable);
+    }
+  }
+
   return { revenue, profit, cash, receivables, payables, gst, healthScore };
 }
 
@@ -1124,10 +1221,39 @@ function buildMemory(
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
 
-export async function generateCFOInsights(user?: { name?: string } | null): Promise<CFOResponse> {
-  // Fetch live data from Prisma
+/**
+ * Generate the CFO insights dashboard.
+ *
+ * @param user Optional user object (for personalized briefs).
+ * @param opts.organizationId When provided, the canonical Business Snapshot
+ *   is fetched and its `healthScore` is used as the authoritative
+ *   `dashboard.healthScore.overall`. This delegates to the centralized Health
+ *   Score engine in `src/lib/business/snapshot.ts` (see AUDIT-DUP-1 + task
+ *   HEALTH-ENGINE) — eliminating the duplicate `computeHealthScore` formula.
+ *   When omitted (legacy callers), the local heuristic is used as a fallback.
+ */
+export async function generateCFOInsights(
+  user?: { name?: string } | null,
+  opts: { organizationId?: string } = {},
+): Promise<CFOResponse> {
+  const organizationId = opts.organizationId;
+
+  // 🔒 TENANT ISOLATION: every Prisma read is scoped by `client: { firmId: organizationId }`.
+  // When no organizationId is provided (legacy callers), we return EMPTY arrays so the
+  // engine never leaks cross-tenant data. Callers that want real CFO insights MUST
+  // pass `opts.organizationId`. See AUDIT-DUP-1 (worklog.md) — pre-fix these 4 reads
+  // were GLOBALLY querying invoice / client / gSTRFiling / notice with no where clause.
+  const firmScope = organizationId
+    ? { client: { firmId: organizationId } }
+    : { client: { firmId: '__NO_ORG__' } }; // sentinel that matches no rows
+  const clientScope = organizationId
+    ? { firmId: organizationId }
+    : { firmId: '__NO_ORG__' };
+
+  // Fetch live data from Prisma (org-scoped)
   const [invoicesRaw, clientsRaw, filingsRaw, noticesRaw] = await Promise.all([
     db.invoice.findMany({
+      where: firmScope,
       select: {
         invoiceDate: true,
         totalAmount: true,
@@ -1143,10 +1269,12 @@ export async function generateCFOInsights(user?: { name?: string } | null): Prom
       take: 5000,
     }) as Promise<InvoiceRow[]>,
     db.client.findMany({
+      where: clientScope,
       select: { id: true, gstin: true, tradeName: true, status: true, healthScore: true },
       take: 1000,
     }) as Promise<ClientRow[]>,
     db.gSTRFiling.findMany({
+      where: firmScope,
       select: {
         id: true,
         returnType: true,
@@ -1158,6 +1286,7 @@ export async function generateCFOInsights(user?: { name?: string } | null): Prom
       take: 2000,
     }) as Promise<FilingRow[]>,
     db.notice.findMany({
+      where: firmScope,
       select: { id: true, noticeType: true, status: true, noticeDate: true, dueDate: true, clientId: true },
       take: 500,
     }) as Promise<NoticeRow[]>,
@@ -1166,12 +1295,67 @@ export async function generateCFOInsights(user?: { name?: string } | null): Prom
   const hasLiveData =
     invoicesRaw.length > 0 || clientsRaw.length > 0 || filingsRaw.length > 0;
 
+  // ── Fetch the canonical Business Snapshot (single source of truth) ──
+  // The snapshot OVERRIDES headline aggregates (revenue / cash / receivables /
+  // payables / GST / profit / healthScore / riskScore) so every CFO consumer
+  // sees the exact same numbers as the Home Dashboard / Oracle / Run Business.
+  // Falls back gracefully if the org has no snapshot yet (legacy heuristic
+  // remains in effect for callers that don't pass an organizationId).
+  let canonicalOverallHealthScore: number | undefined;
+  let snapshot: {
+    revenue: number;
+    revenueThisMonth?: number;
+    revenueLastMonth?: number;
+    profit: number;
+    profitMargin: number;
+    cash: number;
+    runwayDays: number;
+    receivables: number;
+    overdueReceivables?: number;
+    overdueInvoiceCount?: number;
+    collectionRate?: number;
+    payables: number;
+    gstLiability?: number;
+    itcAvailable?: number;
+  } | undefined;
+  if (organizationId) {
+    try {
+      const { getBusinessSnapshot } = await import('@/lib/business/snapshot');
+      const s = await getBusinessSnapshot(organizationId);
+      // Only override if the snapshot has real data (score > 0 OR any headline
+      // aggregate > 0 means the canonical engine saw at least one data point).
+      if (s.healthScore > 0 || s.revenue > 0 || s.cash > 0 || s.receivables > 0) {
+        canonicalOverallHealthScore = s.healthScore;
+        snapshot = {
+          revenue: s.revenue,
+          revenueThisMonth: s.revenueThisMonth,
+          revenueLastMonth: s.revenueLastMonth,
+          profit: s.profit,
+          profitMargin: s.profitMargin,
+          cash: s.cash,
+          runwayDays: s.runwayDays,
+          receivables: s.receivables,
+          overdueReceivables: s.overdueReceivables,
+          overdueInvoiceCount: s.overdueInvoiceCount,
+          collectionRate: s.collectionRate,
+          payables: s.payables,
+          gstLiability: s.gstLiability,
+          itcAvailable: s.itcAvailable,
+        };
+      }
+    } catch {
+      // Swallow — fall back to the legacy heuristic.
+    }
+  }
+
   // Build module-by-module
   // Risks need to be computed first because dashboard.healthScore depends on them.
   // We compute risks using a provisional dashboard (without healthScore), then recompute.
-  const provisionalDashboard = buildDashboard(invoicesRaw, filingsRaw, []);
+  const provisionalDashboard = buildDashboard(invoicesRaw, filingsRaw, [], undefined, snapshot);
   const risks = buildRisks(invoicesRaw, filingsRaw, noticesRaw, provisionalDashboard);
-  const dashboard = buildDashboard(invoicesRaw, filingsRaw, risks);
+  const dashboard = buildDashboard(
+    invoicesRaw, filingsRaw, risks, canonicalOverallHealthScore, snapshot,
+  );
   const predictions = buildPredictions(invoicesRaw, clientsRaw, dashboard, risks);
   const brief = buildDailyBrief(dashboard, risks, user);
   const recommendations = buildRecommendations(dashboard, predictions, risks);

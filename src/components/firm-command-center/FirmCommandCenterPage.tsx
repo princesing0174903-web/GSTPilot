@@ -57,7 +57,7 @@ const stagger = {
 }
 
 // ── SVG Sparkline ──
-function Sparkline({ data, color = '#10b981', w = 120, h = 32 }: {
+function Sparkline({ data, color = '#2563EB', w = 120, h = 32 }: {
   data: number[]; color?: string; w?: number; h?: number
 }) {
   if (data.length < 2) return null
@@ -82,7 +82,7 @@ function ScoreGauge({ value, size = 72, label }: { value: number; size?: number;
   const c = Math.PI * 2 * r
   const pctVal = Math.max(0, Math.min(100, value))
   const fill = (pctVal / 100) * c
-  const color = pctVal > 70 ? '#10b981' : pctVal > 40 ? '#f59e0b' : '#ef4444'
+  const color = pctVal > 70 ? '#2563EB' : pctVal > 40 ? '#f59e0b' : '#ef4444'
   return (
     <div className="flex flex-col items-center gap-1">
       <svg width={size} height={size} className="-rotate-90">
@@ -579,7 +579,7 @@ export default function FirmCommandCenterPage() {
                           )
                         })}
                       </div>
-                      <Sparkline data={metrics.monthlyRevenue} color="#10b981" w={300} h={40} />
+                      <Sparkline data={metrics.monthlyRevenue} color="#2563EB" w={300} h={40} />
                     </div>
                   )}
                 </CardContent>
@@ -678,7 +678,7 @@ export default function FirmCommandCenterPage() {
                       {(() => {
                         const total = metrics.totalClients || 1
                         const segments = [
-                          { count: metrics.healthyClients, color: '#10b981' },
+                          { count: metrics.healthyClients, color: '#2563EB' },
                           { count: metrics.atRiskClients, color: '#f59e0b' },
                           { count: metrics.criticalClients, color: '#ef4444' },
                         ]
@@ -786,7 +786,7 @@ export default function FirmCommandCenterPage() {
                   <CardContent className="p-4">
                     <span className="text-xs text-emerald-600 font-medium">Revenue Forecast</span>
                     <p className="text-lg font-bold text-emerald-800">{fmtINR(Math.round(metrics.revenueForecast))}</p>
-                    <Sparkline data={metrics.monthlyRevenue} color="#10b981" />
+                    <Sparkline data={metrics.monthlyRevenue} color="#2563EB" />
                   </CardContent>
                 </Card>
                 <Card className="border-amber-200 bg-amber-50/50">

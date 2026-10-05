@@ -29,16 +29,19 @@ export type SyncLogRow = Awaited<ReturnType<typeof db.syncLog.findFirst>>;
 export type ConnectionRow = Awaited<ReturnType<typeof db.businessConnection.findUnique>>;
 
 // ─── Reconstruct a GstnDataset from stored DB rows ──────────────────────────────
+// NOTE: `generateGstnDataset` now returns `null` — real GSTN API integration is a
+// future enterprise phase. Until then, there is no synthetic GSTN dataset to load,
+// so `loadGstnDataset` returns `null` (honest empty state) for every connection.
+// Real DB-backed GSTN rows (GSTRFiling / EInvoice / EWayBill / Notice tables) would
+// be rehydrated here when a real GSTN API client is wired up.
 async function loadGstnDataset(connectionId: string): Promise<GstnDataset | null> {
   const conn = await db.businessConnection.findUnique({ where: { id: connectionId } });
   if (!conn || conn.type !== 'gstn' || conn.status !== 'active') return null;
 
-  // The stored GSTN data is regenerated deterministically from the verified GSTIN.
-  // (In production this would be a row-by-row rehydration from GSTRFiling / EInvoice
-  // / EWayBill / Notice tables. We keep the canonical generator as the source of
-  // truth so the dataset is always internally consistent with what was fetched.)
+  // REAL IMPLEMENTATION PENDING — generator returns null (no synthetic data).
+  // Future: rehydrate from real GSTRFiling / EInvoice / EWayBill / Notice rows.
   const dataset = generateGstnDataset(conn.gstin!);
-  return dataset;
+  return dataset; // null
 }
 
 // ─── Reconstruct a BankDataset from stored BankTransaction rows ─────────────────
@@ -307,10 +310,14 @@ export async function listConnections() {
   });
 }
 
-// ─── Public: connect GSTN (verify + persist + seed data) ────────────────────────
+// ─── Public: connect GSTN (verify + persist) ────────────────────────────────────
+// NOTE: With `generateGstnDataset` returning null (real GSTN API pending), this
+// function persists the connection row but does NOT seed synthetic data. The
+// connection metadata is intentionally minimal until a real GSTN client populates
+// legal/trade name, state, business type, etc. from the live API.
 export async function connectGstn(gstinRaw: string, connectedBy?: string) {
   const gstin = gstinRaw.toUpperCase().trim();
-  const dataset = generateGstnDataset(gstin); // throws on invalid
+  const dataset = generateGstnDataset(gstin); // null (real GSTN API pending)
 
   // Replace any existing GSTN connection
   const existing = await db.businessConnection.findFirst({
@@ -328,16 +335,16 @@ export async function connectGstn(gstinRaw: string, connectedBy?: string) {
       type: 'gstn',
       provider: 'GSTN',
       gstin,
-      legalName: dataset.legalName,
-      tradeName: dataset.tradeName,
+      legalName: dataset?.legalName ?? null,
+      tradeName: dataset?.tradeName ?? null,
       status: 'active',
       maskedRef: gstin,
-      metadata: JSON.stringify({
+      metadata: JSON.stringify(dataset ? {
         state: dataset.state,
         stateCode: dataset.stateCode,
         businessType: dataset.businessType,
         registrationDate: dataset.registrationDate,
-      }),
+      } : { pendingRealApi: true }),
       lastSyncedAt: new Date(),
       nextSyncAt: new Date(Date.now() + 15 * 60 * 1000),
       connectedBy,
@@ -347,13 +354,18 @@ export async function connectGstn(gstinRaw: string, connectedBy?: string) {
   return { connection, dataset };
 }
 
-// ─── Public: connect a bank (persist + seed transactions) ───────────────────────
+// ─── Public: connect a bank (persist connection; no synthetic txns) ────────────
+// NOTE: With `generateBankDataset` returning null (real bank API pending), this
+// function persists the connection row but does NOT seed synthetic transactions.
+// Real bank transactions will be fetched and persisted when a real bank API
+// client (Razorpay / Decentro / MBS / Anumati) is wired up via syncConnection().
 export async function connectBank(
   provider: BankDataset['provider'],
   accountRef: string,
   connectedBy?: string,
 ) {
-  const dataset = generateBankDataset(provider, accountRef);
+  const dataset = generateBankDataset(provider, accountRef); // null (real bank API pending)
+  const maskedAccount = dataset?.maskedAccount ?? ('XXXXXX' + (accountRef ?? '').slice(-4));
 
   // Replace any existing bank connection
   const existing = await db.businessConnection.findFirst({
@@ -372,32 +384,39 @@ export async function connectBank(
       type: 'bank',
       provider,
       status: 'active',
-      maskedRef: dataset.maskedAccount,
-      metadata: JSON.stringify({ accountType: dataset.accountType, accountRef }),
+      maskedRef: maskedAccount,
+      metadata: JSON.stringify({
+        accountType: dataset?.accountType ?? 'current',
+        accountRef,
+        pendingRealApi: !dataset,
+      }),
       lastSyncedAt: new Date(),
       nextSyncAt: new Date(Date.now() + 15 * 60 * 1000),
       connectedBy,
     },
   });
 
-  // Bulk-insert transactions (chunked to avoid SQLite param limits)
-  const txns = dataset.transactions.map(t => ({
-    connectionId: connection.id,
-    bankProvider: provider,
-    txnDate: new Date(t.txnDate),
-    description: t.description,
-    amount: t.amount,
-    type: t.type,
-    category: t.category ?? null,
-    counterparty: t.counterparty ?? null,
-    referenceNo: t.referenceNo ?? null,
-    balanceAfter: t.balanceAfter,
-    reconciled: false,
-  }));
+  // Bulk-insert transactions only when a real dataset is available.
+  // (Currently never — `generateBankDataset` returns null. Real bank API pending.)
+  if (dataset) {
+    const txns = dataset.transactions.map(t => ({
+      connectionId: connection.id,
+      bankProvider: provider,
+      txnDate: new Date(t.txnDate),
+      description: t.description,
+      amount: t.amount,
+      type: t.type,
+      category: t.category ?? null,
+      counterparty: t.counterparty ?? null,
+      referenceNo: t.referenceNo ?? null,
+      balanceAfter: t.balanceAfter,
+      reconciled: false,
+    }));
 
-  // Insert in chunks of 200
-  for (let i = 0; i < txns.length; i += 200) {
-    await db.bankTransaction.createMany({ data: txns.slice(i, i + 200) });
+    // Insert in chunks of 200
+    for (let i = 0; i < txns.length; i += 200) {
+      await db.bankTransaction.createMany({ data: txns.slice(i, i + 200) });
+    }
   }
 
   return { connection, dataset };
@@ -476,103 +495,62 @@ export async function syncConnection(
 
     // 2. Re-fetch (regenerate) the dataset
     let recordsImported = 0;
-    let partialErrors: string[] = [];
 
     if (conn.type === 'gstn') {
+      // REAL GSTN API PENDING — generator returns null, nothing to import.
+      // Future: fetch real GSTR filings / e-invoices / e-way bills / notices from
+      // the live GSTN API and persist them, then set recordsImported to the count.
       const dataset = generateGstnDataset(conn.gstin!);
-      recordsImported =
-        dataset.gstrFilings.length +
-        dataset.eInvoices.length +
-        dataset.eWayBills.length +
-        dataset.notices.length;
+      recordsImported = dataset
+        ? dataset.gstrFilings.length +
+          dataset.eInvoices.length +
+          dataset.eWayBills.length +
+          dataset.notices.length
+        : 0;
     } else if (conn.type === 'bank') {
       const provider = (conn.provider ?? 'HDFC') as BankProvider;
       const meta = parseConnectionMeta(conn.metadata);
       const accountRef = (meta.accountRef as string) ?? (conn.maskedRef ?? '').slice(-4) ?? '0000';
       const dataset = generateBankDataset(provider, accountRef);
 
-      // Delete old bank transactions for this connection
+      // Delete old bank transactions for this connection before re-importing
       await db.bankTransaction.deleteMany({ where: { connectionId: conn.id } });
 
-      // Re-insert chunked (200 per batch — SQLite param limit)
-      const txns = dataset.transactions.map(t => ({
-        connectionId: conn.id,
-        bankProvider: provider,
-        txnDate: new Date(t.txnDate),
-        description: t.description,
-        amount: t.amount,
-        type: t.type,
-        category: t.category ?? null,
-        counterparty: t.counterparty ?? null,
-        referenceNo: t.referenceNo ?? null,
-        balanceAfter: t.balanceAfter,
-        reconciled: false,
-      }));
-      for (let i = 0; i < txns.length; i += 200) {
-        await db.bankTransaction.createMany({ data: txns.slice(i, i + 200) });
+      // REAL BANK API PENDING — generator returns null, no transactions to insert.
+      // Future: fetch real bank transactions from the live bank API and persist them.
+      if (dataset) {
+        const txns = dataset.transactions.map(t => ({
+          connectionId: conn.id,
+          bankProvider: provider,
+          txnDate: new Date(t.txnDate),
+          description: t.description,
+          amount: t.amount,
+          type: t.type,
+          category: t.category ?? null,
+          counterparty: t.counterparty ?? null,
+          referenceNo: t.referenceNo ?? null,
+          balanceAfter: t.balanceAfter,
+          reconciled: false,
+        }));
+        for (let i = 0; i < txns.length; i += 200) {
+          await db.bankTransaction.createMany({ data: txns.slice(i, i + 200) });
+        }
+        recordsImported = dataset.transactions.length;
+      } else {
+        recordsImported = 0;
       }
-      recordsImported = dataset.transactions.length;
     } else {
       throw new Error(`Unknown connection type: ${conn.type}`);
     }
 
-    // 3. Simulate rare partial / failed outcomes (5% partial, 2% failed)
-    const r = Math.random();
-    if (r < 0.02) {
-      // Failed
-      const errMsg = 'Sync failed — upstream API timeout (simulated)';
-      log = await db.syncLog.update({
-        where: { id: log.id },
-        data: {
-          status: 'failed',
-          errorsCount: 1,
-          message: errMsg,
-          errorDetail: JSON.stringify([errMsg]),
-          completedAt: new Date(),
-        },
-      });
-      connection = await db.businessConnection.update({
-        where: { id: conn.id },
-        data: {
-          syncStatus: 'failed',
-          lastSyncedAt: new Date(),
-          lastSyncRecords: recordsImported,
-          lastSyncErrors: 1,
-          lastSyncMessage: errMsg,
-        },
-      });
-      return { log, connection };
-    }
-
-    if (r < 0.05) {
-      // Partial — 1–2 errors
-      partialErrors = [
-        'Row 23: counterparty name truncated',
-        ...(Math.random() > 0.5 ? ['Row 67: amount sign normalised'] : []),
-      ];
-      log = await db.syncLog.update({
-        where: { id: log.id },
-        data: {
-          status: 'partial',
-          recordsImported,
-          errorsCount: partialErrors.length,
-          message: `Partial sync — ${recordsImported} records imported, ${partialErrors.length} errors`,
-          errorDetail: JSON.stringify(partialErrors),
-          completedAt: new Date(),
-        },
-      });
-      connection = await db.businessConnection.update({
-        where: { id: conn.id },
-        data: {
-          syncStatus: 'partial',
-          lastSyncedAt: new Date(),
-          lastSyncRecords: recordsImported,
-          lastSyncErrors: partialErrors.length,
-          lastSyncMessage: `Partial sync — ${recordsImported} records imported`,
-        },
-      });
-      return { log, connection };
-    }
+    // 3. Sync outcome — only real errors are recorded. The previous
+    //    implementation simulated 2% failed + 3% partial syncs with
+    //    Math.random() and fabricated error messages ('Row 23: counterparty
+    //    name truncated', 'Row 67: amount sign normalised'). That wrote
+    //    fake failures to the SyncLog and BusinessConnection tables.
+    //    Removed because sync failures must reflect real upstream errors,
+    //    not random noise. Real errors thrown above are caught by the
+    //    surrounding try/catch and recorded as 'failed' below.
 
     // 4. Success
     const okMsg = `Synced ${recordsImported} records`;

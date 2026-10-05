@@ -81,14 +81,12 @@ interface Action {
   agent: string;
   done: boolean;
 }
-const INITIAL_ACTIONS: Action[] = [
-  { id: 1, label: 'Recover ₹4.2L from 3 overdue clients', detail: 'Collections Agent identified priority accounts', priority: 'high', agent: 'Collections', done: false },
-  { id: 2, label: 'File GSTR-3B for Acme Industries', detail: 'Due tomorrow · prepped by GST Agent', priority: 'high', agent: 'GST', done: false },
-  { id: 3, label: 'Contact vendor about delayed shipment', detail: 'Decision Engine flagged supply risk', priority: 'medium', agent: 'CEO', done: false },
-  { id: 4, label: 'Review collections report', detail: 'Analyst Agent compiled weekly summary', priority: 'medium', agent: 'Analyst', done: true },
-  { id: 5, label: 'Approve Q3 revenue forecast', detail: 'CFO Agent awaiting sign-off', priority: 'low', agent: 'CFO', done: false },
-  { id: 6, label: 'Reconcile ICICI bank statement', detail: 'Compliance Agent matched 142 entries', priority: 'medium', agent: 'Compliance', done: true },
-];
+// INITIAL_ACTIONS — previously a hardcoded mock list of 6 fake actions
+// ("Recover ₹4.2L from 3 overdue clients", "File GSTR-3B for Acme Industries",
+// "Approve Q3 revenue forecast", "Reconcile ICICI bank statement", etc.).
+// Removed during mock-data audit (Task 7). The actions list now starts empty;
+// real actions should be sourced from /api/priority-queue or similar.
+const INITIAL_ACTIONS: Action[] = [];
 
 // ─── Data: 5 Engines ──────────────────────────────────────────────────────────
 interface Engine {
@@ -169,7 +167,9 @@ export default function CommandCenterPage() {
   }, []);
 
   const completedCount = actions.filter(a => a.done).length;
-  const progressPct = Math.round((completedCount / actions.length) * 100);
+  const progressPct = actions.length > 0
+    ? Math.round((completedCount / actions.length) * 100)
+    : 0;
 
   const toggleAction = (id: number) => {
     setActions(prev => prev.map(a => a.id === id ? { ...a, done: !a.done } : a));

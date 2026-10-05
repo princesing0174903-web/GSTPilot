@@ -4,7 +4,7 @@
 // Oracle: "I've generated your E-Invoice." / "IRN pushed to IRP."
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { genIRN, genAckNo, nowISO, isValidGstinFormat } from './client';
+import { nowISO, isValidGstinFormat } from './client';
 import type { EInvoiceResult } from './client';
 
 // In-memory IRN store (in production: DB table)
@@ -25,28 +25,17 @@ export async function generateEInvoice(params: {
   if (!isValidGstinFormat(params.sellerGstin)) {
     throw new Error(`Invalid seller GSTIN: "${params.sellerGstin}".`);
   }
-  const irn = genIRN();
-  const ackNo = genAckNo();
-  // Generate a simulated QR code (base64 placeholder)
-  const qrData = JSON.stringify({
-    irn,
-    sellerGstin: params.sellerGstin,
-    buyerGstin: params.buyerGstin,
-    invoiceNo: params.invoiceNo,
-    invoiceValue: params.invoiceValue,
-  });
-  const qrCode = Buffer.from(qrData).toString('base64').slice(0, 200);
-
-  const result: EInvoiceResult = {
-    irn,
-    qrCode,
-    ackNo,
-    ackDate: nowISO(),
-    signedInvoice: Buffer.from(JSON.stringify(params)).toString('base64'),
-    status: 'generated',
-  };
-  irnStore.set(irn, result);
-  return result;
+  // ── PRODUCTION SAFETY ──
+  // IRN, Ack No, signed QR code, and signed invoice are official government
+  // artefacts issued ONLY by the IRP (Invoice Registration Portal) operated
+  // by GSTN/NIC. Fabricating them locally with Math.random() (as the previous
+  // implementation did) would constitute forging legal documents.
+  // Until the real IRP API integration is wired up, refuse to generate and
+  // surface a clear error so the user knows to connect the GST portal.
+  // TODO: Replace with real IRP/NIC API integration when available.
+  throw new Error(
+    'GSTN API not configured. Set GSTN_API_KEY and connect GST portal to generate IRN through the IRP.'
+  );
 }
 
 export async function cancelEInvoice(irn: string, reason: string): Promise<EInvoiceResult> {

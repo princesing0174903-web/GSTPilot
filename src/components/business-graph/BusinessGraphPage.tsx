@@ -129,10 +129,10 @@ function nodeColor(n: GraphNode, riskOverlay: boolean): string {
 
 // Edge color map (by relationship type)
 const EDGE_COLORS: Record<RelationshipType, string> = {
-  OWNS: '#10b981',
-  PAYS: '#06b6d4',
+  OWNS: '#2563EB',
+  PAYS: '#3B82F6',
   OWES: '#f97316',
-  FILES: '#34d399',
+  FILES: '#3B82F6',
   GENERATES: '#a78bfa',
   RESPONDS_TO: '#ef4444',
   WORKS_WITH: '#f472b6',
@@ -141,14 +141,14 @@ const EDGE_COLORS: Record<RelationshipType, string> = {
   PREDICTED_BY: '#c084fc',
   CREATED_BY: '#fb923c',
   // ── Phase 6 LIVE additions ────────────────────────────────────────────────
-  RECEIVES: '#22d3ee',
+  RECEIVES: '#60A5FA',
   SUPPLIES: '#f59e0b',
-  CLEARS: '#06d6a0',
+  CLEARS: '#2563EB',
   REDUCES: '#f43f5e',
   AFFECTS: '#dc2626',
   MANAGES: '#f472b6',
   DERIVES_FROM: '#a78bfa',
-  PAID_BY: '#14b8a6',
+  PAID_BY: '#3B82F6',
   RECORDED_IN: '#0ea5e9',
   GENERATES_LIABILITY: '#7c3aed',
 };

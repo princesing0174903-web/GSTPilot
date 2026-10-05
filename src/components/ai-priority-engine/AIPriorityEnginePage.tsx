@@ -75,12 +75,12 @@ interface ComputedPriority {
 
 // ─── Category Config ──────────────────────────────────────────────────────
 const categoryConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  filing: { label: 'Filing', icon: <FileText className="h-3.5 w-3.5" />, color: '#10b981' },
+  filing: { label: 'Filing', icon: <FileText className="h-3.5 w-3.5" />, color: '#2563EB' },
   follow_up: { label: 'Follow Up', icon: <MessageSquare className="h-3.5 w-3.5" />, color: '#3b82f6' },
   review: { label: 'Review', icon: <Shield className="h-3.5 w-3.5" />, color: '#8b5cf6' },
   upload: { label: 'Upload', icon: <Upload className="h-3.5 w-3.5" />, color: '#f59e0b' },
   call: { label: 'Call', icon: <Phone className="h-3.5 w-3.5" />, color: '#ef4444' },
-  reconciliation: { label: 'Reconciliation', icon: <BarChart3 className="h-3.5 w-3.5" />, color: '#06b6d4' },
+  reconciliation: { label: 'Reconciliation', icon: <BarChart3 className="h-3.5 w-3.5" />, color: '#3B82F6' },
   payment: { label: 'Payment', icon: <IndianRupee className="h-3.5 w-3.5" />, color: '#f97316' },
 }
 
@@ -410,7 +410,7 @@ export default function AIPriorityEnginePage() {
   function scoreColor(score: number): string {
     if (score > 3000) return '#ef4444'
     if (score > 1500) return '#f59e0b'
-    if (score > 500) return '#10b981'
+    if (score > 500) return '#2563EB'
     return '#94a3b8'
   }
 
@@ -418,7 +418,7 @@ export default function AIPriorityEnginePage() {
     if (urgency >= 9) return { label: 'Critical', color: '#ef4444' }
     if (urgency >= 7) return { label: 'Urgent', color: '#f59e0b' }
     if (urgency >= 5) return { label: 'High', color: '#f97316' }
-    if (urgency >= 3) return { label: 'Normal', color: '#10b981' }
+    if (urgency >= 3) return { label: 'Normal', color: '#2563EB' }
     return { label: 'Low', color: '#94a3b8' }
   }
 
@@ -455,10 +455,10 @@ export default function AIPriorityEnginePage() {
       <motion.div variants={stagger} initial="hidden" animate="show"
         className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Priorities', value: summaryStats.total, icon: <ListChecks className="h-4 w-4" />, color: '#10b981' },
+          { label: 'Total Priorities', value: summaryStats.total, icon: <ListChecks className="h-4 w-4" />, color: '#2563EB' },
           { label: 'Urgent Items', value: summaryStats.urgent, icon: <AlertTriangle className="h-4 w-4" />, color: '#ef4444' },
           { label: 'High Priority', value: summaryStats.highScore, icon: <Zap className="h-4 w-4" />, color: '#f59e0b' },
-          { label: 'Avg Score', value: summaryStats.avgScore, icon: <TrendingUp className="h-4 w-4" />, color: '#06b6d4' },
+          { label: 'Avg Score', value: summaryStats.avgScore, icon: <TrendingUp className="h-4 w-4" />, color: '#3B82F6' },
         ].map(stat => (
           <motion.div key={stat.label} variants={fadeUp}>
             <Card className="hover:shadow-sm transition-shadow">
@@ -634,9 +634,9 @@ export default function AIPriorityEnginePage() {
                   <div className="space-y-2">
                     {[
                       { label: 'Urgency', desc: 'Deadline proximity', color: '#ef4444' },
-                      { label: 'Revenue Impact', desc: 'Client tax volume', color: '#10b981' },
+                      { label: 'Revenue Impact', desc: 'Client tax volume', color: '#2563EB' },
                       { label: 'Compliance Risk', desc: 'Overdue returns + health', color: '#f59e0b' },
-                      { label: 'Client Value', desc: 'Tax paid + invoice count', color: '#06b6d4' },
+                      { label: 'Client Value', desc: 'Tax paid + invoice count', color: '#3B82F6' },
                     ].map(item => (
                       <div key={item.label} className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -723,7 +723,7 @@ export default function AIPriorityEnginePage() {
                               </p>
                             </div>
                             <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-5 capitalize"
-                              style={{ borderColor: p.status === 'completed' ? '#10b981' : p.status === 'in_progress' ? '#f59e0b' : p.status === 'dismissed' ? '#94a3b8' : '#ef4444', color: p.status === 'completed' ? '#10b981' : p.status === 'in_progress' ? '#f59e0b' : p.status === 'dismissed' ? '#94a3b8' : '#ef4444' }}>
+                              style={{ borderColor: p.status === 'completed' ? '#2563EB' : p.status === 'in_progress' ? '#f59e0b' : p.status === 'dismissed' ? '#94a3b8' : '#ef4444', color: p.status === 'completed' ? '#2563EB' : p.status === 'in_progress' ? '#f59e0b' : p.status === 'dismissed' ? '#94a3b8' : '#ef4444' }}>
                               {p.status.replace('_', ' ')}
                             </Badge>
                           </div>

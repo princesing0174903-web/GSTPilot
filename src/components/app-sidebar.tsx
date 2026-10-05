@@ -125,6 +125,7 @@ interface NavItem {
 // COMMAND — entry points + autonomous run modes
 const commandItems: NavItem[] = [
   { title: 'Mission Control', view: 'dashboard', icon: LayoutDashboard, subtitle: 'The One Screen', shortcut: 'G+D' },
+  { title: 'Oracle', view: 'oracle-brain', icon: Sparkles, subtitle: 'Ask · Reason · Act', shortcut: 'G+O', isNew: true },
   { title: 'Execution Engine™', view: 'execution-engine', icon: Zap, subtitle: 'Observe·Think·Execute·Learn', isNew: true },
   { title: 'Business DNA', view: 'business-dna', icon: Fingerprint, subtitle: '6 Scores · Digital DNA', isNew: true },
   { title: "RUN INDIA'S BUSINESS™", view: 'run-india-business', icon: Landmark, subtitle: 'Autonomous Enterprise', isNew: true },
@@ -145,6 +146,7 @@ const autonomousItems: NavItem[] = [
 // INTELLIGENCE — AI Executive + AI Workforce merged
 const intelligenceItems: NavItem[] = [
   { title: 'AI CEO', view: 'firm-command-center', icon: Crown, subtitle: 'Autonomous Partner', isNew: true },
+  { title: 'Oracle AI', view: 'oracle-intelligence', icon: Sparkles, subtitle: 'Enterprise AI Workspace', isNew: true },
   { title: 'Operating Room', view: 'ai-operating-room', icon: Gauge, subtitle: '6 Live Scores', isNew: true },
   { title: 'Predictions', view: 'ai-predictions', icon: TrendingUp, subtitle: '6 Prediction Models', isNew: true },
   { title: 'Priority Engine', view: 'ai-priority-engine', icon: Target, subtitle: 'Daily Priorities', isNew: true },
@@ -169,6 +171,7 @@ const financeItems: NavItem[] = [
   { title: 'E-Invoicing', view: 'e-invoicing', icon: FileOutput, subtitle: 'IRN & E-Way Bill' },
   { title: 'Payments', view: 'payments', icon: Receipt, subtitle: 'Collect & Pay' },
   { title: 'Banking', view: 'banking', icon: Landmark, subtitle: 'Accounts & Reconcile' },
+  { title: 'Banking Intelligence', view: 'banking-intelligence', icon: Landmark, subtitle: 'Cash Flow & Forecast', isNew: true },
   { title: 'Invoices', view: 'invoices', icon: FileScan, subtitle: 'Processing Center' },
   { title: 'Reconcile', view: 'reconcile', icon: Search, subtitle: '2A/2B Matching' },
   { title: 'Payroll', view: 'payroll', icon: Wallet, subtitle: 'Salary & Compliance' },
@@ -223,6 +226,8 @@ const platformItems: NavItem[] = [
   { title: 'Approvals', view: 'approvals', icon: CheckCircle, subtitle: 'Workflow Approvals' },
   { title: 'White Label', view: 'white-label', icon: Palette, subtitle: 'Custom Branding' },
   { title: 'Settings', view: 'settings', icon: Settings, subtitle: 'Workspace' },
+  { title: 'Google Workspace', view: 'google-workspace', icon: Cloud, subtitle: 'Gmail · Drive · Docs · Sheets · Calendar', isNew: true },
+  { title: 'Zoho Books', view: 'zoho-books', icon: BookOpen, subtitle: 'Invoices · Customers · Bills · Banking', isNew: true },
 ]
 
 // Phase 13 — Enterprise Collaboration, Multi-Company & Command Network™
@@ -293,7 +298,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
             {item.title}
           </span>
           {item.shortcut && (
-            <span className="text-[9px] text-muted-foreground/30 font-mono hidden group-hover/navitem:inline-flex items-center gap-0.5">
+            <span className="text-[11px] text-muted-foreground/30 font-mono hidden group-hover/navitem:inline-flex items-center gap-0.5">
               {item.shortcut}
             </span>
           )}
@@ -306,7 +311,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
     <Collapsible defaultOpen={defaultOpen} className="group/collapsible">
       <SidebarGroup className="p-1.5">
         <CollapsibleTrigger className="group/label flex w-full items-center justify-between rounded-md px-2 h-8 hover:bg-white/[0.03] transition-colors outline-none focus-visible:ring-1 focus-visible:ring-ring/40">
-          <span className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50">
+          <span className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground/50">
             {label}
           </span>
           <ChevronDown className="h-3 w-3 text-muted-foreground/40 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
@@ -333,17 +338,17 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
                 GSTPilot
               </span>
               <span className="inline-flex items-center rounded-md accent-gradient-soft px-1.5 py-0.5 leading-none">
-                <span className="text-[9px] font-bold uppercase tracking-wider accent-text">
+                <span className="text-[11px] font-bold uppercase tracking-wider accent-text">
                   Infinity
                 </span>
               </span>
             </div>
             {user?.firmName ? (
-              <span className="text-[10px] text-muted-foreground/60 truncate max-w-[150px]">
+              <span className="text-[11px] text-muted-foreground/60 truncate max-w-[150px]">
                 {user.firmName}
               </span>
             ) : (
-              <span className="text-[10px] text-muted-foreground/40">
+              <span className="text-[11px] text-muted-foreground/40">
                 Financial Brain of India
               </span>
             )}
@@ -365,7 +370,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
         <DropdownMenu>
           <DropdownMenuTrigger className="w-full flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-white/[0.04] transition-colors outline-none text-left">
             <Avatar className="h-7 w-7 shrink-0">
-              <AvatarFallback className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 text-[10px] font-semibold">
+              <AvatarFallback className="bg-[#2563EB]/15 text-[#3B82F6] border border-[#2563EB]/25 text-[11px] font-semibold">
                 {userInitials}
               </AvatarFallback>
             </Avatar>
@@ -373,19 +378,19 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-medium text-foreground truncate">{user?.name || 'User'}</span>
               </div>
-              <span className="text-[9px] text-muted-foreground/50 truncate block">{user?.email || ''}</span>
+              <span className="text-[11px] text-muted-foreground/50 truncate block">{user?.email || ''}</span>
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="top" className="w-56">
             <div className="flex items-center gap-2 p-2">
               <Avatar className="h-7 w-7">
-                <AvatarFallback className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 text-[10px] font-semibold">
+                <AvatarFallback className="bg-[#2563EB]/15 text-[#3B82F6] border border-[#2563EB]/25 text-[11px] font-semibold">
                   {userInitials}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium truncate">{user?.name || 'User'}</p>
-                <p className="text-[10px] text-muted-foreground truncate">{user?.email || ''}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{user?.email || ''}</p>
               </div>
             </div>
             {user?.firmName && (
@@ -393,7 +398,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
                 <DropdownMenuSeparator />
                 <div className="flex items-center gap-2 px-2 py-1.5">
                   <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-[10px] text-muted-foreground truncate">{user.firmName}</span>
+                  <span className="text-[11px] text-muted-foreground truncate">{user.firmName}</span>
                 </div>
               </>
             )}
@@ -410,13 +415,13 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex items-center justify-between mt-2 px-1 hidden group-data-[collapsible=icon]:hidden">
-          <span className="text-[9px] font-medium text-muted-foreground/40">
+          <span className="text-[11px] font-medium text-muted-foreground/40">
             GSTPilot Infinity™
           </span>
           {unreadCount > 0 && (
             <div className="flex items-center gap-1">
               <Bell className="h-3 w-3 text-muted-foreground/50" />
-              <span className="text-[9px] font-medium text-muted-foreground/60">{unreadCount}</span>
+              <span className="text-[11px] font-medium text-muted-foreground/60">{unreadCount}</span>
             </div>
           )}
         </div>

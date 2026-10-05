@@ -234,7 +234,7 @@ function CashFlowChart({ points }: { points: CashFlowDailyPoint[] }) {
   });
   const linePts = pts.map(pt => `${pt.x},${pt.y}`).join(' ');
   const shortageColor = '#f87171';
-  const lineColor = '#10b981';
+  const lineColor = '#2563EB';
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="none">
       <defs>
@@ -257,7 +257,7 @@ function ReconDonut({ matched, total }: { matched: number; total: number }) {
   const pct = total > 0 ? Math.round((matched / total) * 100) : 0;
   const r = 36, c = 2 * Math.PI * r;
   const dashOffset = c - (pct / 100) * c;
-  const color = pct >= 80 ? '#10b981' : pct >= 60 ? '#f59e0b' : '#f87171';
+  const color = pct >= 80 ? '#2563EB' : pct >= 60 ? '#f59e0b' : '#f87171';
   return (
     <svg width="90" height="90" className="overflow-visible">
       <circle cx="45" cy="45" r={r} fill="none" stroke="currentColor" strokeWidth="8" className="text-slate-100 dark:text-slate-800" />

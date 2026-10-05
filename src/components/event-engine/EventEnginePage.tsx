@@ -330,7 +330,7 @@ function EventRateChart({ events }: { events: StreamEvent[] }) {
             width={Math.max(barW - 2, 1)}
             height={Math.max(barH, 0.5)}
             rx={1}
-            fill={m.count > 0 ? '#10b981' : '#e2e8f0'}
+            fill={m.count > 0 ? '#2563EB' : '#e2e8f0'}
             opacity={0.7 + (m.count / maxCount) * 0.3}
           />
         )
@@ -433,7 +433,7 @@ function HourlyBarChart({ data }: { data: { hour: string; count: number }[] }) {
               width={Math.max(barW - 4, 2)}
               height={Math.max(barH, 0.5)}
               rx={2}
-              fill="#10b981"
+              fill="#2563EB"
               opacity={0.6 + (d.count / maxCount) * 0.4}
             />
             {i % 3 === 0 && (
@@ -459,9 +459,9 @@ function LatencyDistribution({ events }: { events: StreamEvent[] }) {
   }
 
   const buckets = [
-    { range: '0-10ms', count: 0, color: '#10b981' },
-    { range: '10-50ms', count: 0, color: '#34d399' },
-    { range: '50-100ms', count: 0, color: '#6ee7b7' },
+    { range: '0-10ms', count: 0, color: '#2563EB' },
+    { range: '10-50ms', count: 0, color: '#3B82F6' },
+    { range: '50-100ms', count: 0, color: '#60A5FA' },
     { range: '100-500ms', count: 0, color: '#fbbf24' },
     { range: '500ms-1s', count: 0, color: '#f59e0b' },
     { range: '1s+', count: 0, color: '#ef4444' },
@@ -574,8 +574,8 @@ function RoutingDiagram() {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
       {/* Central hub */}
-      <circle cx={W / 2} cy={H / 2} r={30} fill="#10b981" opacity={0.15} />
-      <circle cx={W / 2} cy={H / 2} r={20} fill="#10b981" opacity={0.3} />
+      <circle cx={W / 2} cy={H / 2} r={30} fill="#2563EB" opacity={0.15} />
+      <circle cx={W / 2} cy={H / 2} r={20} fill="#2563EB" opacity={0.3} />
       <text x={W / 2} y={H / 2 - 2} textAnchor="middle" fontSize="8" fontWeight="600" fill="#0f172a">Event</text>
       <text x={W / 2} y={H / 2 + 8} textAnchor="middle" fontSize="8" fontWeight="600" fill="#0f172a">Bus</text>
 
@@ -596,15 +596,15 @@ function RoutingDiagram() {
         const y = subSpacing * (i + 1)
         return (
           <g key={i}>
-            <rect x={subX - 80} y={y - 12} width={80} height={24} rx={4} fill="#ecfdf5" stroke="#a7f3d0" strokeWidth={0.5} />
-            <text x={subX - 40} y={y + 4} textAnchor="middle" fontSize="8" fill="#065f46">{s}</text>
-            <line x1={W / 2 + 30} y1={H / 2} x2={subX - 80} y2={y} stroke="#34d399" strokeWidth={0.8} strokeDasharray="3,2" />
+            <rect x={subX - 80} y={y - 12} width={80} height={24} rx={4} fill="#eff6ff" stroke="#bfdbfe" strokeWidth={0.5} />
+            <text x={subX - 40} y={y + 4} textAnchor="middle" fontSize="8" fill="#1D4ED8">{s}</text>
+            <line x1={W / 2 + 30} y1={H / 2} x2={subX - 80} y2={y} stroke="#3B82F6" strokeWidth={0.8} strokeDasharray="3,2" />
           </g>
         )
       })}
 
       {/* Animated pulse on central hub */}
-      <circle cx={W / 2} cy={H / 2} r={30} fill="none" stroke="#10b981" strokeWidth={1}>
+      <circle cx={W / 2} cy={H / 2} r={30} fill="none" stroke="#2563EB" strokeWidth={1}>
         <animate attributeName="r" from="30" to="50" dur="2s" repeatCount="indefinite" />
         <animate attributeName="opacity" from="0.5" to="0" dur="2s" repeatCount="indefinite" />
       </circle>
@@ -656,7 +656,7 @@ export default function EventEnginePage() {
   const [filterSource, setFilterSource] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [epsCounter, setEpsCounter] = useState(0)
-  const [totalProcessed, setTotalProcessed] = useState(48932)
+  const [totalProcessed, setTotalProcessed] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const eventCountRef = useRef(0)
 
@@ -706,26 +706,39 @@ export default function EventEnginePage() {
   }, [events])
 
   const donutData = useMemo(() => [
-    { label: 'Invoice', value: eventCounts['invoice.created'] + 4521, color: '#10b981' },
-    { label: 'Payment', value: eventCounts['payment.collected'] + 3890, color: '#22c55e' },
-    { label: 'Return', value: eventCounts['return.filed'] + 2934, color: '#14b8a6' },
-    { label: 'Document', value: eventCounts['document.uploaded'] + 2107, color: '#0ea5e9' },
-    { label: 'Task', value: eventCounts['task.assigned'] + 1845, color: '#f59e0b' },
-    { label: 'Notice', value: eventCounts['notice.received'] + 892, color: '#ef4444' },
-    { label: 'Client', value: eventCounts['client.added'] + 674, color: '#8b5cf6' },
-    { label: 'AI Decision', value: eventCounts['ai.decision'] + 1243, color: '#a855f7' },
+    { label: 'Invoice', value: eventCounts['invoice.created'], color: '#2563EB' },
+    { label: 'Payment', value: eventCounts['payment.collected'], color: '#3B82F6' },
+    { label: 'Return', value: eventCounts['return.filed'], color: '#2563EB' },
+    { label: 'Document', value: eventCounts['document.uploaded'], color: '#0ea5e9' },
+    { label: 'Task', value: eventCounts['task.assigned'], color: '#f59e0b' },
+    { label: 'Notice', value: eventCounts['notice.received'], color: '#ef4444' },
+    { label: 'Client', value: eventCounts['client.added'], color: '#8b5cf6' },
+    { label: 'AI Decision', value: eventCounts['ai.decision'], color: '#a855f7' },
   ], [eventCounts])
 
   const hourlyData = useMemo(() => {
+    // Aggregate REAL events by hour for the last 24 hours.
+    // When no events exist (no webhook subscriptions configured yet),
+    // every bucket is 0 — an honest empty state instead of Math.random().
     const now = new Date()
-    return Array.from({ length: 24 }, (_, i) => {
+    const buckets: { hour: string; count: number }[] = []
+    const countsByHour = new Map<number, number>()
+    for (const e of events) {
+      const ts = e.timestamp ? new Date(e.timestamp).getTime() : NaN
+      if (isNaN(ts)) continue
+      const hourIdx = Math.floor((now.getTime() - ts) / 3600000) // hours ago
+      if (hourIdx < 0 || hourIdx >= 24) continue
+      countsByHour.set(23 - hourIdx, (countsByHour.get(23 - hourIdx) ?? 0) + 1)
+    }
+    for (let i = 0; i < 24; i++) {
       const hour = new Date(now.getTime() - (23 - i) * 3600000)
-      return {
+      buckets.push({
         hour: hour.toLocaleTimeString('en-IN', { hour: '2-digit', hour12: true }),
-        count: Math.floor(Math.random() * 200 + 50 + (i > 8 && i < 18 ? 150 : 0)),
-      }
-    })
-  }, [])
+        count: countsByHour.get(i) ?? 0,
+      })
+    }
+    return buckets
+  }, [events])
 
   // ── Firestore data counts ──
   const liveClientCount = fireClients.length

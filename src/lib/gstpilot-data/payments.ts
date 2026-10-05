@@ -2,7 +2,13 @@
 // GSTPilot Infinity™ — Payments Firestore Service
 //
 // CRUD + real-time subscription for payment documents at:
-//   organizations/GSTpilot_SAAS/payments/{paymentId}
+//   organizations/{organizationId}/payments/{paymentId}
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Every function accepts an `organizationId` parameter (from OrgContext).
+//   The Firestore path is built dynamically — NEVER hardcoded.
+//   If organizationId is null/empty, functions return empty results
+//   (honest empty state) instead of writing to a fallback path.
 //
 // When a payment is created and linked to an invoice (partyType === 'customer'
 // with invoiceId, status 'completed'), the linked invoice's paidAmount,
@@ -27,7 +33,11 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PAYMENTS_COLLECTION } from './config';
+import {
+  orgCollectionPath,
+  orgDocPath,
+  PAYMENTS_SUB,
+} from './config';
 import { getInvoice, updateInvoice } from './invoices';
 import type {
   Payment,
@@ -104,13 +114,29 @@ function buildPayload(input: CreatePaymentInput) {
   };
 }
 
+/** No-op unsubscribe — returned when organizationId is null (preview mode). */
+const noopUnsubscribe: Unsubscribe = () => {};
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
+/**
+ * Subscribe to ALL payments in real-time (onSnapshot) for the given org.
+ *
+ * If `organizationId` is null/empty (preview mode / no org), calls onData([])
+ * immediately and returns a no-op unsubscribe — does NOT touch Firestore.
+ */
 export function subscribePayments(
+  organizationId: string | null | undefined,
   onData: (payments: Payment[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
-  const q = query(collection(db, PAYMENTS_COLLECTION), orderBy('paymentDate', 'desc'));
+  const path = orgCollectionPath(organizationId, PAYMENTS_SUB);
+  if (!path) {
+    onData([]);
+    return noopUnsubscribe;
+  }
+
+  const q = query(collection(db, path), orderBy('paymentDate', 'desc'));
   return onSnapshot(
     q,
     (snap) => {
@@ -122,15 +148,29 @@ export function subscribePayments(
   );
 }
 
-export async function getPayment(id: string): Promise<Payment | null> {
-  const snap = await getDoc(doc(db, PAYMENTS_COLLECTION, id));
+/** Fetch a single payment by id (one-shot). */
+export async function getPayment(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<Payment | null> {
+  const path = orgDocPath(organizationId, PAYMENTS_SUB, id);
+  if (!path) return null;
+  const snap = await getDoc(doc(db, path));
   if (!snap.exists()) return null;
   return toPayment(snap.id, snap.data() as Record<string, unknown>);
 }
 
-export async function getPaymentsOnce(): Promise<Payment[]> {
+/**
+ * Fetch ALL payments in one shot (server-side / API-route friendly).
+ * Returns an empty array on permission-denied / unavailable / no org.
+ */
+export async function getPaymentsOnce(
+  organizationId: string | null | undefined,
+): Promise<Payment[]> {
+  const path = orgCollectionPath(organizationId, PAYMENTS_SUB);
+  if (!path) return [];
   try {
-    const q = query(collection(db, PAYMENTS_COLLECTION), orderBy('paymentDate', 'desc'));
+    const q = query(collection(db, path), orderBy('paymentDate', 'desc'));
     const snap = await getDocs(q);
     const list: Payment[] = [];
     snap.forEach((d) => list.push(toPayment(d.id, d.data() as Record<string, unknown>)));
@@ -144,8 +184,22 @@ export async function getPaymentsOnce(): Promise<Payment[]> {
  * Create a payment. If the payment is a completed customer payment linked to
  * an invoice, the invoice's paidAmount / balanceDue / paymentStatus / status
  * are recalculated automatically (outstanding balance updated).
+ *
+ * If organizationId is null/empty, throws a friendly error — the caller
+ * must resolve the org context before creating.
  */
-export async function createPayment(input: CreatePaymentInput): Promise<Payment> {
+export async function createPayment(
+  organizationId: string | null | undefined,
+  input: CreatePaymentInput,
+): Promise<Payment> {
+  const path = orgCollectionPath(organizationId, PAYMENTS_SUB);
+  if (!path) {
+    throw new Error(
+      'Unable to save payment.\n\nReason: No organization is currently selected. ' +
+      'Please sign in and select an organization, then try again.',
+    );
+  }
+
   if (!input.amount || Number(input.amount) <= 0) {
     throw new Error('Payment amount must be greater than zero.');
   }
@@ -155,7 +209,7 @@ export async function createPayment(input: CreatePaymentInput): Promise<Payment>
 
   const payload = buildPayload(input);
   const now = serverTimestamp();
-  const ref = await addDoc(collection(db, PAYMENTS_COLLECTION), {
+  const ref = await addDoc(collection(db, path), {
     ...payload,
     createdAt: now,
     updatedAt: now,
@@ -168,13 +222,13 @@ export async function createPayment(input: CreatePaymentInput): Promise<Payment>
     payload.status === 'completed'
   ) {
     try {
-      const inv = await getInvoice(payload.invoiceId);
+      const inv = await getInvoice(organizationId, payload.invoiceId);
       if (inv && inv.status !== 'cancelled') {
         const newPaid = Math.min(
           inv.grandTotal,
           Math.round((inv.paidAmount + payload.amount) * 100) / 100,
         );
-        await updateInvoice(inv.id, { paidAmount: newPaid });
+        await updateInvoice(organizationId, inv.id, { paidAmount: newPaid });
       }
     } catch {
       // Invoice update is best-effort — the payment record itself is saved.
@@ -185,10 +239,19 @@ export async function createPayment(input: CreatePaymentInput): Promise<Payment>
   return toPayment(snap.id, snap.data() as Record<string, unknown>);
 }
 
+/** Update an existing payment. */
 export async function updatePayment(
+  organizationId: string | null | undefined,
   id: string,
   patch: UpdatePaymentInput,
 ): Promise<Payment> {
+  const path = orgDocPath(organizationId, PAYMENTS_SUB, id);
+  if (!path) {
+    throw new Error(
+      'Unable to update payment.\n\nReason: No organization is currently selected.',
+    );
+  }
+
   const update: Record<string, unknown> = {};
   const built = buildPayload({
     partyType: patch.partyType ?? 'customer',
@@ -210,13 +273,23 @@ export async function updatePayment(
   if (patch.notes !== undefined) update.notes = built.notes;
   update.updatedAt = serverTimestamp();
 
-  await updateDoc(doc(db, PAYMENTS_COLLECTION, id), update);
-  const snap = await getDoc(doc(db, PAYMENTS_COLLECTION, id));
+  await updateDoc(doc(db, path), update);
+  const snap = await getDoc(doc(db, path));
   return toPayment(snap.id, snap.data() as Record<string, unknown>);
 }
 
-export async function deletePayment(id: string): Promise<void> {
-  await deleteDoc(doc(db, PAYMENTS_COLLECTION, id));
+/** Permanently delete a payment. */
+export async function deletePayment(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<void> {
+  const path = orgDocPath(organizationId, PAYMENTS_SUB, id);
+  if (!path) {
+    throw new Error(
+      'Unable to delete payment.\n\nReason: No organization is currently selected.',
+    );
+  }
+  await deleteDoc(doc(db, path));
 }
 
 // ─── Search + stats ──────────────────────────────────────────────────────────

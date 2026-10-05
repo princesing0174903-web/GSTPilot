@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency, formatNumber } from '@/lib/gst-utils';
+import { EmptyState } from '@/components/shared';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COLOR PALETTE — Emerald + Slate (NO indigo/blue)
@@ -52,9 +53,9 @@ const COLORS = {
   emerald50: '#ecfdf5',
   emerald100: '#d1fae5',
   emerald200: '#a7f3d0',
-  emerald400: '#34d399',
-  emerald500: '#10b981',
-  emerald600: '#059669',
+  emerald400: '#60a5fa',
+  emerald500: '#2563EB',
+  emerald600: '#1D4ED8',
   emerald700: '#047857',
   emerald800: '#065f46',
   slate100: '#f1f5f9',
@@ -159,164 +160,10 @@ function useAnimatedNumber(target: number, duration: number = 1200) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEMO DATA
+// DATA (empty — populated by real APIs when available)
 // ═══════════════════════════════════════════════════════════════════════════════
-const MORNING_DECISIONS: Decision[] = [
-  {
-    id: 'd1',
-    title: 'Increase Collections',
-    icon: IndianRupee,
-    rationale: '3 invoices worth ₹12,34,500 are overdue by 30+ days. Prioritize follow-ups with Sharma Enterprises and Patel Traders.',
-    score: 94,
-    impact: [
-      { type: 'Revenue Potential', value: '₹8,90,000', percent: 92 },
-      { type: 'Risk Reduction', value: 'Bad debt prevention', percent: 78 },
-      { type: 'Time Savings', value: '4 hrs/week', percent: 55 },
-    ],
-    confidence: 92,
-    priority: 'Critical',
-    status: 'Pending',
-    category: 'Collections',
-  },
-  {
-    id: 'd2',
-    title: 'Call High-Risk Clients',
-    icon: Users,
-    rationale: '4 clients have health scores below 50. Gupta & Sons at 32, Mehta Industries at 41 — immediate intervention needed.',
-    score: 87,
-    impact: [
-      { type: 'Revenue Potential', value: 'Client retention', percent: 85 },
-      { type: 'Risk Reduction', value: 'Churn prevention', percent: 90 },
-      { type: 'Time Savings', value: '2 hrs/week', percent: 40 },
-    ],
-    confidence: 87,
-    priority: 'High',
-    status: 'Pending',
-    category: 'Operations',
-  },
-  {
-    id: 'd3',
-    title: 'File Overdue Returns',
-    icon: Shield,
-    rationale: '2 GSTR-1 filings are past deadline. Late fees accumulating at ₹200/day per filing.',
-    score: 91,
-    impact: [
-      { type: 'Revenue Potential', value: 'Avoid ₹6,000 fees', percent: 70 },
-      { type: 'Risk Reduction', value: 'Compliance safeguard', percent: 95 },
-      { type: 'Time Savings', value: '6 hrs saved', percent: 65 },
-    ],
-    confidence: 95,
-    priority: 'Critical',
-    status: 'Pending',
-    category: 'Compliance',
-  },
-  {
-    id: 'd4',
-    title: 'Hire Employees',
-    icon: Users,
-    rationale: 'Team utilization at 94% — burnout risk detected. 3 team members working 55+ hrs/week consistently.',
-    score: 72,
-    impact: [
-      { type: 'Revenue Potential', value: '15% productivity gain', percent: 60 },
-      { type: 'Risk Reduction', value: 'Burnout prevention', percent: 82 },
-      { type: 'Time Savings', value: '12 hrs/week', percent: 75 },
-    ],
-    confidence: 78,
-    priority: 'Medium',
-    status: 'Pending',
-    category: 'Operations',
-  },
-  {
-    id: 'd5',
-    title: 'Reduce Expenses',
-    icon: TrendingDown,
-    rationale: 'Operating costs up 18% vs last quarter. Software subscriptions and office lease are primary drivers.',
-    score: 68,
-    impact: [
-      { type: 'Revenue Potential', value: '₹2,34,000 savings', percent: 72 },
-      { type: 'Risk Reduction', value: 'Margin protection', percent: 55 },
-      { type: 'Time Savings', value: '1 hr/week', percent: 30 },
-    ],
-    confidence: 82,
-    priority: 'Medium',
-    status: 'Pending',
-    category: 'Finance',
-  },
-  {
-    id: 'd6',
-    title: 'Increase Marketing',
-    icon: TrendingUp,
-    rationale: '3 client churns detected, pipeline declining by 22%. Social media engagement down 35%.',
-    score: 58,
-    impact: [
-      { type: 'Revenue Potential', value: '5 new clients', percent: 50 },
-      { type: 'Risk Reduction', value: 'Pipeline stability', percent: 40 },
-      { type: 'Time Savings', value: '3 hrs/week', percent: 35 },
-    ],
-    confidence: 71,
-    priority: 'Low',
-    status: 'Pending',
-    category: 'Growth',
-  },
-  {
-    id: 'd7',
-    title: 'Apply for Financing',
-    icon: IndianRupee,
-    rationale: 'Cash flow gap of ₹15,00,000 predicted in 30 days based on receivables pattern and upcoming tax payments.',
-    score: 83,
-    impact: [
-      { type: 'Revenue Potential', value: 'Bridge ₹15L gap', percent: 80 },
-      { type: 'Risk Reduction', value: 'Liquidity safeguard', percent: 88 },
-      { type: 'Time Savings', value: '5 hrs saved', percent: 50 },
-    ],
-    confidence: 88,
-    priority: 'High',
-    status: 'Pending',
-    category: 'Finance',
-  },
-  {
-    id: 'd8',
-    title: 'Review Compliance',
-    icon: AlertTriangle,
-    rationale: 'GST audit risk elevated for 2 clients. ITC claims exceed 110% of GSTR-2A for last quarter.',
-    score: 86,
-    impact: [
-      { type: 'Revenue Potential', value: 'Avoid penalties', percent: 65 },
-      { type: 'Risk Reduction', value: 'Audit protection', percent: 92 },
-      { type: 'Time Savings', value: '8 hrs saved', percent: 60 },
-    ],
-    confidence: 90,
-    priority: 'High',
-    status: 'Pending',
-    category: 'Compliance',
-  },
-];
-
-const EXECUTED_DECISIONS: ExecutedDecision[] = [
-  { id: 'e1', date: '2025-03-04', decision: 'Increase Collections', score: 94, estimatedImpact: '₹8,90,000', actualImpact: '₹9,20,000', outcome: 'Positive', outcomeValue: '+₹30,000' },
-  { id: 'e2', date: '2025-03-03', decision: 'Call High-Risk Clients', score: 87, estimatedImpact: 'Client retention', actualImpact: '3 of 4 retained', outcome: 'Positive', outcomeValue: '+₹4,50,000' },
-  { id: 'e3', date: '2025-03-03', decision: 'File Overdue Returns', score: 91, estimatedImpact: '₹6,000 saved', actualImpact: '₹5,400 saved', outcome: 'Positive', outcomeValue: '+₹5,400' },
-  { id: 'e4', date: '2025-03-02', decision: 'Hire Employees', score: 72, estimatedImpact: '15% productivity', actualImpact: '12% productivity', outcome: 'Positive', outcomeValue: '+₹1,80,000' },
-  { id: 'e5', date: '2025-03-02', decision: 'Reduce Expenses', score: 68, estimatedImpact: '₹2,34,000', actualImpact: '₹1,95,000', outcome: 'Positive', outcomeValue: '+₹1,95,000' },
-  { id: 'e6', date: '2025-03-01', decision: 'Increase Marketing', score: 58, estimatedImpact: '5 new clients', actualImpact: '2 new clients', outcome: 'Neutral', outcomeValue: '₹0' },
-  { id: 'e7', date: '2025-03-01', decision: 'Apply for Financing', score: 83, estimatedImpact: '₹15,00,000', actualImpact: '₹15,00,000', outcome: 'Positive', outcomeValue: '+₹15,00,000' },
-  { id: 'e8', date: '2025-02-28', decision: 'Review Compliance', score: 86, estimatedImpact: 'Avoid penalties', actualImpact: 'No audit triggered', outcome: 'Positive', outcomeValue: '+₹2,50,000' },
-  { id: 'e9', date: '2025-02-27', decision: 'Increase Collections', score: 89, estimatedImpact: '₹5,60,000', actualImpact: '₹4,20,000', outcome: 'Positive', outcomeValue: '+₹4,20,000' },
-  { id: 'e10', date: '2025-02-26', decision: 'Call High-Risk Clients', score: 82, estimatedImpact: 'Client retention', actualImpact: '1 of 3 retained', outcome: 'Negative', outcomeValue: '-₹2,10,000' },
-  { id: 'e11', date: '2025-02-25', decision: 'File Overdue Returns', score: 90, estimatedImpact: '₹4,800 saved', actualImpact: '₹4,800 saved', outcome: 'Positive', outcomeValue: '+₹4,800' },
-  { id: 'e12', date: '2025-02-24', decision: 'Reduce Expenses', score: 71, estimatedImpact: '₹1,80,000', actualImpact: '₹1,80,000', outcome: 'Positive', outcomeValue: '+₹1,80,000' },
-  { id: 'e13', date: '2025-02-23', decision: 'Apply for Financing', score: 80, estimatedImpact: '₹10,00,000', actualImpact: '₹8,50,000', outcome: 'Positive', outcomeValue: '+₹8,50,000' },
-  { id: 'e14', date: '2025-02-22', decision: 'Review Compliance', score: 88, estimatedImpact: 'Audit risk', actualImpact: '1 notice received', outcome: 'Negative', outcomeValue: '-₹15,000' },
-  { id: 'e15', date: '2025-02-21', decision: 'Hire Employees', score: 65, estimatedImpact: '10% productivity', actualImpact: '8% productivity', outcome: 'Positive', outcomeValue: '+₹1,20,000' },
-  { id: 'e16', date: '2025-02-20', decision: 'Increase Collections', score: 91, estimatedImpact: '₹6,70,000', actualImpact: '₹7,10,000', outcome: 'Positive', outcomeValue: '+₹7,10,000' },
-  { id: 'e17', date: '2025-02-19', decision: 'Increase Marketing', score: 55, estimatedImpact: '3 new clients', actualImpact: '0 new clients', outcome: 'Negative', outcomeValue: '-₹45,000' },
-  { id: 'e18', date: '2025-02-18', decision: 'Call High-Risk Clients', score: 85, estimatedImpact: 'Client retention', actualImpact: '2 of 2 retained', outcome: 'Positive', outcomeValue: '+₹3,80,000' },
-  { id: 'e19', date: '2025-02-17', decision: 'File Overdue Returns', score: 93, estimatedImpact: '₹8,000 saved', actualImpact: '₹8,000 saved', outcome: 'Positive', outcomeValue: '+₹8,000' },
-  { id: 'e20', date: '2025-02-16', decision: 'Reduce Expenses', score: 70, estimatedImpact: '₹2,10,000', actualImpact: '₹2,10,000', outcome: 'Positive', outcomeValue: '+₹2,10,000' },
-  { id: 'e21', date: '2025-02-15', decision: 'Apply for Financing', score: 78, estimatedImpact: '₹12,00,000', actualImpact: '₹12,00,000', outcome: 'Positive', outcomeValue: '+₹12,00,000' },
-  { id: 'e22', date: '2025-02-14', decision: 'Review Compliance', score: 84, estimatedImpact: 'Penalty avoidance', actualImpact: 'No issues', outcome: 'Positive', outcomeValue: '+₹1,50,000' },
-];
-
+const MORNING_DECISIONS: Decision[] = [];
+const EXECUTED_DECISIONS: ExecutedDecision[] = [];
 const DECISION_RULES: DecisionRule[] = [
   { id: 'r1', name: 'Revenue Drop Alert', condition: 'Revenue drops > 10% MoM', action: 'Alert CA + Generate recovery plan', priority: 'Critical', triggeredCount: 12, lastTriggered: '2025-03-03', enabled: true },
   { id: 'r2', name: 'Client Health Watch', condition: 'Client health < 50', action: 'Auto-assign CA + Schedule review', priority: 'High', triggeredCount: 8, lastTriggered: '2025-03-04', enabled: true },
@@ -594,6 +441,16 @@ function DecisionTrendChart() {
 }
 
 function ExecutionTimeline() {
+  if (EXECUTED_DECISIONS.length === 0) {
+    return (
+      <EmptyState
+        icon={Activity}
+        title="No execution events yet"
+        description="Executed decisions will appear on the timeline once they are run."
+        compact
+      />
+    );
+  }
   const events = EXECUTED_DECISIONS.slice(0, 12).map(d => ({
     ...d,
     dateObj: new Date(d.date),
@@ -807,15 +664,15 @@ export default function DecisionEnginePage() {
   const analytics = useMemo(() => {
     const totalExecuted = EXECUTED_DECISIONS.length;
     const positiveCount = EXECUTED_DECISIONS.filter(d => d.outcome === 'Positive').length;
-    const accuracy = Math.round((positiveCount / totalExecuted) * 100);
-    const approvedThisWeek = 8;
-    const dismissedThisWeek = 2;
+    const accuracy = totalExecuted > 0 ? Math.round((positiveCount / totalExecuted) * 100) : 0;
+    const approvedThisWeek = 0;
+    const dismissedThisWeek = 0;
     const categoryBreakdown = [
-      { name: 'Collections', count: 5, color: COLORS.emerald500 },
-      { name: 'Compliance', count: 3, color: COLORS.teal500 },
-      { name: 'Operations', count: 4, color: COLORS.amber500 },
-      { name: 'Finance', count: 2, color: COLORS.orange500 },
-      { name: 'Growth', count: 1, color: COLORS.slate400 },
+      { name: 'Collections', count: 0, color: COLORS.emerald500 },
+      { name: 'Compliance', count: 0, color: COLORS.teal500 },
+      { name: 'Operations', count: 0, color: COLORS.amber500 },
+      { name: 'Finance', count: 0, color: COLORS.orange500 },
+      { name: 'Growth', count: 0, color: COLORS.slate400 },
     ];
     return { accuracy, approvedThisWeek, dismissedThisWeek, categoryBreakdown, totalExecuted, positiveCount };
   }, []);
@@ -933,7 +790,7 @@ export default function DecisionEnginePage() {
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-slate-500">
                         <div className="h-2 w-2 rounded-full bg-slate-400" />
-                        8 decisions scored
+                        {decisions.length} decisions scored
                       </div>
                     </div>
                   </div>
@@ -944,19 +801,31 @@ export default function DecisionEnginePage() {
             {/* Decision Cards */}
             <ScrollArea className="max-h-[calc(100vh-380px)]">
               <div className="space-y-3 pr-2">
-                {decisions
-                  .sort((a, b) => {
-                    const priorityOrder = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-                    return priorityOrder[a.priority] - priorityOrder[b.priority];
-                  })
-                  .map((decision, i) => (
-                    <DecisionCard
-                      key={decision.id}
-                      decision={decision}
-                      onAction={handleDecisionAction}
-                      index={i}
-                    />
-                  ))}
+                {decisions.length === 0 ? (
+                  <Card className="border-slate-200/60">
+                    <CardContent className="p-6">
+                      <EmptyState
+                        icon={Sparkles}
+                        title="No AI decisions yet"
+                        description="The decision engine will generate AI-scored recommendations here once your firm data is synced."
+                      />
+                    </CardContent>
+                  </Card>
+                ) : (
+                  decisions
+                    .sort((a, b) => {
+                      const priorityOrder = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+                      return priorityOrder[a.priority] - priorityOrder[b.priority];
+                    })
+                    .map((decision, i) => (
+                      <DecisionCard
+                        key={decision.id}
+                        decision={decision}
+                        onAction={handleDecisionAction}
+                        index={i}
+                      />
+                    ))
+                )}
               </div>
             </ScrollArea>
           </TabsContent>
@@ -1056,14 +925,10 @@ export default function DecisionEnginePage() {
                         <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Time Savings</span>
                       </div>
                       <div>
-                        <span className="text-3xl font-bold text-slate-900">23</span>
+                        <span className="text-3xl font-bold text-slate-900">0</span>
                         <span className="text-sm text-slate-600 ml-1">hours</span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-2">AI decisions saved 23 hours this week</p>
-                      <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
-                        <TrendingUp className="h-3 w-3" />
-                        +8 hrs vs last week
-                      </div>
+                      <p className="text-xs text-slate-500 mt-2">No decisions executed yet</p>
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -1076,13 +941,9 @@ export default function DecisionEnginePage() {
                         <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Revenue Impact</span>
                       </div>
                       <div>
-                        <span className="text-2xl font-bold text-slate-900">₹34,56,000</span>
+                        <span className="text-2xl font-bold text-slate-900">₹0</span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-2">Approved decisions generated this value</p>
-                      <div className="mt-3 flex items-center gap-1.5 text-xs text-teal-600 font-medium">
-                        <TrendingUp className="h-3 w-3" />
-                        +₹6,20,000 vs last month
-                      </div>
+                      <p className="text-xs text-slate-500 mt-2">No decisions executed yet</p>
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -1332,7 +1193,7 @@ export default function DecisionEnginePage() {
                     <div>
                       <p className="text-sm font-semibold text-slate-800">AI Learning Update</p>
                       <p className="text-xs text-slate-600">
-                        Based on <span className="font-semibold text-emerald-600">156 past decisions</span>, AI confidence improved by <span className="font-semibold text-emerald-600">12%</span> this quarter.
+                        No executed decisions yet. Once decisions are executed, AI confidence metrics will appear here.
                       </p>
                     </div>
                     <ArrowRight className="h-4 w-4 text-emerald-400 shrink-0 ml-auto" />
@@ -1371,32 +1232,43 @@ export default function DecisionEnginePage() {
                           <div className="col-span-2">Outcome</div>
                         </div>
                         <Separator />
-                        {EXECUTED_DECISIONS.map((d, i) => {
-                          const outcomeInfo = getOutcomeBadge(d.outcome, d.outcomeValue);
-                          return (
-                            <motion.div
-                              key={d.id}
-                              initial={{ opacity: 0, x: -5 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: i * 0.03, duration: 0.25 }}
-                              className="grid grid-cols-12 gap-2 items-center px-3 py-2 rounded-lg hover:bg-slate-50/80 transition-colors"
-                            >
-                              <div className="col-span-2 text-xs text-slate-500">{d.date}</div>
-                              <div className="col-span-3 text-xs font-medium text-slate-700 truncate">{d.decision}</div>
-                              <div className="col-span-1">
-                                <span className="text-xs font-semibold" style={{ color: getScoreColor(d.score) }}>{d.score}</span>
-                              </div>
-                              <div className="col-span-2 text-xs text-slate-500 truncate">{d.estimatedImpact}</div>
-                              <div className="col-span-2 text-xs text-slate-600 font-medium truncate">{d.actualImpact}</div>
-                              <div className="col-span-2">
-                                <Badge className={`text-[10px] px-2 py-0 h-5 ${outcomeInfo.bg} border-0`}>
-                                  <OutcomeIconDisplay outcome={d.outcome} />
-                                  {d.outcomeValue}
-                                </Badge>
-                              </div>
-                            </motion.div>
-                          );
-                        })}
+                        {EXECUTED_DECISIONS.length === 0 ? (
+                          <div className="py-6">
+                            <EmptyState
+                              icon={Activity}
+                              title="No decisions executed yet"
+                              description="Executed decisions will appear here once approved decisions are run."
+                              compact
+                            />
+                          </div>
+                        ) : (
+                          EXECUTED_DECISIONS.map((d, i) => {
+                            const outcomeInfo = getOutcomeBadge(d.outcome, d.outcomeValue);
+                            return (
+                              <motion.div
+                                key={d.id}
+                                initial={{ opacity: 0, x: -5 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: i * 0.03, duration: 0.25 }}
+                                className="grid grid-cols-12 gap-2 items-center px-3 py-2 rounded-lg hover:bg-slate-50/80 transition-colors"
+                              >
+                                <div className="col-span-2 text-xs text-slate-500">{d.date}</div>
+                                <div className="col-span-3 text-xs font-medium text-slate-700 truncate">{d.decision}</div>
+                                <div className="col-span-1">
+                                  <span className="text-xs font-semibold" style={{ color: getScoreColor(d.score) }}>{d.score}</span>
+                                </div>
+                                <div className="col-span-2 text-xs text-slate-500 truncate">{d.estimatedImpact}</div>
+                                <div className="col-span-2 text-xs text-slate-600 font-medium truncate">{d.actualImpact}</div>
+                                <div className="col-span-2">
+                                  <Badge className={`text-[10px] px-2 py-0 h-5 ${outcomeInfo.bg} border-0`}>
+                                    <OutcomeIconDisplay outcome={d.outcome} />
+                                    {d.outcomeValue}
+                                  </Badge>
+                                </div>
+                              </motion.div>
+                            );
+                          })
+                        )}
                       </div>
                     </ScrollArea>
                   </CardContent>

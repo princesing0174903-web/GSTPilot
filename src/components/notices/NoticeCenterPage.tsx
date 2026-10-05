@@ -298,14 +298,11 @@ function NoticeSkeleton() {
 
 // ─── Mock Data ─────────────────────────────────────────────────────────────
 // mockNotices + mockClients removed in P1-M2 — notices now come from Firestore
-// (useFireNotices) and clients come from useFireClients. Team members still
-// come from REST because memberships are not one of the 15 collections.
-const mockTeamMembers: TeamMember[] = [
-  { id: 'tm1', name: 'Priya Sharma', email: 'priya@firm.com', role: 'manager', department: 'compliance', avatar: null },
-  { id: 'tm2', name: 'Rahul Mehta', email: 'rahul@firm.com', role: 'senior', department: 'filing', avatar: null },
-  { id: 'tm3', name: 'Anita Desai', email: 'anita@firm.com', role: 'staff', department: 'compliance', avatar: null },
-  { id: 'tm4', name: 'Vikram Singh', email: 'vikram@firm.com', role: 'senior', department: 'audit', avatar: null },
-];
+// (useFireNotices) and clients come from useFireClients. Team members come from
+// REST (/api/team-members) — see fetchTeamMembers() below.
+// mockTeamMembers array (4 fake members: Priya Sharma, Rahul Mehta, Anita Desai,
+// Vikram Singh) removed during mock-data audit (Task 7) — was unused dead code.
+const mockTeamMembers: TeamMember[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT

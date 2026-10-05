@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { escapeHtml } from '@/lib/utils';
 import {
   Card,
   CardContent,
@@ -36,8 +37,8 @@ import { toast } from 'sonner';
 
 // ─── Color Palette (Emerald) ──────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
   amber: '#f59e0b',
@@ -109,9 +110,13 @@ function SessionSkeleton() {
 }
 
 // ─── Format message with simple markdown ───────────────────────────────────
+// SECURITY (POLISH-06): escapeHtml before applying markdown so any HTML in
+// the AI / user content is rendered as text, not executed. Without this, a
+// model echoing user input like "<script>…</script>" would inject markup.
 function formatMessage(content: string) {
   return content.split('\n').map((line, i) => {
-    const formatted = line
+    const escaped = escapeHtml(line);
+    const formatted = escaped
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/⚠️/g, '<span class="text-amber-500">⚠️</span>');
     if (formatted.startsWith('•')) {
@@ -726,7 +731,7 @@ export default function AIDocumentChatPage() {
                           initial={{ opacity: 0, x: -10 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 + index * 0.05, duration: 0.3 }}
-                          whileHover={{ x: 4, backgroundColor: 'rgba(16, 185, 129, 0.05)' }}
+                          whileHover={{ x: 4, backgroundColor: 'rgba(37,99,235, 0.05)' }}
                           onClick={() => handleLoadSession(session)}
                           className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
                             activeSession === session.id

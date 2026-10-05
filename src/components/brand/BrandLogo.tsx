@@ -230,7 +230,8 @@ export function BrandLogo({
 }
 
 // ─── Animated brand logo for loading / splash screens ─────────────────────────
-// Scale 0.95 → 1, glow blue → purple, 2s infinite. Used by loading screens.
+// Professional white-circle loader: brand icon centered inside a spinning
+// gradient ring with a soft outer glow. Used by route loading screens.
 export function BrandLogoPulse({
   size = 96,
   label,
@@ -240,41 +241,114 @@ export function BrandLogoPulse({
   label?: string;
   className?: string;
 }) {
+  // Ring dimensions — the SVG viewBox is 100×100; stroke scales with it.
+  const ringSize = Math.round(size * 1.35);
+  const iconSize = Math.round(size * 0.62);
+
   return (
-    <div className={cn('flex flex-col items-center justify-center gap-6', className)}>
-      <motion.div
-        animate={{
-          scale: [0.95, 1, 0.95],
-          filter: [
-            'drop-shadow(0 0 20px rgba(59,130,246,0.5))',
-            'drop-shadow(0 0 35px rgba(139,92,246,0.7))',
-            'drop-shadow(0 0 20px rgba(59,130,246,0.5))',
-          ],
-        }}
-        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' as const }}
-      >
-        <Image
-          src={BRAND.assets.iconTransparent}
-          alt="GSTPilot"
-          width={size}
-          height={size}
-          priority
-          className="shrink-0"
-        />
-      </motion.div>
-      {label && (
-        <motion.p
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.3 }}
-          className="text-sm font-medium tracking-wide"
-          style={{
-            fontFamily: BRAND.fonts.body,
-            color: 'rgba(255,255,255,0.6)',
+    <div className={cn('flex flex-col items-center justify-center gap-7', className)}>
+      {/* ── Spinning ring + centered icon ── */}
+      <div className="relative" style={{ width: ringSize, height: ringSize }}>
+        {/* Outer ambient glow (static, pulsing) */}
+        <motion.div
+          className="absolute inset-0 rounded-full"
+          animate={{
+            opacity: [0.35, 0.6, 0.35],
+            scale: [0.96, 1.04, 0.96],
           }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+          style={{
+            background:
+              'radial-gradient(circle, rgba(59,130,246,0.25) 0%, rgba(139,92,246,0.18) 40%, transparent 70%)',
+            filter: 'blur(12px)',
+          }}
+        />
+        {/* Spinning gradient ring (SVG for crisp anti-aliasing) */}
+        <motion.svg
+          width={ringSize}
+          height={ringSize}
+          viewBox="0 0 100 100"
+          className="absolute inset-0"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.1, repeat: Infinity, ease: 'linear' }}
         >
-          {label}
-        </motion.p>
+          {/* Track — faint white ring */}
+          <circle
+            cx="50"
+            cy="50"
+            r="45"
+            fill="none"
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth="3"
+          />
+          {/* Active arc — white→cyan gradient with rounded cap */}
+          <defs>
+            <linearGradient id="loaderRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#FFFFFF" />
+              <stop offset="50%" stopColor="#22D3EE" />
+              <stop offset="100%" stopColor="#8B5CF6" />
+            </linearGradient>
+          </defs>
+          <circle
+            cx="50"
+            cy="50"
+            r="45"
+            fill="none"
+            stroke="url(#loaderRingGrad)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray="70 220"
+            strokeDashoffset="0"
+          />
+        </motion.svg>
+        {/* Centered brand icon (static, subtle breathe) */}
+        <motion.div
+          className="absolute inset-0 flex items-center justify-center"
+          animate={{ scale: [0.94, 1, 0.94] }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <Image
+            src={BRAND.assets.iconWhite}
+            alt="GSTPilot"
+            width={iconSize}
+            height={iconSize}
+            priority
+            className="shrink-0 drop-shadow-[0_0_12px_rgba(255,255,255,0.3)]"
+          />
+        </motion.div>
+      </div>
+
+      {/* ── Label with staggered fade-in ── */}
+      {label && (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.25 }}
+          className="flex flex-col items-center gap-2"
+        >
+          <span
+            className="text-[15px] font-semibold tracking-tight text-white"
+            style={{ fontFamily: BRAND.fonts.wordmark }}
+          >
+            {label}
+          </span>
+          {/* Three-dot breathing indicator under the label */}
+          <div className="flex items-center gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <motion.span
+                key={i}
+                className="h-1 w-1 rounded-full bg-white/50"
+                animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.1, 0.8] }}
+                transition={{
+                  duration: 1.2,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                  delay: i * 0.2,
+                }}
+              />
+            ))}
+          </div>
+        </motion.div>
       )}
     </div>
   );

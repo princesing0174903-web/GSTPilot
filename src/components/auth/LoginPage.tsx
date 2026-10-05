@@ -23,6 +23,7 @@ import {
   Loader2,
   AlertCircle,
   Chrome,
+  Github,
   UserPlus,
   ArrowLeft,
   KeyRound,
@@ -36,7 +37,18 @@ interface LoginPageProps {
 type AuthMode = 'login' | 'signup' | 'forgot';
 
 export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
-  const { isLoading, isInitializing, error, setError, signInDemo } = useAuth();
+  const {
+    isLoading,
+    isInitializing,
+    error,
+    setError,
+    signInDemo,
+    signInWithEmail: ctxSignInWithEmail,
+    signUpWithEmail: ctxSignUpWithEmail,
+    signInWithGoogle: ctxSignInWithGoogle,
+    signInWithGitHub: ctxSignInWithGitHub,
+    resetPassword: ctxResetPassword,
+  } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
@@ -48,6 +60,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   const [localError, setLocalError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [showNewTabPrompt, setShowNewTabPrompt] = useState(false);
 
   const combinedLoading = isLoading || localLoading;
   const displayError = localError || error;
@@ -66,31 +79,26 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   }
 
   // ── Email/Password Sign In ──
-  // We use `localLoading` only for the Firebase Auth call itself. On success
-  // we do NOT clear localLoading — `isLoading` (from AuthContext, driven by
-  // OrgContext) keeps the "Redirecting…" card visible until the org resolves.
-  // Previously localLoading was cleared in `finally`, causing the success
-  // card to flash off before the dashboard appeared (perceived slow login).
+  // Uses the AuthContext's wrapped method so `isLoading` is driven correctly
+  // (gating the "Redirecting…" card) and OrgContext clears it when the org
+  // resolves. No dynamic import — avoids Turbopack ChunkLoadError.
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError(null);
     setLocalLoading(true);
 
     try {
-      const { signInWithEmail } = await import('@/lib/auth');
-      const { user, error: authError } = await signInWithEmail(email, password, rememberMe);
+      const { error: authError } = await ctxSignInWithEmail(email, password);
       if (authError) {
         setLocalError(authError);
         setLocalLoading(false);
         return;
       }
-      if (user) {
-        setSuccessMessage('Login successful! Redirecting...');
-        setShowSuccess(true);
-        // Do NOT clear localLoading here. AuthContext.isLoading takes over
-        // and stays true until OrgContext resolves the organization. The
-        // combinedLoading flag keeps the spinner visible the whole time.
-      }
+      setSuccessMessage('Login successful! Redirecting...');
+      setShowSuccess(true);
+      // Clear localLoading — AppRouter will switch to 'app' immediately
+      // when isAuthenticated becomes true.
+      setLocalLoading(false);
     } catch {
       setLocalError('An unexpected error occurred. Please try again.');
       setLocalLoading(false);
@@ -110,18 +118,15 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     }
 
     try {
-      const { signUpWithEmail } = await import('@/lib/auth');
-      const { user, error: authError } = await signUpWithEmail(email, password, name);
+      const { error: authError } = await ctxSignUpWithEmail(name, email, password);
       if (authError) {
         setLocalError(authError);
         setLocalLoading(false);
         return;
       }
-      if (user) {
-        setSuccessMessage('Account created! Please check your email to verify your account.');
-        setShowSuccess(true);
-        // Keep localLoading true — OrgContext.isLoading takes over.
-      }
+      setSuccessMessage('Account created! Please check your email to verify your account.');
+      setShowSuccess(true);
+      setLocalLoading(false);
     } catch {
       setLocalError('An unexpected error occurred. Please try again.');
       setLocalLoading(false);
@@ -129,24 +134,64 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   };
 
   // ── Google Sign In (popup with redirect fallback) ──
+  // Inside an iframe (sandbox preview), Google OAuth cannot run — Google
+  // blocks cross-origin iframes. We detect this and show an "Open in new tab"
+  // prompt instead of failing silently.
   const handleGoogleSignIn = async () => {
     setLocalError(null);
     setLocalLoading(true);
+    setShowNewTabPrompt(false);
     try {
-      const { signInWithGoogle } = await import('@/lib/auth');
-      const { error: googleError } = await signInWithGoogle(rememberMe);
-      if (googleError) {
-        // Show the specific Firebase error (e.g., unauthorized-domain, popup-blocked)
+      const { error: googleError, needsNewTab } = await ctxSignInWithGoogle();
+      if (needsNewTab) {
+        // Iframe detected — show the "Open in new tab" prompt.
+        setShowNewTabPrompt(true);
+        setLocalLoading(false);
+      } else if (googleError) {
         setLocalError(googleError);
         setLocalLoading(false);
+      } else {
+        setLocalLoading(false);
       }
-      // If successful via popup: onAuthStateChanged will update the user state
-      // and AuthContext.isLoading takes over. Do NOT clear localLoading.
-      // If redirect was triggered: page navigates away, isInitializing will show on return
     } catch {
       setLocalError('An unexpected error occurred during Google sign-in. Please try again.');
       setLocalLoading(false);
     }
+  };
+
+  // ── GitHub Sign In ──
+  // Calls /api/auth/github/authorize, gets the OAuth consent URL, then
+  // redirects the top-level window there. The callback sets a session
+  // cookie + redirects back to /?github_connected=1, which AuthContext
+  // detects and uses to hydrate the session.
+  const handleGitHubSignIn = async () => {
+    setLocalError(null);
+    setLocalLoading(true);
+    try {
+      const { error: githubError, notConfigured } = await ctxSignInWithGitHub();
+      if (githubError) {
+        setLocalError(
+          notConfigured
+            ? 'GitHub Sign-In is not configured on this server. Ask your administrator to set GITHUB_APP_CLIENT_ID and GITHUB_APP_CLIENT_SECRET.'
+            : githubError
+        );
+        setLocalLoading(false);
+      }
+      // On success, the browser is being redirected to GitHub — don't clear
+      // localLoading until the redirect completes.
+    } catch {
+      setLocalError('An unexpected error occurred during GitHub sign-in. Please try again.');
+      setLocalLoading(false);
+    }
+  };
+
+  // ── Open Google sign-in in a new top-level tab ──
+  // The new tab opens at the same origin with ?googleSignIn=1, which
+  // triggers signInWithPopup automatically (top-level windows can do OAuth).
+  const handleOpenInNewTab = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const url = `${origin}/?googleSignIn=1`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   // ── Forgot Password ──
@@ -156,8 +201,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     setLocalLoading(true);
 
     try {
-      const { resetPassword } = await import('@/lib/auth');
-      const { error: resetError } = await resetPassword(email);
+      const { error: resetError } = await ctxResetPassword(email);
       if (resetError) {
         setLocalError(resetError);
         return;
@@ -227,14 +271,14 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
           >
-            <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight mb-3">
+            <h1 className="text-3xl xl:text-4xl font-semibold tracking-tight text-white leading-tight mb-3">
               Welcome back to your
               <br />
-              <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-blue-400 to-blue-300 bg-clip-text text-transparent">
                 GST Command Center
               </span>
             </h1>
-            <p className="text-slate-400 text-base max-w-md">
+            <p className="text-muted-foreground text-base max-w-md">
               Sign in to manage compliance, file returns, and keep your clients audit-ready.
             </p>
           </motion.div>
@@ -254,12 +298,12 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 transition={{ duration: 0.5, delay: 0.3 + i * 0.1 }}
                 className="flex items-start gap-3.5"
               >
-                <div className="h-9 w-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                  <benefit.icon className="h-4 w-4 text-emerald-400" />
+                <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                  <benefit.icon className="h-4 w-4 text-blue-400" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-white">{benefit.title}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{benefit.desc}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{benefit.desc}</p>
                 </div>
               </motion.div>
             ))}
@@ -274,22 +318,22 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           >
             <div className="flex items-center gap-3 mb-3">
               <div className="flex items-center gap-1.5">
-                <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                <span className="text-[11px] text-emerald-400 font-medium">Live Dashboard</span>
+                <div className="h-2.5 w-2.5 rounded-full bg-blue-400" />
+                <span className="text-[11px] text-blue-400 font-medium">Live Dashboard</span>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/10 p-2.5 text-center">
-                <p className="text-lg font-bold text-emerald-400">94</p>
-                <p className="text-[9px] text-slate-500 uppercase tracking-wider">Health</p>
+              <div className="rounded-lg bg-blue-500/10 border border-blue-500/10 p-2.5 text-center">
+                <p className="text-lg font-bold text-blue-400">94</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Health</p>
               </div>
               <div className="rounded-lg bg-blue-500/10 border border-blue-500/10 p-2.5 text-center">
                 <p className="text-lg font-bold text-blue-400">128</p>
-                <p className="text-[9px] text-slate-500 uppercase tracking-wider">Filed</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Filed</p>
               </div>
               <div className="rounded-lg bg-amber-500/10 border border-amber-500/10 p-2.5 text-center">
                 <p className="text-lg font-bold text-amber-400">12</p>
-                <p className="text-[9px] text-slate-500 uppercase tracking-wider">Pending</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Pending</p>
               </div>
             </div>
           </motion.div>
@@ -420,6 +464,54 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 Continue with Google
               </Button>
 
+              {/* GitHub Sign In */}
+              <Button
+                variant="outline"
+                onClick={handleGitHubSignIn}
+                disabled={combinedLoading}
+                className="w-full h-11 glass-surface border-white/[0.10] hover:bg-white/[0.06] text-white font-medium gap-2.5 mb-4 press-scale rounded-xl"
+              >
+                {combinedLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Github className="h-4 w-4" />
+                )}
+                Continue with GitHub
+              </Button>
+
+              {/* Open in new tab prompt — shown when iframe is detected */}
+              <AnimatePresence>
+                {showNewTabPrompt && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mb-4 rounded-xl bg-amber-500/10 border border-amber-500/20 p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-amber-200 mb-1">
+                          Google sign-in needs a new tab
+                        </p>
+                        <p className="text-xs text-amber-100/70 mb-3 leading-relaxed">
+                          The preview panel blocks Google's pop-up. Open the app in a new tab to complete sign-in securely.
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleOpenInNewTab}
+                          className="gap-1.5 bg-amber-500 text-black hover:bg-amber-400"
+                        >
+                          <ArrowRight className="h-3.5 w-3.5" />
+                          Open in new tab
+                        </Button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Divider */}
               <div className="relative my-6">
                 <Separator className="bg-white/[0.08]" />
@@ -536,17 +628,19 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 </Button>
               </form>
 
-              {/* Preview Mode — bypass auth for sandbox/preview environments */}
+              {/* Local workspace — explore the platform without an account */}
               <div className="mt-6 pt-6 border-t border-white/[0.06]">
                 <p className="text-center text-xs text-white/35 mb-3">
-                  Exploring the platform? Try it without an account.
+                  Want to look around first? Start a local workspace.
                 </p>
-                <button
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={signInDemo}
-                  className="w-full h-10 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/[0.04] border border-white/[0.08] transition-all press-scale"
+                  className="w-full h-10 rounded-xl border-white/[0.08] bg-transparent text-white/60 hover:text-white hover:bg-white/[0.04]"
                 >
-                  Enter Preview Mode
-                </button>
+                  Explore the platform
+                </Button>
               </div>
             </>
           )}

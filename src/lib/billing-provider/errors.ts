@@ -100,6 +100,13 @@ export class CouponNotFoundError extends BillingError {
   }
 }
 
+/** The coupon code is invalid (not found, inactive, wrong plan, below min cart, etc.). */
+export class CouponInvalidError extends BillingError {
+  constructor(message = 'This coupon code is invalid.') {
+    super(message, { code: 'COUPON_INVALID', statusCode: 400, retryable: false });
+  }
+}
+
 /** The coupon code has expired. */
 export class CouponExpiredError extends BillingError {
   constructor(message = 'This coupon code has expired.') {

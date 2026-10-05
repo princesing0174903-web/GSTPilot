@@ -4,7 +4,14 @@
 // GSTPilot — useGSTpilotProducts() Hook
 //
 // Real-time products list (onSnapshot) + CRUD + search.
-// Firestore is the ONLY source of truth: organizations/GSTpilot_SAAS/products
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Reads the current organizationId from OrgContext and passes it to every
+//   gstpilot-data service call. The Firestore path is:
+//     organizations/{organizationId}/products/{productId}
+//
+//   If no org is resolved (preview mode), the subscription returns an empty
+//   list — NO Firestore read, NO permission error.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -15,11 +22,13 @@ import {
   deleteProduct as svcDelete,
   searchProducts,
   computeProductStats,
+  shouldSkipFirestore,
   type Product,
   type CreateProductInput,
   type UpdateProductInput,
   type ProductStats,
 } from '@/lib/gstpilot-data';
+import { useOrg } from '@/contexts/OrgContext';
 
 export interface UseGSTpilotProductsResult {
   products: Product[];
@@ -37,6 +46,9 @@ export interface UseGSTpilotProductsResult {
 }
 
 export function useGSTpilotProducts(): UseGSTpilotProductsResult {
+  const { organization, isPreviewMode } = useOrg();
+  const orgId = organization?.id ?? null;
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,9 +59,23 @@ export function useGSTpilotProducts(): UseGSTpilotProductsResult {
   const productsRef = useRef<Product[]>([]);
   productsRef.current = products;
 
+  // Keep orgId in a ref so the subscription effect doesn't re-run on every
+  // orgId identity change (it should only re-run when the ID actually changes).
+  const orgIdRef = useRef<string | null>(null);
+  orgIdRef.current = orgId;
+
   useEffect(() => {
+    const currentOrgId = orgIdRef.current;
+    // Local workspace, preview mode, or no org → NO Firestore read.
+    if (shouldSkipFirestore(currentOrgId, isPreviewMode)) {
+      setProducts([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     setLoading(true);
     const unsubscribe = subscribeProducts(
+      currentOrgId,
       (list) => {
         setProducts(list);
         setLoading(false);
@@ -59,16 +85,22 @@ export function useGSTpilotProducts(): UseGSTpilotProductsResult {
         const code = (err as { code?: string }).code;
         const msg =
           code === 'permission-denied'
-            ? 'Permission denied. Check Firestore security rules for organizations/GSTpilot_SAAS/products.'
+            ? 'Unable to load products.\n\nReason: You don\'t currently have permission to read this organization\'s data. Please sign in and ensure you are a member of the organization.'
             : code === 'unavailable'
               ? 'You appear to be offline. Showing cached products.'
               : err.message || 'Could not load products.';
         setError(msg);
         setLoading(false);
+        console.error('[useGSTpilotProducts] subscription error:', {
+          orgId: currentOrgId,
+          path: currentOrgId ? `organizations/${currentOrgId}/products` : '(no org)',
+          code,
+          message: err.message,
+        });
       },
     );
     return () => unsubscribe();
-  }, [retryTick]);
+  }, [orgId, isPreviewMode, retryTick]);
 
   const retry = useCallback(() => {
     setError(null);
@@ -79,13 +111,18 @@ export function useGSTpilotProducts(): UseGSTpilotProductsResult {
   const create = useCallback(async (input: CreateProductInput) => {
     setSaving(true);
     try {
-      const product = await svcCreate(input);
+      const product = await svcCreate(orgIdRef.current, input);
       setProducts((prev) =>
         [product, ...prev].sort((a, b) => a.name.localeCompare(b.name)),
       );
       return product;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create product.');
+      const msg = err instanceof Error ? err.message : 'Failed to create product.';
+      setError(msg);
+      console.error('[useGSTpilotProducts] create error:', {
+        orgId: orgIdRef.current,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -95,7 +132,7 @@ export function useGSTpilotProducts(): UseGSTpilotProductsResult {
   const update = useCallback(async (id: string, patch: UpdateProductInput) => {
     setSaving(true);
     try {
-      const updated = await svcUpdate(id, patch);
+      const updated = await svcUpdate(orgIdRef.current, id, patch);
       setProducts((prev) =>
         prev
           .map((p) => (p.id === id ? updated : p))
@@ -103,7 +140,13 @@ export function useGSTpilotProducts(): UseGSTpilotProductsResult {
       );
       return updated;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update product.');
+      const msg = err instanceof Error ? err.message : 'Failed to update product.';
+      setError(msg);
+      console.error('[useGSTpilotProducts] update error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return null;
     } finally {
       setSaving(false);
@@ -116,14 +159,20 @@ export function useGSTpilotProducts(): UseGSTpilotProductsResult {
       const prev = productsRef.current;
       setProducts((cur) => cur.filter((p) => p.id !== id));
       try {
-        await svcDelete(id);
+        await svcDelete(orgIdRef.current, id);
         return true;
       } catch (err) {
         setProducts(prev);
         throw err;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete product.');
+      const msg = err instanceof Error ? err.message : 'Failed to delete product.';
+      setError(msg);
+      console.error('[useGSTpilotProducts] delete error:', {
+        orgId: orgIdRef.current,
+        id,
+        error: err,
+      });
       return false;
     } finally {
       setSaving(false);

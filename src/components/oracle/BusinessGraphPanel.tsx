@@ -77,11 +77,11 @@ interface BusinessGraph {
 // ─── Node visual config ────────────────────────────────────────────────────────
 
 const NODE_COLORS: Record<GraphNodeType, string> = {
-  business: '#10B981', // emerald
-  client: '#3B82F6',   // blue
-  invoice: '#06B6D4',  // cyan
-  payment: '#22C55E',  // green
-  employee: '#A855F7', // purple
+  business: '#3B82F6', // emerald
+  client: '#3B82F6',   // cyan
+  invoice: '#F59E0B',  // amber
+  payment: '#3B82F6',  // green
+  employee: '#3B82F6', // emerald
   task: '#F97316',     // orange
   gst: '#EAB308',      // yellow
   document: '#9CA3AF', // gray
@@ -124,7 +124,7 @@ function formatINR(n: number): string {
 function riskColor(level: 'low' | 'medium' | 'high' | undefined): string {
   if (level === 'high') return '#F43F5E';
   if (level === 'medium') return '#EAB308';
-  return '#22C55E';
+  return '#3B82F6';
 }
 
 // ─── Simulation types ──────────────────────────────────────────────────────────
@@ -423,7 +423,7 @@ export function BusinessGraphPanel({ open, onClose, onOpenConnectors }: Business
           ctx.beginPath();
           ctx.arc(px, py, 2.2 / view.zoom, 0, Math.PI * 2);
           ctx.fillStyle = 'rgba(0,245,212,0.9)';
-          ctx.shadowColor = '#00F5D4';
+          ctx.shadowColor = '#3B82F6';
           ctx.shadowBlur = 8 / view.zoom;
           ctx.fill();
           ctx.shadowBlur = 0;
@@ -477,7 +477,7 @@ export function BusinessGraphPanel({ open, onClose, onOpenConnectors }: Business
         if (isSel) {
           ctx.beginPath();
           ctx.arc(fx, fy, r + 6 / view.zoom, 0, Math.PI * 2);
-          ctx.strokeStyle = '#00F5D4';
+          ctx.strokeStyle = '#3B82F6';
           ctx.lineWidth = 2 / view.zoom;
           ctx.globalAlpha = 0.9;
           ctx.stroke();
@@ -514,7 +514,7 @@ export function BusinessGraphPanel({ open, onClose, onOpenConnectors }: Business
           roundRect(ctx, fx - tw / 2 - padX, labelY - padY, tw + padX * 2, th + padY * 2, 4 / view.zoom);
           ctx.fill();
           ctx.globalAlpha = 1;
-          ctx.fillStyle = isFocus ? '#00F5D4' : 'rgba(255,255,255,0.92)';
+          ctx.fillStyle = isFocus ? '#3B82F6' : 'rgba(255,255,255,0.92)';
           ctx.fillText(label, fx, labelY);
         }
       }
@@ -685,7 +685,7 @@ export function BusinessGraphPanel({ open, onClose, onOpenConnectors }: Business
         >
           {/* Ambient glow background */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute -top-1/4 left-1/4 h-[600px] w-[600px] rounded-full bg-[#00F5D4]/[0.06] blur-[120px]" />
+            <div className="absolute -top-1/4 left-1/4 h-[600px] w-[600px] rounded-full bg-[#3B82F6]/[0.06] blur-[120px]" />
             <div className="absolute -bottom-1/4 right-1/4 h-[600px] w-[600px] rounded-full bg-[#00B8FF]/[0.05] blur-[120px]" />
           </div>
 
@@ -726,17 +726,17 @@ export function BusinessGraphPanel({ open, onClose, onOpenConnectors }: Business
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search clients, invoices, vendors, employees, tasks…"
-                  className="h-9 border-white/[0.08] bg-white/[0.03] pl-9 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus-visible:border-[#00F5D4]/40 focus-visible:ring-[#00F5D4]/20"
+                  className="h-9 border-white/[0.08] bg-white/[0.03] pl-9 text-[13px] text-foreground placeholder:text-muted-foreground/60 focus-visible:border-[#3B82F6]/40 focus-visible:ring-[#3B82F6]/20"
                 />
               </div>
               <div className="ml-auto flex items-center gap-1.5">
                 <Button variant="ghost" size="sm" onClick={handleCenter} className="h-9 gap-1.5 border border-white/[0.06] bg-white/[0.02] text-[12px] text-muted-foreground hover:text-foreground hover:bg-white/[0.05]">
                   <Crosshair className="h-3.5 w-3.5" /> Center
                 </Button>
-                <Button variant="ghost" size="sm" onClick={handleExpand} className={`h-9 gap-1.5 border border-white/[0.06] text-[12px] ${expandAll ? 'bg-[#00F5D4]/10 text-[#00F5D4] border-[#00F5D4]/30' : 'bg-white/[0.02] text-muted-foreground hover:text-foreground hover:bg-white/[0.05]'}`}>
+                <Button variant="ghost" size="sm" onClick={handleExpand} className={`h-9 gap-1.5 border border-white/[0.06] text-[12px] ${expandAll ? 'bg-[#3B82F6]/10 text-[#3B82F6] border-[#3B82F6]/30' : 'bg-white/[0.02] text-muted-foreground hover:text-foreground hover:bg-white/[0.05]'}`}>
                   <Share2 className="h-3.5 w-3.5" /> {expandAll ? 'Collapse' : 'Expand All'}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={handleAIExplain} disabled={aiLoading} className="h-9 gap-1.5 border border-[#00F5D4]/20 bg-[#00F5D4]/[0.08] text-[12px] text-[#00F5D4] hover:bg-[#00F5D4]/[0.14]">
+                <Button variant="ghost" size="sm" onClick={handleAIExplain} disabled={aiLoading} className="h-9 gap-1.5 border border-[#3B82F6]/20 bg-[#3B82F6]/[0.08] text-[12px] text-[#3B82F6] hover:bg-[#3B82F6]/[0.14]">
                   {aiLoading && aiMode === 'explain' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} AI Explain
                 </Button>
                 <Button variant="ghost" size="icon" onClick={handleFullscreen} className="h-9 w-9 border border-white/[0.06] bg-white/[0.02] text-muted-foreground hover:text-foreground hover:bg-white/[0.05]" aria-label="Fullscreen">
@@ -870,7 +870,7 @@ function GraphSkeleton() {
     <div className="flex flex-1 items-center justify-center">
       <div className="flex flex-col items-center gap-4">
         <div className="relative h-16 w-16">
-          <div className="absolute inset-0 animate-ping rounded-full bg-[#00F5D4]/20" style={{ animationDuration: '2s' }} />
+          <div className="absolute inset-0 animate-ping rounded-full bg-[#3B82F6]/20" style={{ animationDuration: '2s' }} />
           <div className="relative flex h-16 w-16 items-center justify-center rounded-full accent-gradient-soft">
             <Share2 className="h-7 w-7 accent-text" />
           </div>
@@ -923,7 +923,7 @@ function EmptyGraphState({
           transition={{ type: 'spring', damping: 18 }}
           className="relative mb-6"
         >
-          <div className="absolute inset-0 animate-ping rounded-full bg-[#00F5D4]/15" style={{ animationDuration: '3s' }} />
+          <div className="absolute inset-0 animate-ping rounded-full bg-[#3B82F6]/15" style={{ animationDuration: '3s' }} />
           <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl accent-gradient-soft border border-white/[0.08]">
             <Share2 className="h-9 w-9 accent-text" />
           </div>
@@ -939,7 +939,7 @@ function EmptyGraphState({
             <button
               key={b.key}
               onClick={onOpenConnectors}
-              className="group flex items-start gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3.5 text-left transition-all hover:border-[#00F5D4]/30 hover:bg-white/[0.04]"
+              className="group flex items-start gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3.5 text-left transition-all hover:border-[#3B82F6]/30 hover:bg-white/[0.04]"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl accent-gradient-soft">
                 <b.icon className="h-4 w-4 accent-text" />
@@ -966,7 +966,7 @@ function EmptyGraphState({
 }
 
 function HealthBar({ metric }: { metric: HealthMetric }) {
-  const color = metric.level === 'high' ? '#F43F5E' : metric.level === 'medium' ? '#EAB308' : '#22C55E';
+  const color = metric.level === 'high' ? '#F43F5E' : metric.level === 'medium' ? '#EAB308' : '#3B82F6';
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-2">
@@ -1072,7 +1072,7 @@ function NodeDetailPanel({
           )}
 
           {/* AI Insight */}
-          <div className="rounded-2xl border border-[#00F5D4]/15 bg-[#00F5D4]/[0.04] p-3.5">
+          <div className="rounded-2xl border border-[#3B82F6]/15 bg-[#3B82F6]/[0.04] p-3.5">
             <div className="mb-1.5 flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 accent-text" />
               <span className="text-[10px] font-semibold uppercase tracking-[0.14em] accent-text">AI Insight</span>
@@ -1089,7 +1089,7 @@ function NodeDetailPanel({
                   <button
                     key={a}
                     onClick={() => onAskAI(`Tell me more about the ${node.label} ${a.toLowerCase()} action`)}
-                    className="flex w-full items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-left text-[12.5px] font-medium text-foreground/90 transition-colors hover:border-[#00F5D4]/30 hover:bg-white/[0.04]"
+                    className="flex w-full items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-left text-[12.5px] font-medium text-foreground/90 transition-colors hover:border-[#3B82F6]/30 hover:bg-white/[0.04]"
                   >
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md accent-gradient-soft text-[10px] font-bold accent-text">{i + 1}</span>
                     <span className="flex-1">{a}</span>
@@ -1217,7 +1217,7 @@ function AIPanel({
                 <button
                   key={s}
                   onClick={() => { onQuestionChange(s); }}
-                  className="rounded-full border border-white/[0.08] bg-white/[0.02] px-3 py-1.5 text-[11.5px] font-medium text-muted-foreground transition-colors hover:border-[#00F5D4]/30 hover:text-[#00F5D4]"
+                  className="rounded-full border border-white/[0.08] bg-white/[0.02] px-3 py-1.5 text-[11.5px] font-medium text-muted-foreground transition-colors hover:border-[#3B82F6]/30 hover:text-[#3B82F6]"
                 >
                   {s}
                 </button>
@@ -1235,7 +1235,7 @@ function AIPanel({
             onChange={(e) => onQuestionChange(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !loading) onAsk(); }}
             placeholder="Ask about your graph…"
-            className="h-10 border-white/[0.08] bg-white/[0.03] text-[13px] text-foreground placeholder:text-muted-foreground/60 focus-visible:border-[#00F5D4]/40 focus-visible:ring-[#00F5D4]/20"
+            className="h-10 border-white/[0.08] bg-white/[0.03] text-[13px] text-foreground placeholder:text-muted-foreground/60 focus-visible:border-[#3B82F6]/40 focus-visible:ring-[#3B82F6]/20"
           />
           <Button size="icon" className="h-10 w-10 shrink-0 accent-gradient text-black hover:opacity-90" onClick={onAsk} disabled={loading || !question.trim()}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -1244,7 +1244,7 @@ function AIPanel({
         <button
           onClick={onExplain}
           disabled={loading}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#00F5D4]/20 bg-[#00F5D4]/[0.06] py-2 text-[12px] font-medium text-[#00F5D4] transition-colors hover:bg-[#00F5D4]/[0.12] disabled:opacity-50"
+          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#3B82F6]/20 bg-[#3B82F6]/[0.06] py-2 text-[12px] font-medium text-[#3B82F6] transition-colors hover:bg-[#3B82F6]/[0.12] disabled:opacity-50"
         >
           <Sparkles className="h-3.5 w-3.5" /> Re-explain the whole graph
         </button>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
+import { PremiumPageLoader } from '@/components/ui/premium-loading'
 import { motion } from 'framer-motion'
 import {
   FileText,
@@ -54,6 +55,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { apiPost } from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
+import { fetchWithTimeout } from '@/lib/async'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -459,172 +461,201 @@ export default function AIWorkforcePage() {
     const config = AGENT_CONFIGS.find(a => a.id === agentId)
     if (!config) return
 
+    // Single-flight: prevent double-clicks from re-entering runAgent while
+    // the same agent is already running.
+    if (agentStatuses[agentId] === 'running') return
+
     setAgentStatuses(prev => ({ ...prev, [agentId]: 'running' }))
     setAgentRunProgress(prev => ({ ...prev, [agentId]: 0 }))
 
-    // Simulate progress through steps
-    const steps = config.runSteps
-    for (let i = 0; i < steps.length; i++) {
-      setAgentRunStep(prev => ({ ...prev, [agentId]: steps[i] }))
-      setAgentRunProgress(prev => ({ ...prev, [agentId]: Math.round(((i + 1) / steps.length) * 90) }))
-      await new Promise(r => setTimeout(r, 600 + Math.random() * 400))
-    }
-
-    // Prepare firm data for the AI
-    const firmData = {
-      clients: clients.data.slice(0, 50).map(c => ({
-        id: c.clientId, tradeName: c.tradeName, gstin: c.gstin,
-        status: c.status, healthScore: c.healthScore,
-        complianceScore: c.complianceProfile?.filingCompliance,
-        overdueReturns: c.complianceProfile?.overdueReturns,
-        pendingReturnCount: c.pendingReturnCount, totalTaxPaid: c.totalTaxPaid,
-      })),
-      returns: returns.data.slice(0, 50).map(r => ({
-        id: r.returnId, clientId: r.clientId, returnType: r.returnType,
-        period: r.period, status: r.status, totalTax: r.totalTax,
-        issuesFound: r.issuesFound, criticalErrors: r.criticalErrors,
-      })),
-      invoices: invoices.data.slice(0, 50).map(i => ({
-        id: i.invoiceId, invoiceNumber: i.invoiceNumber,
-        sellerGstin: i.sellerGstin, totalAmount: i.totalAmount,
-        riskLevel: i.riskLevel, matchStatus: i.matchStatus, status: i.status,
-      })),
-      reconciliations: reconciliations.data.slice(0, 20).map(r => ({
-        id: r.reconId, clientId: r.clientId, period: r.period,
-        status: r.status, matched: r.matched, totalRecords: r.totalRecords,
-        unmatched: r.unmatched, gstDifference: r.gstDifference,
-      })),
-      tasks: tasks.data.slice(0, 30).map(t => ({
-        id: t.taskId, title: t.title, priority: t.priority,
-        status: t.status, dueDate: t.dueDate,
-      })),
-      leads: leads.data.slice(0, 20).map(l => ({
-        id: l.leadId, contactName: l.contactName, company: l.company,
-        status: l.status, leadScore: l.leadScore, estimatedValue: l.estimatedValue,
-      })),
-      deals: deals.data.slice(0, 20).map(d => ({
-        id: d.dealId, title: d.title, value: d.value,
-        stage: d.stage, probability: d.probability,
-      })),
-      firm: firm.data ? {
-        name: firm.data.firmName,
-        activeClientCount: firm.data.activeClientCount,
-        complianceScore: firm.data.complianceScore,
-        totalTaxVolume: firm.data.totalTaxVolume,
-      } : null,
-    }
-
+    // Track the idle-reset timer so it can be cancelled on unmount.
+    agentIdleTimersRef.current[agentId] = undefined
     const startTime = Date.now()
 
     try {
-      const res = await fetch('/api/agents/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agentId,
-          firmData,
-          firmName: firm.data?.firmName || user?.firmName || 'CA Firm',
-        }),
-      })
+      // Simulate progress through steps
+      const steps = config.runSteps
+      for (let i = 0; i < steps.length; i++) {
+        setAgentRunStep(prev => ({ ...prev, [agentId]: steps[i] }))
+        setAgentRunProgress(prev => ({ ...prev, [agentId]: Math.round(((i + 1) / steps.length) * 90) }))
+        await new Promise(r => setTimeout(r, 600 + Math.random() * 400))
+      }
 
-      const data = await res.json()
-      const duration = Math.round((Date.now() - startTime) / 1000)
+      // Prepare firm data for the AI
+      const firmData = {
+        clients: clients.data.slice(0, 50).map(c => ({
+          id: c.clientId, tradeName: c.tradeName, gstin: c.gstin,
+          status: c.status, healthScore: c.healthScore,
+          complianceScore: c.complianceProfile?.filingCompliance,
+          overdueReturns: c.complianceProfile?.overdueReturns,
+          pendingReturnCount: c.pendingReturnCount, totalTaxPaid: c.totalTaxPaid,
+        })),
+        returns: returns.data.slice(0, 50).map(r => ({
+          id: r.returnId, clientId: r.clientId, returnType: r.returnType,
+          period: r.period, status: r.status, totalTax: r.totalTax,
+          issuesFound: r.issuesFound, criticalErrors: r.criticalErrors,
+        })),
+        invoices: invoices.data.slice(0, 50).map(i => ({
+          id: i.invoiceId, invoiceNumber: i.invoiceNumber,
+          sellerGstin: i.sellerGstin, totalAmount: i.totalAmount,
+          riskLevel: i.riskLevel, matchStatus: i.matchStatus, status: i.status,
+        })),
+        reconciliations: reconciliations.data.slice(0, 20).map(r => ({
+          id: r.reconId, clientId: r.clientId, period: r.period,
+          status: r.status, matched: r.matched, totalRecords: r.totalRecords,
+          unmatched: r.unmatched, gstDifference: r.gstDifference,
+        })),
+        tasks: tasks.data.slice(0, 30).map(t => ({
+          id: t.taskId, title: t.title, priority: t.priority,
+          status: t.status, dueDate: t.dueDate,
+        })),
+        leads: leads.data.slice(0, 20).map(l => ({
+          id: l.leadId, contactName: l.contactName, company: l.company,
+          status: l.status, leadScore: l.leadScore, estimatedValue: l.estimatedValue,
+        })),
+        deals: deals.data.slice(0, 20).map(d => ({
+          id: d.dealId, title: d.title, value: d.value,
+          stage: d.stage, probability: d.probability,
+        })),
+        firm: firm.data ? {
+          name: firm.data.firmName,
+          activeClientCount: firm.data.activeClientCount,
+          complianceScore: firm.data.complianceScore,
+          totalTaxVolume: firm.data.totalTaxVolume,
+        } : null,
+      }
 
-      if (data.success) {
-        const result = data.result as AgentRunResult
-        setAgentResults(prev => ({ ...prev, [agentId]: result }))
-        setAgentStatuses(prev => ({ ...prev, [agentId]: 'completed' }))
-        setAgentRunProgress(prev => ({ ...prev, [agentId]: 100 }))
-        setAgentLastActivity(prev => ({ ...prev, [agentId]: new Date().toISOString() }))
+      try {
+        const res = await fetchWithTimeout('/api/agents/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId,
+            firmData,
+            firmName: firm.data?.firmName || user?.firmName || 'CA Firm',
+          }),
+          timeoutMs: 60_000, // LLM call — give it up to a minute.
+        })
 
-        // Add to run history
+        const data = await res.json()
+        const duration = Math.round((Date.now() - startTime) / 1000)
+
+        if (data.success) {
+          const result = data.result as AgentRunResult
+          setAgentResults(prev => ({ ...prev, [agentId]: result }))
+          setAgentStatuses(prev => ({ ...prev, [agentId]: 'completed' }))
+          setAgentRunProgress(prev => ({ ...prev, [agentId]: 100 }))
+          setAgentLastActivity(prev => ({ ...prev, [agentId]: new Date().toISOString() }))
+
+          // Add to run history
+          const record: AgentRunRecord = {
+            id: `run-${Date.now()}`,
+            agentId,
+            status: 'completed',
+            startedAt: new Date(startTime).toISOString(),
+            completedAt: new Date().toISOString(),
+            duration,
+            result,
+            error: null,
+          }
+          setAgentRunHistory(prev => ({
+            ...prev,
+            [agentId]: [record, ...(prev[agentId] || [])].slice(0, 20),
+          }))
+        } else {
+          throw new Error(data.error || 'Agent run failed')
+        }
+      } catch (error) {
+        const duration = Math.round((Date.now() - startTime) / 1000)
+        setAgentStatuses(prev => ({ ...prev, [agentId]: 'error' }))
+        setAgentRunProgress(prev => ({ ...prev, [agentId]: 0 }))
+
         const record: AgentRunRecord = {
           id: `run-${Date.now()}`,
           agentId,
-          status: 'completed',
+          status: 'failed',
           startedAt: new Date(startTime).toISOString(),
           completedAt: new Date().toISOString(),
           duration,
-          result,
-          error: null,
+          result: null,
+          error: error instanceof Error ? error.message : 'Unknown error',
         }
         setAgentRunHistory(prev => ({
           ...prev,
           [agentId]: [record, ...(prev[agentId] || [])].slice(0, 20),
         }))
-      } else {
-        throw new Error(data.error || 'Agent run failed')
       }
-    } catch (error) {
-      const duration = Math.round((Date.now() - startTime) / 1000)
-      setAgentStatuses(prev => ({ ...prev, [agentId]: 'error' }))
-      setAgentRunProgress(prev => ({ ...prev, [agentId]: 0 }))
 
-      const record: AgentRunRecord = {
-        id: `run-${Date.now()}`,
-        agentId,
-        status: 'failed',
-        startedAt: new Date(startTime).toISOString(),
-        completedAt: new Date().toISOString(),
-        duration,
-        result: null,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      }
-      setAgentRunHistory(prev => ({
-        ...prev,
-        [agentId]: [record, ...(prev[agentId] || [])].slice(0, 20),
-      }))
-    }
-
-    // PT-1-b: Dispatch REAL DB-writing agent run alongside the LLM analysis.
-    // This is what creates Notification / AITask / AuditLog / AIPrediction /
-    // ExecutiveReport / Issue rows so every "Run" button has a real effect
-    // on the database — not just an LLM summary.
-    try {
-      const realAgentKey = REAL_AGENT_MAP[agentId]
-      const realResult = await apiPost<{
-        success: boolean
-        summary: string
-        metrics?: Record<string, number | string>
-        error?: string
-      }>('/api/rmb/run-agent', { agent: realAgentKey, userId: user?.id })
-      if (realResult.success) {
-        toast({
-          title: `${config.name} → real DB writes`,
-          description: realResult.summary,
-        })
-      } else {
+      // PT-1-b: Dispatch REAL DB-writing agent run alongside the LLM analysis.
+      // This is what creates Notification / AITask / AuditLog / AIPrediction /
+      // ExecutiveReport / Issue rows so every "Run" button has a real effect
+      // on the database — not just an LLM summary.
+      try {
+        const realAgentKey = REAL_AGENT_MAP[agentId]
+        const realResult = await apiPost<{
+          success: boolean
+          summary: string
+          metrics?: Record<string, number | string>
+          error?: string
+        }>('/api/rmb/run-agent', { agent: realAgentKey, userId: user?.id })
+        if (realResult.success) {
+          toast({
+            title: `${config.name} → real DB writes`,
+            description: realResult.summary,
+          })
+        } else {
+          toast({
+            title: `${config.name} → real DB writes failed`,
+            description: realResult.error ?? 'Unknown error',
+            variant: 'destructive',
+          })
+        }
+      } catch (e) {
+        // Don't fail the whole Run button — LLM analysis already succeeded
         toast({
           title: `${config.name} → real DB writes failed`,
-          description: realResult.error ?? 'Unknown error',
+          description: e instanceof Error ? e.message : 'Unknown error',
           variant: 'destructive',
         })
       }
-    } catch (e) {
-      // Don't fail the whole Run button — LLM analysis already succeeded
-      toast({
-        title: `${config.name} → real DB writes failed`,
-        description: e instanceof Error ? e.message : 'Unknown error',
-        variant: 'destructive',
-      })
+    } finally {
+      // Always schedule the idle reset — even on error / abort / unmount-during-run.
+      // Tracked so a useEffect cleanup can cancel it if the component unmounts.
+      const timer = setTimeout(() => {
+        setAgentStatuses(prev => ({ ...prev, [agentId]: 'idle' }))
+        delete agentIdleTimersRef.current[agentId]
+      }, 2000)
+      agentIdleTimersRef.current[agentId] = timer
     }
+  }, [clients.data, returns.data, invoices.data, reconciliations.data, tasks.data, leads.data, deals.data, firm.data, user, toast, agentStatuses])
 
-    // Reset to idle after a moment
-    setTimeout(() => {
-      setAgentStatuses(prev => ({ ...prev, [agentId]: 'idle' }))
-    }, 2000)
-  }, [clients.data, returns.data, invoices.data, reconciliations.data, tasks.data, leads.data, deals.data, firm.data, user, toast])
+  // Track idle-reset timers per agent so they can be cleared on unmount.
+  const agentIdleTimersRef = useRef<Record<string, ReturnType<typeof setTimeout> | undefined>>({})
+  useEffect(() => {
+    const timers = agentIdleTimersRef.current
+    return () => {
+      // Cancel any pending idle-reset timers so they don't fire setState on a dead component.
+      for (const id of Object.keys(timers)) {
+        const t = timers[id]
+        if (t) clearTimeout(t)
+      }
+    }
+  }, [])
 
   // ─── Run All Agents ─────────────────────────────────────────────────────────
 
   const runAllAgents = useCallback(async () => {
+    if (runAllLoading) return // single-flight
     setRunAllLoading(true)
-    for (const config of AGENT_CONFIGS) {
-      await runAgent(config.id)
-      await new Promise(r => setTimeout(r, 500))
+    try {
+      for (const config of AGENT_CONFIGS) {
+        await runAgent(config.id)
+        await new Promise(r => setTimeout(r, 500))
+      }
+    } finally {
+      setRunAllLoading(false)
     }
-    setRunAllLoading(false)
-  }, [runAgent])
+  }, [runAgent, runAllLoading])
 
   // ─── Pause Agent ────────────────────────────────────────────────────────────
 
@@ -642,14 +673,7 @@ export default function AIWorkforcePage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full min-h-[60vh]">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
-          <span className="text-sm text-muted-foreground">Loading AI Workforce...</span>
-        </div>
-      </div>
-    )
+    return <PremiumPageLoader label="Loading AI Workforce…" />
   }
 
   return (
@@ -785,7 +809,7 @@ export default function AIWorkforcePage() {
                             e.stopPropagation()
                             if (isRunning) { pauseAgent(config.id) } else { runAgent(config.id) }
                           }}
-                          disabled={status === 'completed'}
+                          disabled={isRunning}
                         >
                           {isRunning ? (
                             <Pause className={`h-3.5 w-3.5 ${config.colorText}`} />
@@ -1492,7 +1516,13 @@ export default function AIWorkforcePage() {
             </Button>
             <Button
               size="sm"
-              onClick={() => setShowScheduleDialog(false)}
+              onClick={() => {
+                setShowScheduleDialog(false);
+                toast({
+                  title: 'Scheduling coming soon',
+                  description: 'Auto-scheduling is on the roadmap. Your agent is ready to run on demand.',
+                });
+              }}
               className="text-xs bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
             >
               <Calendar className="h-3.5 w-3.5 mr-1.5" />

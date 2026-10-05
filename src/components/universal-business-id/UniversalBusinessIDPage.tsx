@@ -46,7 +46,7 @@ const fmtDate = (d: string) => {
 
 // Score → color (emerald / amber / red)
 const scoreColor = (s: number) => {
-  if (s >= 75) return { hex: '#10b981', text: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-200', label: 'Excellent' }
+  if (s >= 75) return { hex: '#2563EB', text: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-200', label: 'Excellent' }
   if (s >= 50) return { hex: '#f59e0b', text: 'text-amber-600', bg: 'bg-amber-50', ring: 'ring-amber-200', label: 'Moderate' }
   return { hex: '#ef4444', text: 'text-rose-600', bg: 'bg-rose-50', ring: 'ring-rose-200', label: 'High Risk' }
 }
@@ -105,8 +105,16 @@ function AnimatedScore({ value, decimals = 0, prefix = '', suffix = '' }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEMO DATA — 12 Indian Businesses
+// BUSINESS DIRECTORY DATA
 // ═══════════════════════════════════════════════════════════════════════════════
+// Previously this module shipped a hardcoded array of 12 REAL Indian listed
+// companies (TCS, Infosys, HDFC, Reliance, SBI, Bharti Airtel, Maruti Suzuki,
+// Asian Paints, Bajaj Finance, Wipro, Mahindra & Mahindra, Adani Power) with
+// fabricated trust / compliance / payment / growth scores, fabricated turnover,
+// employee counts, and loan counts. Publishing fabricated financial scores for
+// real, named companies is defamatory and presents fake data as real.
+// The array is now empty until the user connects real partners.
+// TODO: Replace with real data from /api/business-network when available.
 
 interface Business {
   ubid: string
@@ -133,116 +141,7 @@ interface Business {
   scoreHistory: number[]
 }
 
-const BUSINESSES: Business[] = [
-  {
-    ubid: 'UBID-27-TCS1-0017', name: 'Tata Consultancy Services', gstin: '27AAACT2727Q1ZU',
-    pan: 'AAACT2727Q', cin: 'L28920MH1995PLC085715', incorporated: '1995-03-15',
-    industry: 'IT Services', industryKey: 'it', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 96, complianceScore: 98, paymentScore: 95, growthScore: 92,
-    verified: true, verificationTier: 'Platinum',
-    employees: 603500, annualTurnover: 195000000000, bankAccounts: 18, activeLoans: 4, tradePartners: 1240,
-    scoreHistory: [89, 90, 91, 92, 91, 93, 94, 93, 94, 95, 96, 96],
-  },
-  {
-    ubid: 'UBID-29-INF1-0089', name: 'Infosys Limited', gstin: '29AAACI4798L1Z3',
-    pan: 'AAACI4798L', cin: 'L28920KA1981PLC013115', incorporated: '1981-07-02',
-    industry: 'IT Services', industryKey: 'it', hq: 'Bengaluru', state: 'Karnataka',
-    trustScore: 95, complianceScore: 97, paymentScore: 94, growthScore: 89,
-    verified: true, verificationTier: 'Platinum',
-    employees: 317200, annualTurnover: 158000000000, bankAccounts: 14, activeLoans: 3, tradePartners: 980,
-    scoreHistory: [88, 89, 90, 91, 92, 92, 93, 93, 94, 94, 95, 95],
-  },
-  {
-    ubid: 'UBID-27-HDF1-0234', name: 'HDFC Bank', gstin: '27AAACH2702H1Z3',
-    pan: 'AAACH2702H', cin: 'L65920MH1994PLC072735', incorporated: '1994-10-17',
-    industry: 'Banking', industryKey: 'banking', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 97, complianceScore: 99, paymentScore: 96, growthScore: 88,
-    verified: true, verificationTier: 'Platinum',
-    employees: 218000, annualTurnover: 835000000000, bankAccounts: 1, activeLoans: 0, tradePartners: 2150,
-    scoreHistory: [92, 93, 93, 94, 95, 95, 96, 96, 96, 97, 97, 97],
-  },
-  {
-    ubid: 'UBID-28-RIL2-0042', name: 'Reliance Industries', gstin: '27AAACR5055K1Z5',
-    pan: 'AAACR5055K', cin: 'L17110MH1973PLC019781', incorporated: '1973-08-08',
-    industry: 'Conglomerate', industryKey: 'conglomerate', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 94, complianceScore: 93, paymentScore: 92, growthScore: 90,
-    verified: true, verificationTier: 'Platinum',
-    employees: 342700, annualTurnover: 1000000000000, bankAccounts: 22, activeLoans: 9, tradePartners: 3480,
-    scoreHistory: [86, 87, 88, 89, 90, 91, 91, 92, 92, 93, 94, 94],
-  },
-  {
-    ubid: 'UBID-27-SBI0-1001', name: 'State Bank of India', gstin: '27AAACS8577G1Z1',
-    pan: 'AAACS8577G', cin: 'L65110MH1955PLC011448', incorporated: '1955-07-01',
-    industry: 'Banking', industryKey: 'banking', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 96, complianceScore: 98, paymentScore: 93, growthScore: 82,
-    verified: true, verificationTier: 'Platinum',
-    employees: 235000, annualTurnover: 532000000000, bankAccounts: 1, activeLoans: 0, tradePartners: 4280,
-    scoreHistory: [90, 91, 91, 92, 93, 93, 94, 94, 95, 95, 96, 96],
-  },
-  {
-    ubid: 'UBID-06-BRT4-0156', name: 'Bharti Airtel', gstin: '06AABCB3728G1ZJ',
-    pan: 'AABCB3728G', cin: 'L74810DL1995PLC070494', incorporated: '1995-07-07',
-    industry: 'Telecom', industryKey: 'telecom', hq: 'New Delhi', state: 'Delhi',
-    trustScore: 87, complianceScore: 88, paymentScore: 84, growthScore: 80,
-    verified: true, verificationTier: 'Gold',
-    employees: 17800, annualTurnover: 149000000000, bankAccounts: 16, activeLoans: 6, tradePartners: 2150,
-    scoreHistory: [80, 81, 82, 83, 83, 84, 85, 85, 86, 86, 87, 87],
-  },
-  {
-    ubid: 'UBID-06-MSU2-0411', name: 'Maruti Suzuki India', gstin: '06AAACM4933F1ZP',
-    pan: 'AAACM4933F', cin: 'L34103HR1981PLC011635', incorporated: '1981-02-24',
-    industry: 'Automobile', industryKey: 'auto', hq: 'Gurugram', state: 'Haryana',
-    trustScore: 89, complianceScore: 91, paymentScore: 88, growthScore: 78,
-    verified: true, verificationTier: 'Gold',
-    employees: 18500, annualTurnover: 132000000000, bankAccounts: 12, activeLoans: 5, tradePartners: 1620,
-    scoreHistory: [82, 83, 84, 85, 86, 86, 87, 87, 88, 88, 89, 89],
-  },
-  {
-    ubid: 'UBID-27-ASN1-0528', name: 'Asian Paints', gstin: '27AAACA9514P1Z2',
-    pan: 'AAACA9514P', cin: 'L24220MH1945PLC005077', incorporated: '1945-01-01',
-    industry: 'Manufacturing', industryKey: 'mfg', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 90, complianceScore: 92, paymentScore: 89, growthScore: 81,
-    verified: true, verificationTier: 'Gold',
-    employees: 8200, annualTurnover: 35400000000, bankAccounts: 9, activeLoans: 3, tradePartners: 890,
-    scoreHistory: [83, 84, 85, 86, 87, 87, 88, 88, 89, 89, 90, 90],
-  },
-  {
-    ubid: 'UBID-23-BJF1-0673', name: 'Bajaj Finance', gstin: '23AABCB5594J1Z6',
-    pan: 'AABCB5594J', cin: 'L65910MH1987PLC042612', incorporated: '1987-03-25',
-    industry: 'NBFC', industryKey: 'nbfc', hq: 'Pune', state: 'Maharashtra',
-    trustScore: 86, complianceScore: 89, paymentScore: 82, growthScore: 85,
-    verified: true, verificationTier: 'Gold',
-    employees: 28400, annualTurnover: 41000000000, bankAccounts: 11, activeLoans: 7, tradePartners: 1340,
-    scoreHistory: [79, 80, 81, 82, 83, 83, 84, 84, 85, 85, 86, 86],
-  },
-  {
-    ubid: 'UBID-29-WIP1-0791', name: 'Wipro Limited', gstin: '29AAACW5674N1Z9',
-    pan: 'AAACW5674N', cin: 'L32102KA1945PLC020035', incorporated: '1945-12-29',
-    industry: 'IT Services', industryKey: 'it', hq: 'Bengaluru', state: 'Karnataka',
-    trustScore: 88, complianceScore: 90, paymentScore: 87, growthScore: 76,
-    verified: true, verificationTier: 'Gold',
-    employees: 234000, annualTurnover: 89000000000, bankAccounts: 13, activeLoans: 4, tradePartners: 1180,
-    scoreHistory: [81, 82, 83, 84, 84, 85, 85, 86, 86, 87, 88, 88],
-  },
-  {
-    ubid: 'UBID-27-MAH2-0845', name: 'Mahindra & Mahindra', gstin: '27AAACM7785P1Z4',
-    pan: 'AAACM7785P', cin: 'L28100MH1945PLC004558', incorporated: '1945-10-02',
-    industry: 'Automobile', industryKey: 'auto', hq: 'Mumbai', state: 'Maharashtra',
-    trustScore: 84, complianceScore: 86, paymentScore: 83, growthScore: 79,
-    verified: true, verificationTier: 'Gold',
-    employees: 79000, annualTurnover: 99000000000, bankAccounts: 14, activeLoans: 6, tradePartners: 1450,
-    scoreHistory: [77, 78, 79, 80, 81, 81, 82, 82, 83, 83, 84, 84],
-  },
-  {
-    ubid: 'UBID-24-ADN1-0928', name: 'Adani Power', gstin: '24AAACA4492P1Z8',
-    pan: 'AAACA4492P', cin: 'L40100GJ2005PLC046728', incorporated: '2005-08-22',
-    industry: 'Energy', industryKey: 'energy', hq: 'Ahmedabad', state: 'Gujarat',
-    trustScore: 71, complianceScore: 74, paymentScore: 68, growthScore: 73,
-    verified: true, verificationTier: 'Silver',
-    employees: 4200, annualTurnover: 31800000000, bankAccounts: 8, activeLoans: 11, tradePartners: 540,
-    scoreHistory: [62, 63, 64, 65, 66, 67, 68, 69, 70, 70, 71, 71],
-  },
-]
+const BUSINESSES: Business[] = []
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TRUST NETWORK DATA (pre-computed positions)
@@ -259,13 +158,13 @@ interface NetNode {
 }
 
 const RELATION_COLORS: Record<NetNode['type'], { hex: string; label: string }> = {
-  vendor:     { hex: '#10b981', label: 'Vendor' },
-  customer:   { hex: '#059669', label: 'Customer' },
-  bank:       { hex: '#0d9488', label: 'Bank' },
+  vendor:     { hex: '#2563EB', label: 'Vendor' },
+  customer:   { hex: '#1D4ED8', label: 'Customer' },
+  bank:       { hex: '#2563EB', label: 'Bank' },
   nbfc:       { hex: '#0f766e', label: 'NBFC' },
   ca:         { hex: '#65a30d', label: 'CA Firm' },
   gov:        { hex: '#475569', label: 'Govt Body' },
-  insurance:  { hex: '#0891b2', label: 'Insurance' },
+  insurance:  { hex: '#2563EB', label: 'Insurance' },
   logistics:  { hex: '#7c3aed', label: 'Logistics' },
 }
 
@@ -319,19 +218,12 @@ const BELL_CURVE: { score: number; count: number; cumulativePct: number }[] = ((
   return buckets
 })()
 
-// Industry averages
-const INDUSTRY_AVG: { name: string; key: string; icon: React.ElementType; avg: number; businesses: number; growth: number }[] = [
-  { name: 'IT Services',      key: 'it',      icon: Cpu,          avg: 88.4, businesses: 48230, growth: 14.2 },
-  { name: 'Banking',          key: 'banking', icon: Landmark,    avg: 92.1, businesses: 1840,  growth: 8.7 },
-  { name: 'Pharmaceuticals',  key: 'pharma',  icon: Stethoscope, avg: 86.7, businesses: 12380, growth: 11.5 },
-  { name: 'Automobile',       key: 'auto',    icon: Wrench,      avg: 84.2, businesses: 8920,  growth: 6.3 },
-  { name: 'Telecom',          key: 'telecom', icon: Network,     avg: 79.5, businesses: 480,   growth: 4.1 },
-  { name: 'Manufacturing',    key: 'mfg',     icon: Building2,   avg: 81.3, businesses: 68450, growth: 9.8 },
-  { name: 'Energy',           key: 'energy',  icon: Zap,         avg: 75.8, businesses: 3120,  growth: 7.2 },
-  { name: 'Retail',           key: 'retail',  icon: ShoppingBag, avg: 73.4, businesses: 124800,growth: 12.6 },
-  { name: 'Real Estate',      key: 'realty',  icon: Building2,   avg: 68.2, businesses: 24360, growth: 5.4 },
-  { name: 'Agriculture',      key: 'agri',    icon: Wheat,       avg: 64.7, businesses: 89240, growth: 3.8 },
-]
+// Industry averages — previously 10 hardcoded mock industries (IT Services,
+// Banking, Pharmaceuticals, Automobile, Telecom, Manufacturing, Energy, Retail,
+// Real Estate, Agriculture) with fabricated avg scores / business counts /
+// growth rates. Removed during mock-data audit (Task 7). Empty until a real
+// industry-benchmark API is wired.
+const INDUSTRY_AVG: { name: string; key: string; icon: React.ElementType; avg: number; businesses: number; growth: number }[] = []
 
 // Indian States Heatmap (simplified grid layout)
 const STATE_GRID: { name: string; abbr: string; row: number; col: number; score: number; businesses: number }[] = [
@@ -424,9 +316,9 @@ function QrPattern({ size = 88, seed = 17 }: { size?: number; seed?: number }) {
         })
       )}
       {/* Center accent dot */}
-      <circle cx={size / 2} cy={size / 2} r={cellSize * 1.1} fill="#10b981" opacity={0.85} />
+      <circle cx={size / 2} cy={size / 2} r={cellSize * 1.1} fill="#2563EB" opacity={0.85} />
       <circle cx={size / 2} cy={size / 2} r={cellSize * 0.55} fill="#ffffff" />
-      <circle cx={size / 2} cy={size / 2} r={cellSize * 0.3} fill="#10b981" />
+      <circle cx={size / 2} cy={size / 2} r={cellSize * 0.3} fill="#2563EB" />
     </svg>
   )
 }
@@ -491,7 +383,7 @@ function ScoreGauge({ value, label, size = 130, icon: Icon }: {
 // SPARKLINE — 12-month score history mini chart
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function Sparkline({ data, color = '#10b981', w = 280, h = 56 }: {
+function Sparkline({ data, color = '#2563EB', w = 280, h = 56 }: {
   data: number[]; color?: string; w?: number; h?: number
 }) {
   if (data.length < 2) return null
@@ -582,11 +474,11 @@ function TrustNetworkGraph({ business }: { business: Business }) {
       <svg width="600" height="480" viewBox="0 0 600 480" className="mx-auto" style={{ maxWidth: 600 }}>
         <defs>
           <radialGradient id="net-center-glow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+            <stop offset="0%" stopColor="#2563EB" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
           </radialGradient>
           <linearGradient id="net-center-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#059669" />
+            <stop offset="0%" stopColor="#1D4ED8" />
             <stop offset="100%" stopColor="#047857" />
           </linearGradient>
         </defs>
@@ -634,7 +526,7 @@ function TrustNetworkGraph({ business }: { business: Business }) {
         {/* Center node */}
         <g>
           <circle cx={center.x} cy={center.y} r="38" fill="url(#net-center-fill)" />
-          <circle cx={center.x} cy={center.y} r="38" fill="none" stroke="#10b981" strokeWidth="2" opacity="0.5">
+          <circle cx={center.x} cy={center.y} r="38" fill="none" stroke="#2563EB" strokeWidth="2" opacity="0.5">
             <animate attributeName="r" values="38;46;38" dur="2.5s" repeatCount="indefinite" />
             <animate attributeName="opacity" values="0.5;0;0.5" dur="2.5s" repeatCount="indefinite" />
           </circle>
@@ -748,8 +640,8 @@ function BellCurve({ highlightScore }: { highlightScore?: number }) {
     <svg width="100%" viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
       <defs>
         <linearGradient id="bell-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2563EB" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0.02" />
         </linearGradient>
       </defs>
 
@@ -769,7 +661,7 @@ function BellCurve({ highlightScore }: { highlightScore?: number }) {
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1 }}
       />
       <motion.path
-        d={linePath} fill="none" stroke="#10b981" strokeWidth="2.5"
+        d={linePath} fill="none" stroke="#2563EB" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
         transition={{ duration: 1.5, ease: 'easeOut' as const }}
@@ -779,7 +671,7 @@ function BellCurve({ highlightScore }: { highlightScore?: number }) {
       <line
         x1={padL + (BELL_MEAN / 100) * chartW} y1={padT}
         x2={padL + (BELL_MEAN / 100) * chartW} y2={padT + chartH}
-        stroke="#059669" strokeWidth="1.5" strokeDasharray="4,4"
+        stroke="#1D4ED8" strokeWidth="1.5" strokeDasharray="4,4"
       />
       <text
         x={padL + (BELL_MEAN / 100) * chartW}
@@ -897,7 +789,7 @@ function HeroBanner() {
     <motion.div {...fadeUp}>
       <Card className="relative overflow-hidden border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-teal-50">
         <div className="absolute inset-0 opacity-[0.04]" style={{
-          backgroundImage: 'radial-gradient(circle at 1px 1px, #10b981 1px, transparent 0)',
+          backgroundImage: 'radial-gradient(circle at 1px 1px, #2563EB 1px, transparent 0)',
           backgroundSize: '24px 24px',
         }} />
         <CardContent className="relative p-6 md:p-8">
@@ -964,10 +856,10 @@ function HeroBanner() {
 
 function StatsRow() {
   const stats = [
-    { label: 'Verified Businesses', value: 500000, suffix: '+', icon: Building2, color: '#10b981' },
-    { label: 'GSTIN Linked', value: 480000, suffix: '+', icon: FileCheck, color: '#059669' },
-    { label: 'Trust Score Avg', value: 99.2, suffix: '%', decimals: 1, icon: ShieldCheck, color: '#0d9488' },
-    { label: 'Transaction Volume', value: 50000, suffix: '+ Cr', icon: IndianRupee, color: '#0891b2' },
+    { label: 'Verified Businesses', value: 500000, suffix: '+', icon: Building2, color: '#2563EB' },
+    { label: 'GSTIN Linked', value: 480000, suffix: '+', icon: FileCheck, color: '#1D4ED8' },
+    { label: 'Trust Score Avg', value: 99.2, suffix: '%', decimals: 1, icon: ShieldCheck, color: '#2563EB' },
+    { label: 'Transaction Volume', value: 50000, suffix: '+ Cr', icon: IndianRupee, color: '#2563EB' },
   ]
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1384,8 +1276,8 @@ function TrustPathExplorer({ business }: { business: Business }) {
 
   // Fake path: business → partner bank → target
   const hops = [
-    { label: business.name, role: 'Source', score: business.trustScore, color: '#10b981' },
-    { label: 'HDFC Bank', role: 'Common Banking Partner', score: 97, color: '#0d9488' },
+    { label: business.name, role: 'Source', score: business.trustScore, color: '#2563EB' },
+    { label: 'HDFC Bank', role: 'Common Banking Partner', score: 97, color: '#2563EB' },
     { label: 'GSTN Network', role: 'Government Verification', score: 99, color: '#475569' },
     { label: targetB.name, role: 'Target', score: targetB.trustScore, color: scoreColor(targetB.trustScore).hex },
   ]
@@ -1484,10 +1376,10 @@ function TrustPathExplorer({ business }: { business: Business }) {
 
 function TrustNetworkTab({ business }: { business: Business }) {
   const stats = [
-    { label: 'Network Trust Score', value: business.trustScore + 1, suffix: '', icon: ShieldCheck, color: '#10b981' },
-    { label: 'Avg Partner Score', value: 87.4, suffix: '', decimals: 1, icon: Users, color: '#059669' },
+    { label: 'Network Trust Score', value: business.trustScore + 1, suffix: '', icon: ShieldCheck, color: '#2563EB' },
+    { label: 'Avg Partner Score', value: 87.4, suffix: '', decimals: 1, icon: Users, color: '#1D4ED8' },
     { label: 'High-Risk Connections', value: 1, suffix: '', icon: AlertTriangle, color: '#f59e0b' },
-    { label: 'Verified Connections', value: 9, suffix: '/10', icon: BadgeCheck, color: '#0d9488' },
+    { label: 'Verified Connections', value: 9, suffix: '/10', icon: BadgeCheck, color: '#2563EB' },
   ]
   return (
     <div className="space-y-4">
@@ -1624,7 +1516,7 @@ function PercentileCalculator() {
 
 function IndustryTable() {
   const sorted = [...INDUSTRY_AVG].sort((a, b) => b.avg - a.avg)
-  const max = Math.max(...sorted.map(s => s.avg))
+  const max = sorted.length > 0 ? Math.max(...sorted.map(s => s.avg)) : 0
 
   return (
     <Card className="border-slate-200">
@@ -1819,7 +1711,7 @@ function DistributionTab() {
                 <span>Low (60)</span>
                 <div className="flex gap-0.5">
                   {[0.3, 0.45, 0.6, 0.75, 0.9].map((o) => (
-                    <div key={o} className="w-6 h-3 rounded-sm" style={{ backgroundColor: '#10b981', opacity: o }} />
+                    <div key={o} className="w-6 h-3 rounded-sm" style={{ backgroundColor: '#2563EB', opacity: o }} />
                   ))}
                 </div>
                 <span>High (90)</span>
@@ -1871,7 +1763,7 @@ function ProfileDialog({ business, open, onClose }: {
 
 export default function UniversalBusinessIDPage() {
   const [tab, setTab] = useState('directory')
-  const [selected, setSelected] = useState<Business>(BUSINESSES[0])
+  const [selected, setSelected] = useState<Business | null>(BUSINESSES[0] ?? null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogBusiness, setDialogBusiness] = useState<Business | null>(null)
 
@@ -1885,6 +1777,42 @@ export default function UniversalBusinessIDPage() {
     setTab('credit')
   }
 
+  // Empty state — no businesses in the user's network yet. The previous
+  // implementation hardcoded 12 REAL Indian listed companies with fabricated
+  // trust / compliance / payment / growth scores. We now show an honest empty
+  // state until the user connects real partners.
+  // TODO: Replace with real data from /api/business-network when available.
+  if (BUSINESSES.length === 0) {
+    return (
+      <div className="space-y-6">
+        <HeroBanner />
+        <Card className="border-dashed border-slate-200 bg-slate-50/50">
+          <CardContent className="p-10 md:p-16 flex flex-col items-center justify-center text-center">
+            <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+              <Network className="w-7 h-7 text-emerald-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-800">
+              No businesses in your network yet
+            </h2>
+            <p className="text-sm text-slate-500 mt-1.5 max-w-md">
+              Connect with partners to see their trust scores, compliance history,
+              and credit profiles. Verified GSTIN / PAN / CIN data appears here once
+              you add a business to your network.
+            </p>
+            <div className="mt-5 flex flex-col sm:flex-row gap-2">
+              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                <Link2 className="w-4 h-4 mr-1.5" /> Connect a partner
+              </Button>
+              <Button variant="outline" className="border-slate-300">
+                <Search className="w-4 h-4 mr-1.5" /> Search by GSTIN
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <style>{`
@@ -1895,12 +1823,12 @@ export default function UniversalBusinessIDPage() {
         input[type='range']::-webkit-slider-thumb {
           -webkit-appearance: none; appearance: none;
           width: 16px; height: 16px; border-radius: 50%;
-          background: #10b981; cursor: pointer;
-          border: 2px solid #ffffff; box-shadow: 0 0 0 1px #10b981;
+          background: #2563EB; cursor: pointer;
+          border: 2px solid #ffffff; box-shadow: 0 0 0 1px #2563EB;
         }
         input[type='range']::-moz-range-thumb {
           width: 16px; height: 16px; border-radius: 50%;
-          background: #10b981; cursor: pointer; border: 2px solid #ffffff;
+          background: #2563EB; cursor: pointer; border: 2px solid #ffffff;
         }
       `}</style>
 
@@ -1962,7 +1890,8 @@ export default function UniversalBusinessIDPage() {
                 size="sm"
                 variant="outline"
                 className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                onClick={() => selectAndViewFull(selected)}
+                disabled={!selected}
+                onClick={() => selected && selectAndViewFull(selected)}
               >
                 Open Featured Profile <ArrowRight className="w-3.5 h-3.5 ml-1" />
               </Button>
@@ -1981,7 +1910,7 @@ export default function UniversalBusinessIDPage() {
                   Featured Business:
                 </div>
                 <select
-                  value={selected.ubid}
+                  value={selected?.ubid ?? ''}
                   onChange={(e) => {
                     const b = BUSINESSES.find((x) => x.ubid === e.target.value)
                     if (b) setSelected(b)
@@ -1997,7 +1926,7 @@ export default function UniversalBusinessIDPage() {
               </div>
             </CardContent>
           </Card>
-          <BusinessProfileCard business={selected} />
+          {selected && <BusinessProfileCard business={selected} />}
         </TabsContent>
 
         {/* TAB 3 — Trust Network */}
@@ -2010,7 +1939,7 @@ export default function UniversalBusinessIDPage() {
                   Center Business:
                 </div>
                 <select
-                  value={selected.ubid}
+                  value={selected?.ubid ?? ''}
                   onChange={(e) => {
                     const b = BUSINESSES.find((x) => x.ubid === e.target.value)
                     if (b) setSelected(b)
@@ -2026,7 +1955,7 @@ export default function UniversalBusinessIDPage() {
               </div>
             </CardContent>
           </Card>
-          <TrustNetworkTab business={selected} />
+          {selected && <TrustNetworkTab business={selected} />}
         </TabsContent>
 
         {/* TAB 4 — Score Analytics */}

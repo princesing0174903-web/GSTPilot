@@ -70,6 +70,11 @@ model Client {
   emailMessages       EmailMessage[]
   smsMessages         SMSMessage[]
   communicationLogs   CommunicationLog[]
+
+  // ── PERF: Client is queried by firmId (every org-scoped query) and status ──
+  @@index([firmId])
+  @@index([firmId, status])
+  @@index([status])
 }
 
 model Invoice {
@@ -114,11 +119,24 @@ model Invoice {
   notesFinance    String?             // Invoice Cloud private notes
   sentToCustomer  Boolean  @default(false)
   sentAt          DateTime?
+  // ── Invoice Cloud™ document fields (Phase: Invoice QA Overhaul) ──
+  terms           String?             // Terms & conditions (separate from notes)
+  bankDetails     String?             // Org bank details for the invoice PDF
+  placeOfSupply   String?             // State code (place of supply for GST)
 
   client          Client                 @relation(fields: [clientId], references: [id])
   reconciliations ReconciliationResult[]
   issues          Issue[]
   items           InvoiceItem[]
+
+  // ── PERF: indexes for the most common dashboard queries ──
+  // Invoice is queried by status (workflow pipeline), client.firmId (snapshot),
+  // invoiceDate (monthly aggregates), and matchStatus (reconciliation).
+  @@index([clientId])
+  @@index([status])
+  @@index([invoiceDate])
+  @@index([matchStatus])
+  @@index([status, matchStatus])
 }
 
 model GSTRFiling {
@@ -144,6 +162,11 @@ model GSTRFiling {
   client Client        @relation(fields: [clientId], references: [id])
   events FilingEvent[]
   issues Issue[]
+
+  // ── PERF: GSTRFiling is queried by clientId and status ──
+  @@index([clientId])
+  @@index([status])
+  @@index([returnType, period])
 }
 
 model ReconciliationResult {
@@ -332,6 +355,10 @@ model Notice {
 
   client   Client      @relation(fields: [clientId], references: [id])
   assignee TeamMember? @relation(fields: [assignedTo], references: [id])
+
+  // ── PERF: Notice is queried by clientId (snapshot) and status ──
+  @@index([clientId])
+  @@index([status])
 }
 
 model Document {
@@ -619,7 +646,7 @@ model InvoiceItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }
 
 // ─── Uploaded Files (Processing Pipeline) ────────────────────────────────────────
@@ -740,6 +767,11 @@ model PurchaseBill {
   updatedAt     DateTime @updatedAt
 
   client Client? @relation(fields: [clientId], references: [id])
+
+  // ── PERF: PurchaseBill is queried by clientId and status ──
+  @@index([clientId])
+  @@index([status])
+  @@index([paymentStatus])
 }
 
 // ─── Expenses (Receipts / Operational Spend) ─────────────────────────────────────
@@ -762,6 +794,11 @@ model Expense {
   updatedAt     DateTime @updatedAt
 
   client Client? @relation(fields: [clientId], references: [id])
+
+  // ── PERF: Expense is queried by clientId and status ──
+  @@index([clientId])
+  @@index([status])
+  @@index([date])
 }
 
 // ─── Payments (Customer + Vendor Settlements) ────────────────────────────────────
@@ -783,6 +820,11 @@ model Payment {
   updatedAt     DateTime @updatedAt
 
   client Client? @relation(fields: [clientId], references: [id])
+
+  // ── PERF: Payment is queried by clientId, invoiceId, and status ──
+  @@index([clientId])
+  @@index([invoiceId])
+  @@index([status])
 }
 
 // ─── Employees (Payroll Roster) ──────────────────────────────────────────────────
@@ -995,6 +1037,13 @@ model BusinessEvent {
   createdAt   DateTime @default(now())
 
   decision    Decision?
+
+  // ── PERF: BusinessEvent is queried by status+severity (workflow pipeline)
+  // and businessId (org scope). createdAt for "recent" ordering.
+  @@index([status, severity])
+  @@index([businessId])
+  @@index([createdAt])
+  @@index([type, status])
 }
 
 // ─── MODULE 2 — Decision Engine™: Decision ──────────────────────────────────────
@@ -2935,20 +2984,33 @@ model AppWebhook {
 //       (the app code references db.bankTransaction.findMany on every account).
 model BankAccount {
   id              String   @id @default(cuid())
+  organizationId  String   @default("local") // tenant scope
   bankName        String
+  bankLogoUrl     String?  // bank logo / brand color
+  accountNumber   String   @default("") // full (mock) account number
   accountMasked   String
-  accountType     String   @default("savings") // savings | current | overdraft | credit_card
+  accountType     String   @default("current") // current | savings | od | cash_wallet | upi_wallet | credit_card
   ifsc            String?
-  balance         Float    @default(0)
-  availableBalance Float   @default(0)
+  branch          String?  // bank branch name
+  owner           String?  // account holder name
+  balance         Float    @default(0) // current / ledger balance
+  availableBalance Float   @default(0) // withdrawable balance
   overdraftLimit  Float    @default(0)
   upiHandle       String?
+  currency        String   @default("INR")
+  provider        String   @default("mock") // mock | setu | razorpayx | aa | perfios | finvu
   aaConsent       Boolean  @default(false) // Account Aggregator consent
   aaConsentExpiry DateTime?
-  status          String   @default("connected") // connected | disconnected | syncing | error
+  status          String   @default("active") // active | paused | syncing | error | disconnected
   lastSyncAt      DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  transactions    BankTransaction[]
+  reconciliations BankReconciliation[]
+  imports         StatementImport[]
+
+  @@index([organizationId])
 }
 
 
@@ -4189,7 +4251,9 @@ model FirmProfile {
 
 model GSTProfile {
   id               String   @id @default(cuid())
-  gstin            String   @unique
+  // Tenant isolation — a GSTIN profile is scoped to the org that verified it.
+  organizationId   String
+  gstin            String
   pan              String?
   legalName        String?
   tradeName        String?
@@ -4200,13 +4264,21 @@ model GSTProfile {
   taxpayerType     String?
   status           String?
   businessType     String?
+  // Whether this profile came from a live/sandbox/demo verification.
+  source           String   @default("demo") // live | sandbox | demo
   lastSyncedAt     DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@unique([organizationId, gstin])
+  @@index([organizationId])
 }
 
 model GSTR2BInvoice {
   id             String   @id @default(cuid())
+  // Tenant isolation — every GSTR-2B row is scoped to the org that synced it.
+  // A user who knows another org's GSTIN must NOT be able to read their rows.
+  organizationId String
   gstin          String
   period         String   // YYYY-MM
   supplierGSTIN  String
@@ -4223,12 +4295,23 @@ model GSTR2BInvoice {
   matched        Boolean  @default(false)
   matchStatus    String   @default("unmatched") // unmatched | matched | mismatched
   mismatchReason String?
+  // Source document ID from the provider (for audit traceability).
+  sourceDocId    String?
+  // Whether this row came from a live/sandbox/demo sync.
+  source         String   @default("demo") // live | sandbox | demo
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  // Tenant isolation + dedup queries both filter on these.
+  @@index([organizationId, period])
+  @@index([organizationId, gstin, period])
+  @@index([gstin, period, supplierGSTIN, invoiceNo])
 }
 
 model GSTReturn {
   id                String   @id @default(cuid())
+  // Tenant isolation — a return is scoped to the org that owns it.
+  organizationId    String
   gstin             String
   type              String   // GSTR-1 | GSTR-2B | GSTR-3B
   period            String   // YYYY-MM
@@ -4243,6 +4326,14 @@ model GSTReturn {
   downloadedAt      DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  // ── PERF: GSTReturn is queried by status (workflow pipeline: prepared/draft),
+  // filedAt (done count this month), and type+period (lookup) ──
+  @@index([organizationId, period])
+  @@index([status])
+  @@index([filedAt])
+  @@index([type, period])
+  @@index([gstin, period])
 }
 
 // ─── Global Enterprise — Audit / Brief / Recommendation ────────────────────────
@@ -4298,6 +4389,8 @@ model GlobalRecommendation {
 
 model ITCMismatch {
   id            String   @id @default(cuid())
+  // Tenant isolation — an ITC mismatch is scoped to the org that owns it.
+  organizationId String
   gstin         String
   invoiceId     String?  // TODO: relation to GSTR2BInvoice (not added — back-ref bloat)
   supplierGSTIN String?
@@ -4309,6 +4402,9 @@ model ITCMismatch {
   suggestion    String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, gstin])
 }
 
 // ─── Enterprise — Identity Provider Config ─────────────────────────────────────
@@ -5283,25 +5379,39 @@ model Workspace {
 
 model BankTransaction {
   id               String   @id @default(cuid())
+  organizationId   String   @default("local") // tenant scope
   accountId        String
+  account          BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   date             DateTime
+  valueDate        DateTime? // bank value date
   description      String
-  amount           Float
+  narration        String?  // bank-provided narration
+  amount           Float    // always positive — see `type` for direction
   type             String   // credit | debit
-  category         String?  // vendor | sales | expense | tax | etc.
-  referenceNo      String?
+  balance          Float?   // running balance after this txn
+  category         String?  // sales | purchase | gst | salary | rent | utilities | loan | interest | transfer | investment | cash_withdrawal | fee | refund | other
+  counterparty     String?  // extracted counterparty name
+  referenceNo      String?  // UTR / reference number
+  reference        String?  // alias for referenceNo (bank statement ref)
+  upiRef           String?
+  status           String   @default("posted") // posted | pending | reconciled | disputed
+  source           String   @default("statement") // statement | api | import | manual
   matched          Boolean  @default(false)
   matchedInvoiceId String?
-  matchType        String?  // exact | fuzzy | manual
+  matchType        String?  // exact | partial | duplicate | overpayment | underpayment | missing | suspicious
   matchConfidence  Float?   @default(0)
-  upiRef           String?
-  balanceAfter     Float?
+  reconciledAt     DateTime?
+  reconciledBy     String?
   notes            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  // TODO: relation to BankAccount (bankAccountId → BankAccount.id)
-  // TODO: relation to Invoice (matchedInvoiceId → Invoice.id)
+  reconciliations  BankReconciliation[]
+
+  @@index([accountId])
+  @@index([organizationId])
+  @@index([date])
+  @@index([matched])
 }
 
 model AGIApproval {
@@ -5351,4 +5461,1291 @@ model AGIAuditLog {
   result        String?  // success | blocked | denied
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GROUP 3.24 — Oracle AI™ Intelligence Layer (Phase 1 — Enterprise AI Workspace)
+//
+// True session + message persistence (the legacy OracleConversation stores
+// turns as a JSON array — these models give us per-message rows for paging,
+// indexing, and citation back-references). Plus the AI Task Queue, rich
+// Artifacts, multi-Agent roster, curated Knowledge Base, and Tool-Call log.
+// All firm-scoped + user-scoped for multi-tenant isolation.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Oracle AI Chat Sessions ─────────────────────────────────────────────────
+model OracleAISession {
+  id           String   @id @default(cuid())
+  firmId       String
+  userId       String?
+  title        String   @default("New conversation")
+  summary      String?  // LLM-generated short summary after first turn
+  status       String   @default("active") // active | archived | pinned | deleted
+  agentId      String?  // which agent persona handled this session
+  modelUsed    String?  // e.g. "glm-4.6"
+  messageCount Int      @default(0)
+  tokensUsed   Int      @default(0)
+  metadata     String   @default("{}") // JSON: {language, tags, pinned, ...}
+  lastMessageAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([firmId, status, updatedAt])
+  @@index([userId, status])
+}
+
+// ─── Oracle AI Messages (true per-message persistence) ───────────────────────
+model OracleAIMessage {
+  id          String   @id @default(cuid())
+  sessionId   String
+  firmId      String
+  userId      String?
+  role        String   // user | assistant | system | tool
+  content     String   @default("") // raw markdown / text content
+  parts       String   @default("[]") // JSON: MessagePart[] (text, artifact-ref, tool-call, citation, thinking)
+  model       String?  // model that produced this message (assistant only)
+  tokensIn    Int      @default(0)
+  tokensOut   Int      @default(0)
+  latencyMs   Int      @default(0)
+  status      String   @default("completed") // streaming | completed | error | cancelled
+  error       String?  // populated when status = error
+  agentId     String?  // agent persona that produced this message
+  toolName    String?  // populated when role = tool
+  parentMessageId String? // for branching / retries
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([firmId, createdAt])
+}
+
+// ─── Oracle AI Artifacts (rich rendered outputs: tables, charts, reports) ────
+model OracleAIArtifact {
+  id          String   @id @default(cuid())
+  sessionId   String
+  messageId   String?  // the assistant message that produced this artifact
+  firmId      String
+  userId      String?
+  kind        String   // table | chart | report | document | code | json | kanban | metric
+  title       String
+  description String?
+  data        String   @default("{}") // JSON payload — schema depends on `kind`
+  rendered    Boolean  @default(false) // has the artifact been rendered client-side?
+  pinned      Boolean  @default(false)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sessionId, createdAt])
+  @@index([firmId, kind])
+}
+
+// ─── Oracle AI Task Queue (background + async jobs) ──────────────────────────
+model OracleAITask {
+  id          String   @id @default(cuid())
+  firmId      String
+  userId      String?
+  sessionId   String?  // optional: originating chat session
+  messageId   String?  // optional: originating message
+  type        String   // reasoning | research | report | data-fetch | tool-call | agent-run | batch
+  title       String
+  description String?
+  status      String   @default("queued") // queued | running | completed | failed | cancelled
+  priority    Int      @default(5) // 1 (highest) .. 10 (lowest)
+  progress    Int      @default(0) // 0..100
+  payload     String   @default("{}") // JSON: task-specific input
+  result      String?  // JSON: task-specific output
+  error       String?
+  agentId     String?  // which agent is/was running this
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([firmId, status, priority, createdAt])
+  @@index([sessionId, createdAt])
+}
+
+// ─── Oracle AI Agents (multi-agent roster — personas) ────────────────────────
+model OracleAIAgent {
+  id           String   @id @default(cuid())
+  firmId       String
+  name         String
+  role         String   // e.g. "CFO", "Compliance Officer", "Research Analyst"
+  description  String?
+  systemPrompt String   @default("")
+  tools        String   @default("[]") // JSON: tool names this agent can call
+  model        String?  // preferred model override
+  color        String   @default("emerald") // tailwind color token for avatar
+  icon         String   @default("Sparkles") // lucide icon name
+  temperature  Float    @default(0.4)
+  isBuiltIn    Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  invocationCount Int   @default(0)
+  lastInvokedAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([firmId, isActive])
+}
+
+// ─── Oracle AI Knowledge Base (curated, searchable, citable) ─────────────────
+model OracleAIKnowledge {
+  id          String   @id @default(cuid())
+  firmId      String
+  title       String
+  content     String   // markdown body
+  category    String   @default("general") // gst | compliance | finance | operations | legal | general
+  tags        String   @default("[]") // JSON string[]
+  source      String?  // URL or document reference
+  sourceType  String   @default("manual") // manual | imported | generated | url
+  confidence  Float    @default(0.8) // 0..1 — how reliable this entry is
+  pinned      Boolean  @default(false)
+  viewCount   Int      @default(0)
+  metadata    String   @default("{}") // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([firmId, category, updatedAt])
+}
+
+// ─── Oracle AI Tool Calls (audit log for tool invocations) ───────────────────
+model OracleAIToolCall {
+  id          String   @id @default(cuid())
+  messageId   String?  // the assistant message that triggered this call
+  sessionId   String?
+  firmId      String
+  userId      String?
+  toolName    String
+  args        String   @default("{}") // JSON input
+  result      String?  // JSON output
+  status      String   @default("pending") // pending | success | error | timeout
+  durationMs  Int      @default(0)
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([firmId, toolName])
+}
+
+// ─── Google Workspace Integration Tokens (Phase: Google Workspace) ──────────
+// Stores encrypted OAuth tokens for each (organization, user) pair. The
+// refresh token is AES-256-GCM encrypted with a key derived from
+// GOOGLE_CLIENT_SECRET (no separate encryption env var needed). Tokens are
+// server-side only — never exposed to the client. Org-isolated + RBAC-gated.
+model GoogleWorkspaceToken {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  userEmail      String
+  googleUserId   String?
+  accessToken    String   // encrypted (short-lived, refreshed automatically)
+  refreshToken   String   // encrypted (long-lived)
+  expiryDate     DateTime?
+  scope          String
+  tokenType      String   @default("Bearer")
+  connectedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  revokedAt      DateTime?
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// ─── Zoho Books Integration Tokens (Phase 1: Zoho Books OAuth) ──────────────
+// Stores encrypted OAuth tokens for each (organization, user) pair. Tokens are
+// AES-256-GCM encrypted with a key derived from ZOHO_CLIENT_SECRET (no separate
+// encryption env var needed — mirrors the Google Workspace pattern). Server-side
+// only, never exposed to the client. Org-isolated + RBAC-gated.
+//
+// Multi-tenant: Zoho's own "organization" concept (zohoOrgId / zohoOrgName) is
+// mapped to our PlatformOrganization. A user may have access to multiple Zoho
+// Books organizations; we store the primary one selected during connect.
+model ZohoBooksToken {
+  id               String   @id @default(cuid())
+  organizationId   String   // → PlatformOrganization.id (loose ref, no FK)
+  userId           String   // → User.id (loose ref, no FK)
+  userEmail        String
+  zohoUserId       String?  // Zoho account ID of the connecting user
+  zohoOrgId        String?  // Zoho Books numeric organization ID (multi-tenant)
+  zohoOrgName      String?  // Zoho Books organization display name
+  accessToken      String   // encrypted (short-lived, refreshed automatically)
+  refreshToken     String   // encrypted (long-lived)
+  expiryDate       DateTime?
+  scope            String
+  tokenType        String   @default("Bearer")
+  apiDomain        String?  // Zoho returns a datacenter-specific apiDomain
+  dataCenter       String   @default("in")  // in | com | eu | au | jp | ca
+  connectedAt      DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  revokedAt        DateTime?
+  // ── Phase 4 — Customer Auto-Sync toggle ──
+  // When true, the customer-sync cron will run periodically using the stored
+  // refresh token. Default false — explicit opt-in per Zoho connection.
+  autoSyncCustomers       Boolean @default(false)
+  autoSyncIntervalMinutes Int    @default(60)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 2 — Zoho Books Data Sync
+//
+// Three additive models that enable idempotent Zoho data sync into the existing
+// GSTPilot tables (Client, Vendor, Invoice, PurchaseBill, Expense, BankAccount,
+// BankTransaction) WITHOUT modifying those existing models:
+//
+//   • ZohoEntityMap  — (zohoEntityType, zohoEntityId) → localEntityType +
+//                      localEntityId. Drives the upsert lookup ("no duplicate
+//                      imports") and stores lastModifiedAt for incremental sync.
+//   • ZohoSyncLog    — one row per sync run. Records status (running |
+//                      completed | failed | partial), per-entity stats, and the
+//                      resume cursor (lastEntity + lastCursor) so an interrupted
+//                      sync can be continued.
+//   • ZohoJournalEntry — GSTPilot-normalized journal entries. GSTPilot has no
+//                      generic Journal model, so journals live here (normalized,
+//                      not raw Zoho JSON). Oracle can read them via a future
+//                      tool — currently not surfaced in Oracle Chat tools.
+//
+// PROTECTED (NOT modified): all existing GSTPilot models. These three tables
+// are pure additions. Oracle Memory Engine + Oracle Chat read the EXISTING
+// tables (Client/Vendor/Invoice/Expense/PurchaseBill/BankAccount/BankTransaction)
+// which the sync writes into — so Oracle gets Zoho data with zero Oracle code
+// changes.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── ZohoEntityMap: idempotent upsert lookup + incremental-sync watermark ────
+model ZohoEntityMap {
+  id              String   @id @default(cuid())
+  organizationId  String   // → PlatformOrganization.id (loose ref, no FK)
+  zohoOrgId       String   // Zoho Books numeric organization ID (multi-tenant)
+  zohoEntityType  String   // customer | vendor | invoice | bill | expense | bank_account | bank_transaction | journal | tax
+  zohoEntityId    String   // Zoho's ID for the entity (e.g. "460000000012345")
+  localEntityType String   // Client | Vendor | Invoice | PurchaseBill | Expense | BankAccount | BankTransaction | ZohoJournalEntry | TaxRate
+  localEntityId   String   // Prisma row ID of the normalized record
+  lastModifiedAt  DateTime? // Zoho's last_modified_time — drives incremental sync
+  lastSyncedAt    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoEntityType, zohoEntityId])
+  @@index([organizationId, zohoEntityType, lastModifiedAt])
+  @@index([organizationId, zohoOrgId])
+  @@index([localEntityType, localEntityId])
+}
+
+// ─── ZohoSyncLog: one row per sync run (full or incremental) ─────────────────
+model ZohoSyncLog {
+  id              String   @id @default(cuid())
+  organizationId  String   // → PlatformOrganization.id (loose ref, no FK)
+  userId          String?  // → User.id (loose ref, no FK; nullable for system runs)
+  zohoOrgId       String   // Zoho Books numeric organization ID
+  status          String   @default("running") // running | completed | failed | partial
+  mode            String   @default("full")    // full | incremental
+  // Resume support: when a sync is interrupted (process crash, timeout, OOM),
+  // the next sync run looks for the most-recent "running" log and continues
+  // from `lastEntity` at `lastCursor` (the entity-specific pagination cursor
+  // — typically the next page token or the last_modified_time watermark).
+  lastEntity      String?  // customer | vendor | invoice | bill | expense | ...
+  lastCursor      String?  // entity-specific cursor (page token or timestamp)
+  // Phase 5 — live progress: the entity currently being synced. The UI polls
+  // GET /sync/status and shows "Fetching {currentEntity}…" in real time.
+  currentEntity   String?  // customer | vendor | invoice | bill | ... | creditnote
+  error           String?  // top-level error message if status=failed
+  stats           String   @default("{}") // JSON: { customers: {imported, updated, failed}, ... }
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId, zohoOrgId, startedAt])
+  @@index([status])
+}
+
+// ─── ZohoJournalEntry: normalized journal entries (GSTPilot has no Journal model)
+//
+// Stores Zoho journal entries as normalized GSTPilot records (not raw Zoho
+// JSON). Each entry has the standard journal fields: reference number, date,
+// debit/credit totals, notes, and a JSON `lines` array of {account, debit,
+// credit, description} for the double-entry lines.
+model ZohoJournalEntry {
+  id              String   @id @default(cuid())
+  organizationId  String   // → PlatformOrganization.id (loose ref, no FK)
+  zohoOrgId       String   // Zoho Books numeric organization ID
+  journalNumber   String?  // Zoho journal_number (e.g. "JNL-00001")
+  referenceNumber String?  // Zoho reference_number
+  date            String   // ISO date of the journal entry
+  totalDebit      Float    @default(0)
+  totalCredit     Float    @default(0)
+  notes           String?
+  // JSON array of { account: string, debit: number, credit: number, description?: string }
+  // — normalized line items (NEVER the raw Zoho response)
+  lines           String   @default("[]")
+  status          String   @default("posted") // posted | draft | void
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId, zohoOrgId, date])
+  @@index([journalNumber])
+}
+
+// ─── ZohoItem: normalized product/service catalog from Zoho Books /items ──────
+//
+// GSTPilot has no standalone Item model (InvoiceItem is a line-item on invoices,
+// not a catalog entry). Zoho Books exposes /items (products & services sold),
+// so we store them here as normalized GSTPilot records — NOT raw Zoho JSON.
+//
+// Oracle Memory Engine can read db.zohoItem.findMany to answer catalog questions
+// ("What's my product list?", "Which items have GST?") with zero Oracle changes.
+model ZohoItem {
+  id              String   @id @default(cuid())
+  organizationId  String   // → PlatformOrganization.id (loose ref, no FK)
+  zohoOrgId       String   // Zoho Books numeric organization ID
+  zohoItemId      String   // Zoho's item_id
+  name            String
+  description     String?
+  // goods | service | digital_product | digital_service | overhead_cost
+  itemType        String   @default("goods")
+  unit            String?  // NOS | KG | MTR | BOX | etc.
+  hsnOrSac        String?  // HSN for goods, SAC for services
+  rate            Float    @default(0)   // selling price (per unit)
+  purchaseRate    Float    @default(0)   // purchase cost (per unit)
+  taxName         String?
+  taxPercentage   Float    @default(0)
+  isTaxable       Boolean  @default(true)
+  stockOnHand     Float    @default(0)   // current inventory
+  reorderLevel    Float    @default(0)
+  status          String   @default("active") // active | inactive
+  source          String   @default("zoho")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoItemId])
+  @@index([organizationId, zohoOrgId])
+  @@index([name])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 4 — Real Customer Sync (Zoho Books /contacts)
+//
+// Dedicated customer table that mirrors the Zoho Books contact shape 1:1 so the
+// UI, Oracle, and the Invoice Cloud can read full customer records (currency,
+// payment terms, outstanding receivable, billing/shipping address) without
+// overloading the existing `Client` model (which is GST-centric and lacks these
+// financial-ERP fields).
+//
+// Sync flow:
+//   • POST /api/integrations/zoho/customers/sync →
+//       GET /books/v3/contacts?contact_type=customer →
+//       upsert each into ZohoCustomer by (organizationId, zohoOrgId, zohoContactId)
+//
+// Create flow (when user adds a customer inside GSTPilot):
+//   • POST /api/integrations/zoho/customers →
+//       POST /books/v3/contacts → save returned contact_id →
+//       INSERT ZohoCustomer row
+//
+// Update flow (when user edits an existing customer):
+//   • PUT /api/integrations/zoho/customers/{id} →
+//       PUT /books/v3/contacts/{contact_id} →
+//       UPDATE ZohoCustomer row
+//
+// `lastSyncedAt` is bumped on every sync run (full or incremental) for every
+// touched row, so the UI can show "Last synced 2 minutes ago" per customer.
+//
+// `ZohoCustomerSyncRun` records each sync execution: total fetched, imported,
+// updated, failed, duration, status (completed | partial | failed), and the
+// top-level error if any. Drives the "Sync Successful — N customers synced in
+// X seconds" toast and the sync history.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model ZohoCustomer {
+  id                    String   @id @default(cuid())
+  organizationId        String   // → PlatformOrganization.id (loose ref, no FK)
+  zohoOrgId             String   // Zoho Books numeric organization ID (multi-tenant)
+  zohoContactId         String   // Zoho's contact_id (the durable external key)
+  contactName           String   // Zoho `contact_name`
+  companyName           String?  // Zoho `company_name`
+  gstNumber             String?  // Zoho `gstin` (null for B2C / unregistered)
+  email                 String?  // primary contact person email
+  phone                 String?  // primary contact person phone
+  currency              String?  // Zoho `currency_code` (e.g. "INR")
+  paymentTerms          Int?     // Zoho `payment_terms` (days)
+  outstandingReceivable Float    @default(0) // Zoho `outstanding_receivable_amount`
+  status                String   @default("active") // Zoho `status`: active | inactive | etc.
+  billingAddress        String?  // JSON-stringified Zoho billing_address object
+  shippingAddress       String?  // JSON-stringified Zoho shipping_address object
+  lastSyncedAt          DateTime @default(now()) // bumped on every successful sync
+  zohoCreatedAt         DateTime? // Zoho `created_time`
+  zohoUpdatedAt         DateTime? // Zoho `last_modified_time`
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoContactId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([organizationId, zohoOrgId, contactName])
+  @@index([gstNumber])
+}
+
+// ─── ZohoCustomerSyncRun: one row per customer-sync execution ─────────────────
+//
+// Drives the "Sync Successful — N customers synced in X seconds" UI. Records
+// every sync run (manual or auto), with status, count, duration, and the
+// triggering user. Supports a future "Sync History" view.
+model ZohoCustomerSyncRun {
+  id              String   @id @default(cuid())
+  organizationId  String   // → PlatformOrganization.id (loose ref, no FK)
+  userId          String?  // → User.id (null for auto/system runs)
+  zohoOrgId       String   // Zoho Books numeric organization ID
+  trigger         String   @default("manual") // manual | auto
+  status          String   @default("running") // running | completed | partial | failed
+  totalFetched    Int      @default(0) // records returned by Zoho for this run
+  imported        Int      @default(0) // newly inserted ZohoCustomer rows
+  updated         Int      @default(0) // updated existing ZohoCustomer rows
+  failed          Int      @default(0) // records that failed to upsert
+  durationMs      Int      @default(0) // wall-clock duration of the sync
+  error           String?  // top-level error message (status=failed)
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId, zohoOrgId, startedAt])
+  @@index([status])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 5 — ZohoCreditNote: Credit notes issued to customers
+//
+// Mirrors Zoho Books /creditnotes. A credit note is a negative invoice —
+// issued when a customer returns goods, gets a discount post-invoice, or
+// overpays. Linked to a customer (contact_id) and optionally to an invoice.
+//
+// Oracle reads db.zohoCreditNote.findMany to answer:
+//   "How much credit have I issued?"
+//   "Which customers have credit notes?"
+//   "Show me all credit notes for TechCorp"
+//
+// Sync flow: GET /books/v3/creditnotes → upsert by (orgId, zohoOrgId, zohoCreditNoteId)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model ZohoCreditNote {
+  id                String   @id @default(cuid())
+  organizationId    String   // → PlatformOrganization.id (loose ref, no FK)
+  zohoOrgId         String   // Zoho Books numeric organization ID
+  zohoCreditNoteId  String   // Zoho's creditnote_id (durable external key)
+  creditNoteNumber  String?  // Zoho `creditnote_number` (e.g. "CN-00001")
+  date              String?  // ISO date string
+  status            String   @default("open") // open | closed | void | draft
+  customerId        String?  // Zoho `customer_id` (links to ZohoCustomer.zohoContactId)
+  customerName      String?  // Zoho `customer_name`
+  invoiceId         String?  // Zoho `invoice_id` (optional — if linked to an invoice)
+  invoiceNumber     String?  // Zoho `invoice_number`
+  total             Float    @default(0) // Zoho `total` (credit note total)
+  subTotal          Float    @default(0) // Zoho `sub_total`
+  totalCredited     Float    @default(0) // Zoho `total_credited` (amount already applied)
+  balance           Float    @default(0) // Zoho `balance` (unapplied credit)
+  currencyCode      String?  // Zoho `currency_code` (e.g. "INR")
+  reason            String?  // Zoho `reason` (e.g. "Goods returned")
+  notes             String?  // Zoho `notes`
+  // JSON array of line items: { item_id, name, quantity, rate, amount, tax }
+  lineItems         String   @default("[]")
+  lastSyncedAt      DateTime @default(now())
+  zohoCreatedAt     DateTime? // Zoho `created_time`
+  zohoUpdatedAt     DateTime? // Zoho `last_modified_time`
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoCreditNoteId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([customerId])
+  @@index([invoiceId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 5 — Complete Zoho Books Data Synchronization (remaining entities)
+//
+// These models mirror the Zoho Books REST API shape 1:1 so the sync engine can
+// upsert every record by its Zoho ID. Each stores: zohoId, organizationId,
+// zohoOrgId, createdTime, modifiedTime, lastSyncedAt — exactly as required.
+//
+// Relationships maintained:
+//   ZohoInvoice       → ZohoCustomer (customerId)
+//   ZohoBill          → ZohoVendor   (vendorId)
+//   ZohoPaymentReceived → ZohoInvoice (invoiceId)
+//   ZohoPaymentMade    → ZohoBill    (billId)
+//   ZohoExpense       → ZohoVendor   (vendorId)
+//   ZohoBankTransaction → ZohoBankAccount (bankAccountId)
+//   ZohoCreditNote    → ZohoCustomer (customerId) — already defined above
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── ZohoVendor: suppliers (Zoho Books /contacts?contact_type=vendor) ────────
+model ZohoVendor {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  zohoOrgId             String
+  zohoContactId         String   // Zoho contact_id (durable key)
+  contactName           String
+  companyName           String?
+  gstNumber             String?
+  email                 String?
+  phone                 String?
+  currency              String?
+  paymentTerms          Int?
+  outstandingPayable    Float    @default(0)
+  status                String   @default("active")
+  billingAddress        String?
+  shippingAddress       String?
+  lastSyncedAt          DateTime @default(now())
+  zohoCreatedAt         DateTime?
+  zohoUpdatedAt         DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoContactId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([gstNumber])
+}
+
+// ─── ZohoInvoice: sales invoices (Zoho Books /invoices) ──────────────────────
+model ZohoInvoice {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoInvoiceId      String   // Zoho invoice_id
+  invoiceNumber      String?  // Zoho invoice_number
+  customerId         String?  // → ZohoCustomer.zohoContactId
+  customerName       String?
+  status             String   @default("draft") // draft|sent|paid|overdue|void|partial
+  date               String?  // ISO date
+  dueDate            String?  // ISO date
+  subTotal           Float    @default(0)
+  total              Float    @default(0)
+  balance            Float    @default(0) // unpaid amount
+  paidAmount         Float    @default(0)
+  cgst               Float    @default(0)
+  sgst               Float    @default(0)
+  igst               Float    @default(0)
+  cess               Float    @default(0)
+  totalTax           Float    @default(0)
+  currencyCode       String?
+  // JSON array of line items: { item_id, name, quantity, rate, amount, tax }
+  lineItems          String   @default("[]")
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoInvoiceId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([customerId])
+  @@index([invoiceNumber])
+}
+
+// ─── ZohoBill: vendor bills (Zoho Books /bills) ──────────────────────────────
+model ZohoBill {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoBillId         String   // Zoho bill_id
+  billNumber         String?  // Zoho bill_number
+  vendorId           String?  // → ZohoVendor.zohoContactId
+  vendorName         String?
+  status             String   @default("open") // open|paid|overdue|void|partial
+  date               String?
+  dueDate            String?
+  subTotal           Float    @default(0)
+  total              Float    @default(0)
+  balance            Float    @default(0)
+  paidAmount         Float    @default(0)
+  cgst               Float    @default(0)
+  sgst               Float    @default(0)
+  igst               Float    @default(0)
+  cess               Float    @default(0)
+  totalTax           Float    @default(0)
+  currencyCode       String?
+  lineItems          String   @default("[]")
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoBillId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([vendorId])
+}
+
+// ─── ZohoPaymentReceived: customer payments (Zoho Books /customerpayments) ───
+model ZohoPaymentReceived {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoPaymentId      String   // Zoho payment_id
+  paymentNumber      String?  // Zoho payment_number
+  customerId         String?  // → ZohoCustomer.zohoContactId
+  customerName       String?
+  invoiceId          String?  // → ZohoInvoice.zohoInvoiceId
+  invoiceNumber      String?
+  amount             Float    @default(0)
+  date               String?
+  paymentMode        String?  // cash|cheque|card|banktransfer|onlinepayment
+  referenceNumber    String?
+  description        String?
+  currencyCode       String?
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoPaymentId])
+  @@index([organizationId, zohoOrgId])
+  @@index([customerId])
+  @@index([invoiceId])
+}
+
+// ─── ZohoPaymentMade: vendor payments (Zoho Books /vendorpayments) ───────────
+model ZohoPaymentMade {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoPaymentId      String   // Zoho payment_id
+  paymentNumber      String?
+  vendorId           String?  // → ZohoVendor.zohoContactId
+  vendorName         String?
+  billId             String?  // → ZohoBill.zohoBillId
+  billNumber         String?
+  amount             Float    @default(0)
+  date               String?
+  paymentMode        String?
+  referenceNumber    String?
+  description        String?
+  currencyCode       String?
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoPaymentId])
+  @@index([organizationId, zohoOrgId])
+  @@index([vendorId])
+  @@index([billId])
+}
+
+// ─── ZohoExpense: expenses (Zoho Books /expenses) ────────────────────────────
+model ZohoExpense {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoExpenseId      String   // Zoho expense_id
+  expenseNumber      String?
+  vendorId           String?  // → ZohoVendor.zohoContactId
+  vendorName         String?
+  accountId          String?  // Zoho account_id (expense category)
+  accountName        String?
+  amount             Float    @default(0)
+  date               String?
+  status             String   @default("unbilled") // unbilled|billed|reimbursed|void
+  paymentMode        String?
+  referenceNumber    String?
+  description        String?
+  currencyCode       String?
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoExpenseId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+  @@index([vendorId])
+}
+
+// ─── ZohoTax: tax rates (Zoho Books /settings/taxes) ─────────────────────────
+model ZohoTax {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoTaxId          String   // Zoho tax_id
+  taxName            String
+  taxPercentage      Float    @default(0)
+  taxType            String   @default("tax") // tax|compound_tax|retention_tax
+  taxAuthorityName   String?
+  status             String   @default("active") // active|inactive
+  isDefault          Boolean  @default(false)
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoTaxId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+}
+
+// ─── ZohoBankAccount: bank accounts (Zoho Books /bankaccounts) ───────────────
+model ZohoBankAccount {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoAccountId      String   // Zoho account_id
+  accountName        String
+  accountNumber      String?  // Zoho bank_account_number (masked)
+  ifscCode           String?
+  bankName           String?
+  accountType        String?  // savings|current|credit_card|etc
+  currencyCode       String?
+  balance            Float    @default(0)
+  availableBalance   Float    @default(0)
+  status             String   @default("active") // active|inactive
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoAccountId])
+  @@index([organizationId, zohoOrgId])
+  @@index([organizationId, zohoOrgId, status])
+}
+
+// ─── ZohoBankTransaction: bank transactions (Zoho Books /banktransactions) ──
+model ZohoBankTransaction {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  zohoOrgId          String
+  zohoTransactionId  String   // Zoho transaction_id
+  bankAccountId      String?  // → ZohoBankAccount.zohoAccountId
+  accountName        String?
+  amount             Float    @default(0)
+  transactionType    String   @default("debit") // debit|credit
+  transactionDate    String?
+  description        String?
+  referenceNumber    String?
+  status             String   @default("uncategorized") // uncategorized|matched|excluded
+  payee              String?
+  currencyCode       String?
+  lastSyncedAt       DateTime @default(now())
+  zohoCreatedAt      DateTime?
+  zohoUpdatedAt      DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, zohoOrgId, zohoTransactionId])
+  @@index([organizationId, zohoOrgId])
+  @@index([bankAccountId])
+  @@index([organizationId, zohoOrgId, transactionDate])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROMPT 6 — Oracle AI Business Brain (Persistent Memory System)
+// Isolated models (OracleBrain* prefix) — additive, never touches existing Oracle models.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── OracleBrainMemory — the core persistent memory record ───────────────────
+// Stores every memory type: conversation, business, user, task, decision,
+// reminder, report, learning. Embeddings are stored as a JSON number array
+// for cosine-similarity semantic search (top-k retrieval).
+model OracleBrainMemory {
+  id            String   @id @default(cuid())
+  firmId        String
+  userId        String?
+  // Memory classification
+  type          String   // conversation | business | user | task | decision | reminder | report | learning | fact
+  subtype       String?  // e.g. summary | topics | actions | intent | result (for conversation)
+  title         String
+  content       String   @default("")  // full text body
+  summary       String?  // one-line TL;DR
+  // Semantic vector (JSON number[] — 256-dim hash embedding). NULL until embedded.
+  embedding     String?
+  // Classification & ranking
+  tags          String   @default("[]") // JSON string[]
+  importance    Int      @default(50)   // 0-100
+  pinned        Boolean  @default(false)
+  source        String   @default("oracle") // oracle | user | system | autonomous
+  // Free-form structured metadata (JSON object)
+  metadata      String   @default("{}")
+  // Lifecycle
+  archived      Boolean  @default(false)
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([firmId, type, createdAt])
+  @@index([firmId, type, pinned])
+  @@index([firmId, archived])
+  @@index([userId, type])
+}
+
+// ─── OracleBrainTask — autonomous task lifecycle ──────────────────────────────
+// Overdue collection → Create Task → Reminder → Follow-up → Complete.
+model OracleBrainTask {
+  id              String    @id @default(cuid())
+  firmId          String
+  userId          String?
+  title           String
+  description     String    @default("")
+  type            String    @default("custom") // collect_payment | generate_report | file_gst | call_client | review_vendor | custom
+  status          String    @default("pending") // pending | in_progress | reminder_sent | follow_up | completed | cancelled
+  priority        String    @default("medium")  // low | medium | high | critical
+  // Linkage to the business entity this task acts on
+  relatedType     String?   // invoice | customer | return | vendor | account
+  relatedId       String?
+  relatedLabel    String?   // human-readable label (e.g. "INV-1042 — Acme Corp")
+  // Scheduling
+  dueDate         DateTime?
+  reminderSentAt  DateTime?
+  followUpSentAt  DateTime?
+  completedAt     DateTime?
+  completedBy     String?
+  completionNote  String?
+  // Origin traceability
+  sourceMemoryId  String?   // → OracleBrainMemory.id (the insight that spawned this task)
+  autonomous      Boolean   @default(false) // true if Oracle created it autonomously
+  metadata        String    @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([firmId, status, priority])
+  @@index([firmId, dueDate])
+  @@index([firmId, type, status])
+  @@index([userId, status])
+}
+
+// ─── OracleBrainDecision — explainable decision log ──────────────────────────
+// Every Oracle recommendation is logged with reason + evidence + outcome.
+model OracleBrainDecision {
+  id              String   @id @default(cuid())
+  firmId          String
+  userId          String?
+  title           String
+  recommendation  String   @default("")
+  // Explainability (PROMPT 6: Why? Evidence? Confidence? Expected Result?)
+  reason          String   @default("")
+  evidence        String   @default("[]") // JSON string[]
+  expectedOutcome String   @default("")
+  confidence      Int      @default(50)   // 0-100
+  priority        String   @default("P2") // P0 | P1 | P2 | P3
+  // Lifecycle
+  status          String   @default("recommended") // recommended | accepted | rejected | implemented | superseded | failed
+  outcome         String?  // success | failure | partial | pending
+  outcomeNote     String?
+  decidedAt       DateTime?
+  implementedAt   DateTime?
+  // Origin
+  sourceMemoryId  String?
+  metadata        String   @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([firmId, status, createdAt])
+  @@index([firmId, priority])
+}
+
+// ─── OracleBrainReport — auto-generated daily / weekly / monthly reports ─────
+model OracleBrainReport {
+  id              String   @id @default(cuid())
+  firmId          String
+  userId          String?
+  type            String   // daily | weekly | monthly
+  period          String   // "2024-07-24" | "2024-W30" | "2024-07"
+  title           String
+  summary         String   @default("")
+  // Full structured report (JSON): sections, metrics, charts data, etc.
+  content         String   @default("{}")
+  insights        String   @default("[]") // JSON array
+  recommendations String   @default("[]") // JSON array
+  // Metrics snapshot at generation time
+  metrics         String   @default("{}")
+  generatedBy     String   @default("oracle") // oracle | user | scheduled
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([firmId, type, period])
+  @@index([firmId, type, createdAt])
+}
+
+// ─── OracleBrainReminder — smart proactive reminders ─────────────────────────
+// GST due, customer overdue, bank balance low, cash runway falling, revenue drop.
+model OracleBrainReminder {
+  id              String    @id @default(cuid())
+  firmId          String
+  userId          String?
+  type            String    // gst_due | customer_overdue | low_balance | cash_runway | revenue_drop | task_due | custom
+  title           String
+  message         String    @default("")
+  severity        String    @default("info") // info | watch | warn | critical
+  relatedType     String?
+  relatedId       String?
+  relatedLabel    String?
+  dueDate         DateTime?
+  triggerDate     DateTime?
+  status          String    @default("active") // active | snoozed | dismissed | acted
+  actionTaken     String?
+  snoozedUntil    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([firmId, status, severity])
+  @@index([firmId, type, status])
+  @@index([firmId, dueDate])
+}
+
+// ─── OracleBrainLearning — auto-learning signals (behavioural patterns) ──────
+// Oracle learns: edits reports → remember; always exports PDF → remember;
+// ignores advice → learn; prefers short → learn; frequent queries → remember.
+model OracleBrainLearning {
+  id              String   @id @default(cuid())
+  firmId          String
+  userId          String?
+  signal          String   // edits_report | exports_pdf | ignores_advice | prefers_short | frequent_query | prefers_language | custom
+  pattern         String   @default("")  // short description of learned behaviour
+  observation     String   @default("")
+  weight          Float    @default(1.0)
+  occurrenceCount Int      @default(1)
+  metadata        String   @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([firmId, userId, signal, pattern])
+  @@index([firmId, signal])
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TASK 12 — Banking & Reconciliation Module (GSTPilot Infinity™)
+//
+// Production-ready banking architecture. Uses IBankProvider adapter pattern:
+//   BankProvider (interface) → MockProvider (now) → SetuProvider (later)
+// All data lives in the local Prisma/SQLite database. Switching to a real
+// provider later only requires changing the provider implementation — the
+// schema, service layer, API routes, and UI remain unchanged.
+//
+// Models: BankReconciliation, StatementImport, CashFlowSnapshot
+// (BankAccount + BankTransaction enhanced above with additive fields.)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Bank Reconciliation (one match between a bank txn and an invoice/payment) ─
+model BankReconciliation {
+  id              String   @id @default(cuid())
+  organizationId  String   @default("local")
+  transactionId   String
+  transaction     BankTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  invoiceId       String?  // matched invoice (sales or purchase)
+  paymentId       String?  // matched payment record
+  matchType       String   // exact | partial | duplicate | overpayment | underpayment | missing | suspicious
+  confidence      Float    @default(0) // 0..1
+  expectedAmount  Float?   // invoice / payment amount
+  actualAmount    Float?   // bank transaction amount
+  difference      Float    @default(0) // actualAmount - expectedAmount
+  status          String   @default("pending") // pending | approved | rejected
+  matchedBy       String   @default("auto") // auto | manual
+  matchedAt       DateTime?
+  approvedBy      String?
+  approvedAt      DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  account         BankAccount? @relation(fields: [accountId], references: [id])
+  accountId       String?
+
+  @@index([organizationId])
+  @@index([transactionId])
+  @@index([invoiceId])
+  @@index([status])
+}
+
+// ─── Statement Import (one CSV/Excel bank statement import run) ───────────────
+model StatementImport {
+  id              String   @id @default(cuid())
+  organizationId  String   @default("local")
+  accountId       String?
+  account         BankAccount? @relation(fields: [accountId], references: [id])
+  fileName        String
+  fileType        String   @default("csv") // csv | xlsx | txt
+  fileSize        Int      @default(0)
+  totalRows       Int      @default(0)
+  importedRows    Int      @default(0)
+  duplicateRows   Int      @default(0)
+  errorRows       Int      @default(0)
+  status          String   @default("pending") // pending | processing | completed | failed | partial
+  errors          String   @default("[]") // JSON array of {row, message}
+  uploadedBy      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([accountId])
+}
+
+// ─── Cash Flow Snapshot (daily/weekly/monthly aggregated cash position) ───────
+model CashFlowSnapshot {
+  id              String   @id @default(cuid())
+  organizationId  String   @default("local")
+  date            DateTime
+  openingBalance  Float    @default(0)
+  closingBalance  Float    @default(0)
+  totalInflow     Float    @default(0)
+  totalOutflow    Float    @default(0)
+  netFlow         Float    @default(0)
+  creditCount     Int      @default(0)
+  debitCount      Int      @default(0)
+  period          String   @default("daily") // daily | weekly | monthly | quarterly | yearly
+  createdAt       DateTime @default(now())
+
+  @@unique([organizationId, date, period])
+  @@index([organizationId, date])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GST RECONCILIATION ENGINE — GSTR-2B vs Books (Purchase Invoices)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Production-grade reconciliation between purchase invoices (from GSTPilot/Zoho
+// Books) and GSTR-2B data (downloaded from GSTN via a configurable GSP).
+// Supports: perfect match, value/tax/date mismatch, missing in books,
+// missing in GSTR-2B, duplicate, fuzzy matching, ITC loss calculation.
+
+model GSTReconciliationRun {
+  id              String   @id @default(cuid())
+  organizationId  String
+  clientId        String?
+  gstin           String
+  period          String   // YYYY-MM
+  gspProvider     String   @default("mock") // mock | mastersindia | clarity | cleartax |gstsuvidha
+  status          String   @default("running") // running | completed | failed | partial
+  totalBooks      Int      @default(0)
+  total2B         Int      @default(0)
+  matched         Int      @default(0)
+  unmatched       Int      @default(0)
+  missingInBooks  Int      @default(0)
+  missingIn2B     Int      @default(0)
+  duplicates      Int      @default(0)
+  matchPercent    Float    @default(0)
+  potentialITCLoss Float   @default(0)
+  totalTaxableValue Float  @default(0)
+  totalMatchedTax  Float   @default(0)
+  // ── AI CFO Report (computed post-reconciliation) ──
+  aiSummary       String?  // JSON: {missingInvoices, duplicateInvoices, wrongGST, itcBlocked, expectedRecovery, riskLevel, topIssues[]}
+  vendorScores    String?  // JSON: [{gstin, name, score, reasons[], invoiceCount, matched, mismatched, missing}]
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  durationMs      Int      @default(0)
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  matches         GSTReconciliationMatch[]
+
+  @@index([organizationId, period])
+  @@index([gstin, period])
+  @@index([organizationId, createdAt])
+}
+
+model GSTReconciliationMatch {
+  id              String   @id @default(cuid())
+  runId           String
+  // Book-side (purchase invoice) — null when "missing in books"
+  booksInvoiceId  String?
+  booksInvoiceNo  String?
+  booksInvoiceDate String?
+  booksSupplierGSTIN String?
+  booksTaxableValue Float  @default(0)
+  booksCGST       Float    @default(0)
+  booksSGST       Float    @default(0)
+  booksIGST       Float    @default(0)
+  booksCESS       Float    @default(0)
+  booksTotal      Float    @default(0)
+  // GSTR-2B side — null when "missing in GSTR-2B"
+  gstr2bInvoiceId String?
+  gstr2bInvoiceNo String?
+  gstr2bInvoiceDate String?
+  gstr2bSupplierGSTIN String?
+  gstr2bTaxableValue Float  @default(0)
+  gstr2bCGST      Float    @default(0)
+  gstr2bSGST      Float    @default(0)
+  gstr2bIGST      Float    @default(0)
+  gstr2bCESS      Float    @default(0)
+  gstr2bTotal     Float    @default(0)
+  // Match result
+  status          String   @default("unmatched") // perfect_match | value_mismatch | tax_mismatch | date_mismatch | missing_in_books | missing_in_gstr2b | duplicate | gstin_mismatch
+  confidence      Float    @default(0) // 0-1 weighted confidence score (v2 engine)
+  scoreBreakdown  String   @default("{}") // JSON: per-field 0-1 scores (gstin, invoiceNo, date, taxable, cgst, sgst, igst, cess)
+  mismatchReasons String   @default("[]") // JSON array of {field, booksValue, gstr2bValue, delta}
+  itcAtRisk       Float    @default(0)
+  aiExplanation   String?  // Oracle AI explanation
+  aiRecommendation String? // Oracle AI recommended action
+  aiSuggestion    String?  // Oracle suggested action key: contact_supplier | wait_for_gstr1 | raise_dispute | claim_later | ignore_mismatch
+  fixSuggestions  String?  // JSON array of {type, label, field, from, to, preview, severity}
+  fixApplied      Boolean  @default(false)
+  fixAppliedAt    DateTime?
+  fixAppliedBy    String?
+  resolved        Boolean  @default(false)
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  resolutionNote  String?
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  run             GSTReconciliationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, status])
+  @@index([runId, resolved])
+  @@index([runId, confidence])
+  @@index([booksSupplierGSTIN])
+  @@index([gstr2bSupplierGSTIN])
+}
+
+// GSP (GST Suvidha Provider) configuration — abstracted so any provider can be plugged in
+model GSPProviderConfig {
+  id              String   @id @default(cuid())
+  organizationId  String
+  providerKey     String   // mock | mastersindia | generic
+  displayName     String
+  clientId        String?
+  clientSecret    String?  // AES-256-GCM encrypted at rest (server-only key)
+  apikey          String?  // AES-256-GCM encrypted at rest
+  authEndpoint    String?
+  apiEndpoint     String?
+  // 'sandbox' = GSP test environment, 'production' = real GSTN
+  mode            String   @default("sandbox") // sandbox | production
+  // The org's own GSTIN (whose GSTR-2B will be synced)
+  gstin           String?
+  // Verified legal/trade name from GSTIN lookup (cached)
+  legalName       String?
+  tradeName       String?
+  // Whether the last "Test Connection" succeeded
+  lastTestOk      Boolean  @default(false)
+  lastTestMessage String?
+  // Explicit connection state machine — drives the UI badge + data-fetch gates.
+  // not_connected | connecting | connected | syncing | synced | token_expired | connection_error | rate_limited | partial_sync
+  connectionState String   @default("not_connected")
+  // When the last TEST was performed (distinct from lastConnectedAt which is
+  // when the last successful connection was established).
+  lastTestedAt    DateTime?
+  enabled         Boolean  @default(true)
+  lastConnectedAt DateTime?
+  lastSyncAt      DateTime?
+  // Token expiry (if the provider uses expiring tokens). Updated by /api/gst/test
+  // and /api/gst/sync-2b after every successful authentication.
+  tokenExpiry     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  syncJobs        GSTSyncJob[]
+
+  @@unique([organizationId, providerKey])
+  @@index([organizationId, enabled])
+  @@index([organizationId, connectionState])
+}
+
+// GSTR-2B sync jobs — one per (org, period) sync operation. Tracks every sync
+// for the Sync Center + audit trail.
+model GSTSyncJob {
+  id              String   @id @default(cuid())
+  organizationId  String
+  configId        String?
+  gstin           String
+  period          String   // YYYY-MM
+  providerKey     String
+  mode            String   // sandbox | production | demo
+  status          String   @default("pending") // pending | running | completed | failed | partial
+  trigger         String   @default("manual")  // manual | automatic | retry
+  recordsFetched  Int      @default(0)
+  recordsImported Int      @default(0)
+  // Records that existed and were updated with new values.
+  recordsUpdated  Int      @default(0)
+  // Records that existed and were unchanged (skipped, no-op).
+  recordsSkipped  Int      @default(0)
+  // Records that failed to insert/update (validation error, etc.).
+  recordsFailed   Int      @default(0)
+  // Legacy field — kept for backward compat. Same as recordsUpdated.
+  recordsChanged  Int      @default(0)
+  recordsRemoved  Int      @default(0)
+  durationMs      Int      @default(0)
+  errorMessage    String?
+  // Retry tracking — if this job is a retry, points to the original job.
+  retryOf         String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  config          GSPProviderConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([configId, createdAt])
+  @@index([gstin, period])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Setu Account Aggregator — Webhook Idempotency + Consent Tracking
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Tracks every Setu webhook event received. The `eventId` unique constraint
+// guarantees idempotency — if Setu retries a webhook (which it does), we
+// process it exactly once. The raw payload is stored for audit/debugging.
+model SetuWebhookEvent {
+  id          String   @id @default(cuid())
+  // Setu's event id from the payload, or a derived hash (type+timestamp+consentId)
+  // if Setu doesn't send one. This is the idempotency key.
+  eventId     String   @unique
+  eventType   String   // CONSENT_STATUS_UPDATE | SESSION_STATUS_UPDATE | FI_DATA_READY
+  consentId   String?
+  dataSessionId String?
+  success     Boolean  @default(true)
+  payload     String   // JSON string of the full webhook body (for audit)
+  processed   Boolean  @default(true)
+  processedAt DateTime @default(now())
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  @@index([eventType, createdAt])
+  @@index([consentId])
+}
+
+// Tracks Setu consents per organization. Created when POST /api/banking/connect
+// initiates a consent, updated by the webhook when the consent status changes.
+// This is how the webhook knows which org a consent belongs to.
+model SetuConsent {
+  id              String   @id @default(cuid())
+  organizationId  String
+  // Setu's consent id (the `id` field from POST /v2/consents response).
+  consentId       String   @unique
+  // The VUA (mobile number) the consent was created for.
+  vua             String
+  // The user who initiated the consent.
+  createdByUid    String
+  // Current consent status: INITIATED | PENDING | ACTIVE | REJECTED | REVOKED | EXPIRED
+  status          String   @default("INITIATED")
+  // The Setu webview URL where the user approves the consent.
+  approvalUrl     String?
+  // The redirect URL Setu sends the user to after consent.
+  redirectUrl     String?
+  // When the consent was approved (Setu webhook CONSENT_STATUS_UPDATE + ACTIVE).
+  approvedAt      DateTime?
+  // When the consent expires (Setu's consentExpiry).
+  expiresAt       DateTime?
+  // Linked bank connection id (set after completeConnection succeeds).
+  connectionId    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdByUid])
 }

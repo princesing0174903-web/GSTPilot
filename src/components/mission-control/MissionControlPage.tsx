@@ -41,6 +41,7 @@ import { useGSTpilotInvoices } from '@/hooks/useGSTpilotInvoices';
 import { useGSTpilotVendors } from '@/hooks/useGSTpilotVendors';
 import { useGSTpilotExpenses } from '@/hooks/useGSTpilotExpenses';
 import { useGSTpilotPayments } from '@/hooks/useGSTpilotPayments';
+import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
 import { TrustBar } from '@/components/shared/TrustBar';
 import type { FirestoreClient, FirestoreReturn } from '@/lib/firestore-schema';
 
@@ -98,33 +99,20 @@ function timeAgo(createdAt: unknown): string {
   return `${years}y ago`;
 }
 
-// ─── Business Score computation ───────────────────────────────────────────────
-// Start at 100. Subtract weighted penalties for risk signals. Clamp 0–100.
-// If there is no data at all, return null (UI shows premium empty state).
-
-function computeBusinessScore(opts: {
-  totalClients: number;
-  criticalIssues: number;
-  warnings: number;
-  pendingReturns: number;
-  overdueReturns: number;
-  averageHealthScore: number;
-  matchPercentage: number;
-}): number | null {
-  const { totalClients, criticalIssues, warnings, pendingReturns, overdueReturns, averageHealthScore, matchPercentage } = opts;
-  if (totalClients === 0 && pendingReturns === 0 && overdueReturns === 0) return null;
-
-  let score = 100;
-  score -= criticalIssues * 6;
-  score -= warnings * 2;
-  score -= overdueReturns * 8;
-  score -= pendingReturns * 2;
-  if (averageHealthScore > 0) {
-    score -= Math.max(0, 80 - averageHealthScore) * 0.6;
-  }
-  score -= Math.max(0, 100 - matchPercentage) * 0.3;
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
+// ─── Business Score ───────────────────────────────────────────────────────────
+//
+// Previously this page computed its OWN client-side 7-input penalty-based
+// "Business Score" (start at 100, subtract weighted penalties for
+// criticalIssues / warnings / overdueReturns / pendingReturns / avgHealthScore
+// / matchPercentage). That formula was a SIXTH independent health engine —
+// different from the canonical 8-factor Health Score in
+// `src/lib/business/snapshot.ts`.
+//
+// We now delegate to the canonical Business Snapshot via `useBusinessSnapshot()`
+// so Mission Control shows EXACTLY the same Health Score as the Home Dashboard,
+// Oracle chat, AI CFO, and Run Business pages. The local `computeBusinessScore`
+// function has been removed.
+//
 
 // V16 palette — only Emerald / Cyan / Blue. No amber, no red.
 function scoreTier(score: number | null): { label: string; color: string } {
@@ -280,8 +268,8 @@ function ScoreGauge({ score }: { score: number | null }) {
       <svg width={size} height={size} className="-rotate-90">
         <defs>
           <linearGradient id="missionScoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#10b981" />
-            <stop offset="50%" stopColor="#06b6d4" />
+            <stop offset="0%" stopColor="#2563EB" />
+            <stop offset="50%" stopColor="#3B82F6" />
             <stop offset="100%" stopColor="#3b82f6" />
           </linearGradient>
         </defs>
@@ -620,6 +608,11 @@ export default function MissionControlPage() {
   const { setCurrentView } = useApp();
   const { user } = useAuth();
   const { metrics, loading, error } = useLiveDashboardMetrics();
+  // ── Canonical Business Snapshot ──
+  // Replaces the former local 7-input penalty-based "Business Score" with the
+  // canonical Health Score from `getBusinessSnapshot()` — the single source of
+  // truth shared by every page in the app.
+  const { snapshot: businessSnapshot, loading: snapshotLoading } = useBusinessSnapshot();
   const { data: activities } = useFireActivities();
   // Real clients list — used by buildInsights() to detect churn-risk. This is
   // the same Firestore subscription useLiveDashboardMetrics opens internally;
@@ -648,11 +641,11 @@ export default function MissionControlPage() {
   // + premium empty states). Premium UX never makes the user stare at a skeleton.
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   useEffect(() => {
-    if (!loading) return;
+    if (!loading && !snapshotLoading) return;
     const t = setTimeout(() => setLoadingTimedOut(true), 3500);
     return () => clearTimeout(t);
-  }, [loading]);
-  const showLoading = loading && !loadingTimedOut;
+  }, [loading, snapshotLoading]);
+  const showLoading = (loading || snapshotLoading) && !loadingTimedOut;
 
   // ── Trust indicator: last sync time ──
   // Stamp a Date whenever real (non-loading) data lands. onSnapshot delivers
@@ -665,15 +658,14 @@ export default function MissionControlPage() {
   }, [metrics, loading]);
 
   // ── Business Score ──
-  const businessScore = useMemo(() => computeBusinessScore({
-    totalClients: metrics.totalClients,
-    criticalIssues: metrics.criticalIssues,
-    warnings: metrics.warnings,
-    pendingReturns: metrics.pendingReturns,
-    overdueReturns: metrics.overdueReturns,
-    averageHealthScore: metrics.averageHealthScore,
-    matchPercentage: metrics.matchPercentage,
-  }), [metrics]);
+  // Sourced from the canonical Business Snapshot — the same Health Score shown
+  // on the Home Dashboard, Oracle chat, AI CFO, and Run Business pages. Returns
+  // null when the snapshot has no live data (UI shows the premium empty state).
+  const businessScore = useMemo(() => {
+    if (!businessSnapshot.hasLiveData) return null;
+    const score = Math.round(businessSnapshot.healthScore || 0);
+    return score > 0 ? score : null;
+  }, [businessSnapshot.hasLiveData, businessSnapshot.healthScore]);
 
   // ── "Has data" flag — drives honest empty vs premium states ──
   const hasData = useMemo(() => (
@@ -1108,7 +1100,7 @@ export default function MissionControlPage() {
                   className="h-full rounded-full"
                   style={{
                     width: `${collectionScore}%`,
-                    background: 'linear-gradient(90deg, #06b6d4 0%, #0891b2 100%)',
+                    background: 'linear-gradient(90deg, #3B82F6 0%, #2563EB 100%)',
                   }}
                 />
               </div>

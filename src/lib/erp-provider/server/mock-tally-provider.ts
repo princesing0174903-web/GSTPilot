@@ -4,8 +4,12 @@
 // Deterministic simulated Tally Prime responses. Seeded by company name so the
 // same company always yields the same dataset — syncs are idempotent.
 //
-// This is the DEFAULT provider. Switch to the real Tally integration later by
-// setting ERP_PROVIDER=tally-future (once implemented) — zero downstream changes.
+// GATING: Disabled by default. Set `MOCK_ERP_PROVIDER=true` in env to enable.
+// When disabled, every sync method returns empty records (`{ records: [] }`),
+// the connect/complete/refresh lifecycle methods throw, and healthCheck returns
+// `false`. Real ERP integration is via Zoho Books customer sync
+// (/api/integrations/zoho/customers). This mock is retained only as a
+// provider-architecture fallback for local development.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { ERPSession, ERPSyncOptions, IERPProvider } from '../provider';
@@ -23,7 +27,7 @@ import type {
   ERPTax,
   ERPVendor,
 } from '../types';
-import { AuthRejectedError, ERPUnavailableError, ValidationError } from '../errors';
+import { ERPUnavailableError, ValidationError } from '../errors';
 import {
   generateBankTransactions,
   generateCustomers,
@@ -38,12 +42,17 @@ import {
 
 const ORG_PREFIX = 'mock-tally';
 
+// Mock ERP provider is disabled by default. Set MOCK_ERP_PROVIDER=true to enable.
+const MOCK_ERP_ENABLED = process.env.MOCK_ERP_PROVIDER === 'true';
+const MOCK_DISABLED_MSG = 'Mock ERP provider disabled. Connect a real ERP (Zoho Books).';
+
 export class MockTallyProvider implements IERPProvider {
   readonly name = 'Mock Tally Prime';
   readonly provider: ERPProviderName = 'tally';
   readonly isLive = false;
 
   async connect(input: Omit<ConnectERPInput, 'organizationId' | 'createdBy'>): Promise<ConnectERPResult> {
+    if (!MOCK_ERP_ENABLED) throw new ERPUnavailableError('tally', MOCK_DISABLED_MSG);
     if (!input.companyName) throw new ValidationError('Company name is required.');
     if (!input.credentials?.host) throw new ValidationError('Tally host is required.');
     if (!input.credentials?.port) throw new ValidationError('Tally port is required.');
@@ -70,6 +79,7 @@ export class MockTallyProvider implements IERPProvider {
     session: ERPSession;
     companyInfo: CompleteERPConnectionResult['companyInfo'];
   }> {
+    if (!MOCK_ERP_ENABLED) throw new ERPUnavailableError('tally', MOCK_DISABLED_MSG);
     await delay(200);
     const [_, companyName] = connectionRef.split(':');
     return {
@@ -92,6 +102,7 @@ export class MockTallyProvider implements IERPProvider {
   }
 
   async refreshSession(session: ERPSession): Promise<{ session: ERPSession }> {
+    if (!MOCK_ERP_ENABLED) throw new ERPUnavailableError('tally', MOCK_DISABLED_MSG);
     await delay(150);
     return {
       session: {
@@ -107,6 +118,7 @@ export class MockTallyProvider implements IERPProvider {
   }
 
   async syncCustomers(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPCustomer[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     return {
       records: generateCustomers(seed(session), 'tally', session.companyId, '', 25),
@@ -114,6 +126,7 @@ export class MockTallyProvider implements IERPProvider {
   }
 
   async syncVendors(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPVendor[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     return {
       records: generateVendors(seed(session), 'tally', session.companyId, '', 18),
@@ -121,6 +134,7 @@ export class MockTallyProvider implements IERPProvider {
   }
 
   async syncInvoices(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPInvoice[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(600);
     const customers = generateCustomers(seed(session), 'tally', session.companyId, '', 25);
     const vendors = generateVendors(seed(session), 'tally', session.companyId, '', 18);
@@ -131,16 +145,19 @@ export class MockTallyProvider implements IERPProvider {
   }
 
   async syncSales(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPInvoice[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     const all = await this.syncInvoices(session, _o);
     return { records: all.records.filter((i) => i.invoiceType === 'sales') };
   }
 
   async syncPurchases(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPInvoice[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     const all = await this.syncInvoices(session, _o);
     return { records: all.records.filter((i) => i.invoiceType === 'purchase') };
   }
 
   async syncExpenses(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPInvoice[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(300);
     // Expenses modeled as purchase invoices with expense voucher type.
     const customers = generateCustomers(seed(session), 'tally', session.companyId, '', 5);
@@ -152,16 +169,19 @@ export class MockTallyProvider implements IERPProvider {
   }
 
   async syncInventory(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPInventoryItem[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     return { records: generateInventory(seed(session), 'tally', session.companyId, '') };
   }
 
   async syncLedgers(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPLedger[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     return { records: generateLedgers(seed(session), 'tally', session.companyId, '') };
   }
 
   async syncPayments(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPPayment[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     const customers = generateCustomers(seed(session), 'tally', session.companyId, '', 25);
     const vendors = generateVendors(seed(session), 'tally', session.companyId, '', 18);
@@ -171,11 +191,13 @@ export class MockTallyProvider implements IERPProvider {
   }
 
   async syncBankTransactions(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPBankTransaction[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(400);
     return { records: generateBankTransactions(seed(session), 'tally', session.companyId, '', 40) };
   }
 
   async syncTaxes(session: ERPSession, _o?: ERPSyncOptions): Promise<{ records: ERPTax[] }> {
+    if (!MOCK_ERP_ENABLED) return { records: [] };
     await delay(300);
     const customers = generateCustomers(seed(session), 'tally', session.companyId, '', 25);
     const vendors = generateVendors(seed(session), 'tally', session.companyId, '', 18);
@@ -185,7 +207,7 @@ export class MockTallyProvider implements IERPProvider {
   }
 
   async healthCheck(): Promise<boolean> {
-    return true;
+    return MOCK_ERP_ENABLED;
   }
 }
 

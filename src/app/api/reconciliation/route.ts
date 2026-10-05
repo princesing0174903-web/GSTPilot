@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { NextResponse } from 'next/server'
-import { validateGSTIN, getRiskLevel, calculateRiskScore } from '@/lib/gst-utils'
+import { validateGSTIN, getRiskLevel, calculateReconciliationRiskScore } from '@/lib/gst-utils'
 import { invalidateGraph } from '@/lib/graph/live-update'
 
 type MatchStatus = 'perfect_match' | 'partial_match' | 'mismatch' | 'missing_in_books' | 'missing_in_gstr' | 'unmatched' | 'duplicate'
@@ -170,7 +170,7 @@ function detectMismatches(sourceA: InvoiceLike, sourceB: InvoiceLike | null): {
   } else if (matchScore >= 70) {
     matchStatus = 'partial_match'
     confidenceScore = Math.max(50, 90 - scoreDeduction)
-    riskLevel = getRiskLevel(calculateRiskScore({
+    riskLevel = getRiskLevel(calculateReconciliationRiskScore({
       matchStatus: 'partial_match',
       taxDifference: taxDiff,
       dateDifference: dateDiffDays,
@@ -196,7 +196,7 @@ function detectMismatches(sourceA: InvoiceLike, sourceB: InvoiceLike | null): {
   } else {
     matchStatus = 'mismatch'
     confidenceScore = Math.max(30, 80 - scoreDeduction)
-    riskLevel = getRiskLevel(calculateRiskScore({
+    riskLevel = getRiskLevel(calculateReconciliationRiskScore({
       matchStatus: 'mismatch',
       taxDifference: taxDiff,
       dateDifference: dateDiffDays,
@@ -1029,6 +1029,89 @@ export async function PUT(request: Request) {
     console.error('PUT /api/reconciliation error:', error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to resolve reconciliation' },
+      { status: 500 }
+    )
+  }
+}
+
+// PATCH /api/reconciliation?id=... — Update a reconciliation run (e.g. rename, change status)
+export async function PATCH(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    const body = await request.json()
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Reconciliation run id is required (use ?id=)' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.reconciliationRun.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Reconciliation run not found' },
+        { status: 404 }
+      )
+    }
+
+    const updateData: Record<string, unknown> = {}
+    if (body.status !== undefined) updateData.status = body.status
+    if (body.notes !== undefined) updateData.notes = body.notes
+    if (body.totalRecords !== undefined) updateData.totalRecords = body.totalRecords
+    if (body.matchedRecords !== undefined) updateData.matchedRecords = body.matchedRecords
+    if (body.mismatchedRecords !== undefined) updateData.mismatchedRecords = body.mismatchedRecords
+
+    const run = await db.reconciliationRun.update({
+      where: { id },
+      data: updateData,
+    })
+
+    invalidateGraph()
+
+    return NextResponse.json({ run })
+  } catch (error) {
+    console.error('PATCH /api/reconciliation error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update reconciliation' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/reconciliation?id=... — Delete a reconciliation run and its results
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Reconciliation run id is required (use ?id=)' },
+        { status: 400 }
+      )
+    }
+
+    const existing = await db.reconciliationRun.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Reconciliation run not found' },
+        { status: 404 }
+      )
+    }
+
+    // Delete results first (FK), then the run
+    await db.reconciliationResult.deleteMany({ where: { runId: id } })
+    await db.reconciliationRun.delete({ where: { id } })
+
+    invalidateGraph()
+
+    return NextResponse.json({ ok: true, id })
+  } catch (error) {
+    console.error('DELETE /api/reconciliation error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to delete reconciliation' },
       { status: 500 }
     )
   }

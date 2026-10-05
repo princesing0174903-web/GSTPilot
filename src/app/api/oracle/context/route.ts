@@ -1,25 +1,44 @@
-// GET /api/oracle/context — Context Engine™ live business context
-import { NextResponse } from 'next/server';
-import { gatherBusinessContext, formatContextForPrompt, getCachedContext } from '@/lib/oracle-core/context';
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /api/oracle/context — Unified Oracle Financial Context
+//
+// Returns the single normalized context layer that every Oracle surface reads
+// from. Includes: business profile, revenue, expenses, cash flow, customers,
+// suppliers, GST, invoices, banking, risk, integrations, evidence index.
+//
+// Every section carries a `source` block with environment (LIVE/SANDBOX/DEMO/
+// STALE/UNAVAILABLE), lastUpdatedAt, and connectionState — so Oracle never
+// presents stale or sandbox data as live financial truth.
+//
+// Auth: requireAuth + requireOrgMembership (server-enforced).
+// ═══════════════════════════════════════════════════════════════════════════════
 
-export async function GET() {
-  try {
-    const ctx = await getCachedContext();
-    const formatted = formatContextForPrompt(ctx);
-    return NextResponse.json({ context: ctx, formatted, estimatedTokens: ctx.estimatedTokens });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
+import { getUnifiedOracleContext, invalidateUnifiedContext } from '@/lib/oracle/context/builder';
 
-// Force fresh context
-export async function POST() {
+export const runtime = 'nodejs';
+export const revalidate = 0;
+
+export async function GET(req: NextRequest) {
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
+  const url = new URL(req.url);
+  const orgId = url.searchParams.get('orgId') ?? '';
+  const refresh = url.searchParams.get('refresh') === '1';
+
+  const orgResult = await requireOrgMembership(uid, orgId);
+  if (orgResult instanceof NextResponse) return orgResult;
+
   try {
-    const ctx = await gatherBusinessContext();
-    return NextResponse.json({ context: ctx, refreshed: true });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (refresh) invalidateUnifiedContext(orgId);
+    const ctx = await getUnifiedOracleContext(orgId, { forceRefresh: refresh });
+    return NextResponse.json({
+      ok: true,
+      context: ctx,
+    });
+  } catch (err) {
+    return friendlyApiError(err, 'We could not load your Oracle context right now.');
   }
 }

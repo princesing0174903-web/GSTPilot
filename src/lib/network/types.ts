@@ -669,3 +669,50 @@ export function timeAgo(iso: string): string {
   if (months < 12) return `${months}mo ago`;
   return `${Math.floor(months / 12)}y ago`;
 }
+
+// ─── Engine UI constants (re-exported by engine.ts for UI consumers) ──────────
+//
+// `engine.ts` imports these three maps from this types module and uses them
+// to render the Oracle context block (e.g. `TIER_GLYPH[state.myBusiness.networkTier]`
+// at line ~1352). The engine also re-exports them at the bottom of its file
+// for UI consumers, so they MUST live here.
+//
+// Tier vocabulary (from `scoreToTier` in engine.ts and the
+// `BusinessDirectoryEntry.networkTier` field): platinum | gold | silver | bronze.
+//
+// Node-kind vocabulary (from `NodeType` above): organization | customer | vendor
+// | supplier | partner | government | bank | investor | accountant | auditor
+// | logistics. The maps are intentionally `Record<string, string>` so the
+// engine can index them with any tier/nodeKind string at runtime, even if a
+// new value is added before the type union is updated.
+
+/** Human-readable label for each network node kind. */
+export const NETWORK_NODE_LABELS: Record<string, string> = {
+  organization: 'Organization',
+  customer: 'Customer',
+  vendor: 'Vendor',
+  supplier: 'Supplier',
+  partner: 'Partner',
+  government: 'Government Body',
+  bank: 'Bank',
+  investor: 'Investor',
+  accountant: 'Accountant',
+  auditor: 'Auditor',
+  logistics: 'Logistics Partner',
+};
+
+/** Tailwind color classes for each network tier badge. */
+export const TIER_COLOR: Record<string, string> = {
+  platinum: 'bg-violet-100 text-violet-800 border-violet-300',
+  gold: 'bg-amber-100 text-amber-800 border-amber-300',
+  silver: 'bg-slate-100 text-slate-800 border-slate-300',
+  bronze: 'bg-orange-100 text-orange-800 border-orange-300',
+};
+
+/** Emoji glyph for each network tier. */
+export const TIER_GLYPH: Record<string, string> = {
+  platinum: '💎',
+  gold: '🥇',
+  silver: '🥈',
+  bronze: '🥉',
+};

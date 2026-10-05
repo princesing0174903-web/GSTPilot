@@ -13,7 +13,7 @@ import type {
   PurchaseBill,
   RevenueForecast,
 } from './types';
-import { isOverdue } from './invoices';
+import { isOverdue } from './invoices-utils';
 
 // ─── Forecast generation ──────────────────────────────────────────────────────
 

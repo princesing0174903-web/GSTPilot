@@ -60,55 +60,55 @@ const PIPELINE_STEPS: PipelineStep[] = [
   {
     id: 1, name: 'Read Financial Data', icon: Database, emoji: '📊',
     description: 'Pull invoices, payments, GST returns, banking transactions',
-    output: '234 invoices, 156 payments, 12 GST returns, 45 bank transactions processed',
+    output: 'Pending execution — dispatch agent to see real results.',
     duration: 2400,
   },
   {
     id: 2, name: 'Update Economic Graph', icon: Network, emoji: '🔗',
     description: 'Sync company node + relationships in real-time economic graph',
-    output: 'Updated 47 graph nodes, 23 new edges, 5 industry clusters touched',
+    output: 'Pending execution — dispatch agent to see real results.',
     duration: 1800,
   },
   {
     id: 3, name: 'Optimize Cash Flow', icon: TrendingUp, emoji: '💰',
     description: 'AI analyzes inflow/outflow, recommends optimizations',
-    output: '3 collection opportunities worth ₹12,50,000 identified',
+    output: 'Pending execution — dispatch agent to see real results.',
     duration: 2200,
   },
   {
     id: 4, name: 'Trade on Invoice Exchange', icon: Banknote, emoji: '🏦',
     description: 'Auto-list eligible invoices for financing',
-    output: '8 invoices listed (₹45,00,000), 3 bids received within 90s',
+    output: 'Pending execution — dispatch agent to see real results.',
     duration: 2600,
   },
   {
     id: 5, name: 'Apply for Financing', icon: HandCoins, emoji: '💳',
     description: 'Auto-apply to best-fit lenders via Financing Marketplace',
-    output: '₹2,50,00,000 working capital approved at 9.2% from Bajaj Finance',
+    output: 'Pending execution — dispatch agent to see real results.',
     duration: 3000,
   },
   {
     id: 6, name: 'Predict Risks', icon: Shield, emoji: '📈',
     description: 'AI forecasts next 30-day risks (cash flow, compliance, credit)',
-    output: '2 compliance risks (GST mismatch), 1 cash flow gap predicted for Day 18',
+    output: 'Pending execution — dispatch agent to see real results.',
     duration: 2400,
   },
   {
     id: 7, name: 'Execute AI Decisions', icon: Brain, emoji: '🧠',
     description: 'Run AI Decision Engine, execute approved decisions',
-    output: '5 decisions auto-executed, 2 escalated for human approval',
+    output: 'Pending execution — dispatch agent to see real results.',
     duration: 2000,
   },
   {
     id: 8, name: 'Update Digital Twin', icon: Cpu, emoji: '🔄',
     description: "Refresh company's digital twin with new state",
-    output: 'Digital Twin synced. 3 what-if scenarios re-simulated.',
+    output: 'Pending execution — dispatch agent to see real results.',
     duration: 1600,
   },
   {
     id: 9, name: 'Generate Stakeholder Reports', icon: FileText, emoji: '📋',
     description: 'Create reports for board, investors, lenders',
-    output: '5 reports generated: Board Pack, Investor Update, Lender Compliance, GST Summary, Cash Flow Forecast',
+    output: 'Pending execution — dispatch agent to see real results.',
     duration: 1800,
   },
 ]
@@ -925,8 +925,8 @@ export default function RunMyCompanyPage() {
                     width: `${overallProgress}%`,
                     background: isPaused
                       ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
-                      : 'linear-gradient(90deg, #10b981, #34d399, #fbbf24, #6ee7b7)',
-                    boxShadow: '0 0 10px rgba(52,211,153,0.5)',
+                      : 'linear-gradient(90deg, #2563EB, #3B82F6, #fbbf24, #60A5FA)',
+                    boxShadow: '0 0 10px rgba(59,130,246,0.5)',
                   }}
                   transition={{ duration: 0.3 }}
                 />

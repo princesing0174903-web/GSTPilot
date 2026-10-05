@@ -590,6 +590,12 @@ export async function buildSmartInsights(): Promise<SmartCFOInsights> {
   } catch (err) {
     // Fail-safe: never throw — return empty-but-valid structures so the API
     // route can still respond 200 with a sensible empty payload.
+    // Log so "no insights exist" stays distinguishable from "the insights
+    // builder threw" — the latter usually means a DB query is unreachable.
+    console.warn(
+      '[cfo/insights] generateSmartCFOInsights failed — returning empty:',
+      err instanceof Error ? err.message : err,
+    );
     return {
       topRisks: [],
       topOpportunities: [],

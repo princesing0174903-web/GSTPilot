@@ -21,6 +21,10 @@
 //   - saveLedgers()      for ledgers[]
 //   - updateConnection() to set lastSync + authStatus='session_active'
 //   - createSyncJob()    to record the sync job for audit
+//
+// SECURITY:
+//   • requireAuth — must be signed in.
+//   • requireOrgMembership — must be an active member of `organizationId`.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -32,6 +36,7 @@ import {
   fetchLedgers,
 } from '@/lib/gstn-provider/server/orchestrator';
 import { GSTNError, friendlyGSTNError } from '@/lib/gstn-provider/errors';
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -39,6 +44,11 @@ export const runtime = 'nodejs';
 type SyncScope = 'full' | 'profile' | 'returns' | 'notices' | 'ledgers';
 
 export async function POST(req: NextRequest) {
+  // ── 1. Authentication ─────────────────────────────────────────────────────
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   try {
     const body = await req.json();
     const { organizationId, connectionId, encryptedSession, scope = 'full' } = body as {
@@ -54,6 +64,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // ── 2. Authorization — caller must be a member of organizationId ─────────
+    const memberResult = await requireOrgMembership(uid, organizationId);
+    if (memberResult instanceof NextResponse) return memberResult;
+
     if (!connectionId) {
       return NextResponse.json(
         { ok: false, error: 'connectionId is required' },

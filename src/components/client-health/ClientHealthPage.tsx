@@ -43,6 +43,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { useApp } from '@/contexts/AppContext';
 import type { Client, HealthScoreRecord } from '@/types/gst';
 import { formatNumber, periodToLabel } from '@/lib/gst-utils';
+import { useClients } from '@/hooks/useClients';
 import {
   Users,
   HeartPulse,
@@ -111,7 +112,7 @@ function getHealthCategory(score: number): HealthCategory {
 }
 
 function getHealthColor(score: number): string {
-  if (score >= 80) return '#10b981';
+  if (score >= 80) return '#2563EB';
   if (score >= 60) return '#f59e0b';
   return '#ef4444';
 }
@@ -343,7 +344,7 @@ const INDIAN_STATES = [
 // ──────────────────────────────────────────────
 
 const healthTrendChartConfig = {
-  score: { label: 'Health Score', color: '#10b981' },
+  score: { label: 'Health Score', color: '#2563EB' },
 };
 
 // ──────────────────────────────────────────────
@@ -384,10 +385,12 @@ const kpiVariants = {
 export default function ClientHealthPage() {
   const { setCurrentView, setSelectedClientId } = useApp();
 
-  // Data state
-  const [clients, setClients] = useState<EnrichedClient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Data state — clients come from the shared, tenant-scoped useClients hook
+  // so the orgId is always threaded into /api/clients?organizationId=….
+  const { clients: rawClients, loading: clientsLoading, error: clientsError, refetch: refetchClients } = useClients();
+  const clients: EnrichedClient[] = useMemo(() => rawClients as EnrichedClient[], [rawClients]);
+  const loading = clientsLoading;
+  const error = clientsError;
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -399,29 +402,14 @@ export default function ClientHealthPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // ── Fetch clients on mount ──────────────────
+  // Refresh client list when the user clicks "Recalculate Score" so any newly
+  // created clients appear immediately. The hook itself auto-caches, so this
+  // is just a manual override.
   useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const [clientsRes, healthRes] = await Promise.all([
-          fetch('/api/clients'),
-          fetch('/api/health-score'),
-        ]);
-
-        if (!clientsRes.ok) throw new Error('Failed to fetch clients');
-        const clientsData = await clientsRes.json();
-        setClients(clientsData.clients ?? []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, []);
+    // no-op — useClients handles initial fetch via TanStack Query. This effect
+    // exists only to surface `refetchClients` to the rest of the component via
+    // the dependency array below if needed in the future.
+  }, [refetchClients]);
 
   // ── Derived KPI counts ──────────────────────
   const kpiCounts = useMemo(() => {
@@ -462,21 +450,40 @@ export default function ClientHealthPage() {
     }).sort((a, b) => a.healthScore - b.healthScore);
   }, [clients, searchQuery, stateFilter, healthRangeFilter]);
 
-  // ── Generate mock trend data for sparklines ──
-  const clientTrendData = useMemo(() => {
-    const map = new Map<string, number[]>();
-    for (const client of clients) {
-      // Generate 6 points of trend data based on current health score
-      const base = client.healthScore;
-      const trend: number[] = [];
-      for (let i = 0; i < 6; i++) {
-        const variation = Math.floor(Math.random() * 16) - 8;
-        trend.push(Math.max(0, Math.min(100, base + variation - (5 - i) * 1.5)));
+  // ── Fetch real trend data from /api/health-score?trends=1 ──
+  // Replaces the previous Math.random()-based mock sparklines with real
+  // HealthScore history. Falls back to a flat line based on the current
+  // score when no history exists yet (e.g. brand-new client).
+  const [realTrendData, setRealTrendData] = useState<Map<string, number[]>>(new Map());
+  useEffect(() => {
+    if (clients.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/health-score?trends=1', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data?.trends) return;
+        const map = new Map<string, number[]>();
+        for (const client of clients) {
+          const hist: { score: number }[] = data.trends[client.id] ?? [];
+          if (hist.length >= 2) {
+            map.set(client.id, hist.map((h) => h.score));
+          } else {
+            // Not enough history yet — show a flat line at the current score
+            // (honest empty state, no fake variation).
+            map.set(client.id, [client.healthScore, client.healthScore]);
+          }
+        }
+        setRealTrendData(map);
+      } catch {
+        // Silent — sparklines just won't render, which is fine.
       }
-      map.set(client.id, trend);
-    }
-    return map;
+    })();
+    return () => { cancelled = true; };
   }, [clients]);
+
+  const clientTrendData = realTrendData;
 
   // ── Fetch detail for dialog ─────────────────
   const handleViewDetails = useCallback(async (client: EnrichedClient) => {
@@ -1099,8 +1106,8 @@ export default function ClientHealthPage() {
                             <AreaChart data={selectedClient.healthTrend}>
                               <defs>
                                 <linearGradient id="healthTrendFill" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                                  <stop offset="5%" stopColor="#2563EB" stopOpacity={0.3} />
+                                  <stop offset="95%" stopColor="#2563EB" stopOpacity={0.02} />
                                 </linearGradient>
                               </defs>
                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -1120,7 +1127,7 @@ export default function ClientHealthPage() {
                               <Area
                                 type="monotone"
                                 dataKey="score"
-                                stroke="#10b981"
+                                stroke="#2563EB"
                                 strokeWidth={2}
                                 fill="url(#healthTrendFill)"
                               />
@@ -1231,6 +1238,9 @@ export default function ClientHealthPage() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ clientId: selectedClient.client.id }),
                           });
+                          // Refresh the tenant-scoped client list so the
+                          // updated health score appears immediately.
+                          refetchClients();
                         } catch { /* ignore */ }
                         setDialogOpen(false);
                       }}

@@ -4,7 +4,7 @@
 // Oracle: "I've generated your E-Way Bill."
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { genEWBNo, nowISO, isValidGstinFormat } from './client';
+import { isValidGstinFormat } from './client';
 import type { EWayBillResult } from './client';
 
 const ewbStore = new Map<string, EWayBillResult>();
@@ -31,20 +31,17 @@ export async function generateEWayBill(params: {
   if (!isValidGstinFormat(params.supplierGstin)) {
     throw new Error(`Invalid supplier GSTIN: "${params.supplierGstin}".`);
   }
-  const ewbNo = genEWBNo();
-  const now = new Date();
-  const validDays = Math.max(1, Math.ceil(params.distanceKm / 200));
-  const validUpto = new Date(now.getTime() + validDays * 86400000).toISOString();
-
-  const result: EWayBillResult = {
-    ewbNo,
-    ewbDate: nowISO(),
-    validUpto,
-    status: 'generated',
-    consignmentId: `CON${ewbNo.slice(-8)}`,
-  };
-  ewbStore.set(ewbNo, result);
-  return result;
+  // ── PRODUCTION SAFETY ──
+  // The E-Way Bill number (EWB No) and consignment ID are official government
+  // identifiers issued ONLY by the NIC E-Way Bill portal. Fabricating them
+  // locally with Math.random() (as the previous implementation did) would
+  // constitute forging a legal transport document.
+  // Until the real NIC EWB API integration is wired up, refuse to generate
+  // and surface a clear error so the user knows to connect the GST portal.
+  // TODO: Replace with real NIC EWB API integration when available.
+  throw new Error(
+    'GSTN API not configured. Set GSTN_API_KEY and connect GST portal to generate E-Way Bills through the NIC EWB portal.'
+  );
 }
 
 export async function extendEWayBill(ewbNo: string, extraDays: number, reason: string): Promise<EWayBillResult> {

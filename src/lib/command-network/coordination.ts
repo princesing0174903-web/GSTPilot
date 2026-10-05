@@ -103,8 +103,11 @@ async function getDeptMetrics(module: CommandModule): Promise<{
         return { activeWorkflows: 0, lastSyncAt: last?.updatedAt.toISOString() ?? null, pendingApprovals: 0, openTasks: count };
       }
       case 'ai_marketing': {
-        const count = await db.cEODecision.count({ where: { type: { in: ['increase_marketing', 'pause_marketing'] } } });
-        const last = await db.cEODecision.findFirst({ where: { type: { in: ['increase_marketing', 'pause_marketing'] } }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } });
+        // (Was 2 sequential awaits — now Promise.all for 1 round-trip.)
+        const [count, last] = await Promise.all([
+          db.cEODecision.count({ where: { type: { in: ['increase_marketing', 'pause_marketing'] } } }),
+          db.cEODecision.findFirst({ where: { type: { in: ['increase_marketing', 'pause_marketing'] } }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+        ]);
         return { activeWorkflows: 0, lastSyncAt: last?.createdAt.toISOString() ?? null, pendingApprovals: 0, openTasks: count };
       }
       case 'ai_cfo': {
@@ -136,8 +139,11 @@ async function getDeptMetrics(module: CommandModule): Promise<{
         return { activeWorkflows: 0, lastSyncAt: last?.createdAt.toISOString() ?? null, pendingApprovals: 0, openTasks: count };
       }
       case 'ai_hr': {
-        const count = await db.cEOTask.count({ where: { type: { in: ['approve_payroll', 'renew_subscription'] } } });
-        const last = await db.cEOTask.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } });
+        // (Was 2 sequential awaits — now Promise.all for 1 round-trip.)
+        const [count, last] = await Promise.all([
+          db.cEOTask.count({ where: { type: { in: ['approve_payroll', 'renew_subscription'] } } }),
+          db.cEOTask.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+        ]);
         return { activeWorkflows: 0, lastSyncAt: last?.createdAt.toISOString() ?? null, pendingApprovals: 0, openTasks: count };
       }
       case 'ai_operations': {

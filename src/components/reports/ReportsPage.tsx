@@ -25,9 +25,20 @@ import {
   ShieldCheck,
   TrendingUp,
   Wallet,
-  BarChart3,
-  Printer,
+  Calendar,
+  Receipt,
+  History,
+  Filter,
+  ChevronDown,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  ClipboardCheck,
+  FileCheck2,
+  type LucideIcon,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import {
   Invoice,
   GSTRFiling,
@@ -45,7 +56,9 @@ import {
 import { useInvoices } from '@/hooks/useInvoices';
 import { useGSTTransactions } from '@/hooks/useGSTTransactions';
 import { useBanking } from '@/hooks/useBanking';
-import { ALL_CATEGORIES, CATEGORY_LABELS } from '@/lib/banking';
+import { useOrg } from '@/contexts/OrgContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { ALL_CATEGORIES, CATEGORY_LABELS } from '@/lib/banking/categorize';
 import type { TransactionCategory } from '@/lib/banking-provider';
 import { createReport, deleteReport } from '@/lib/firestore-service';
 import type {
@@ -92,14 +105,14 @@ interface ClientOption {
 const SECTION_KEYS: GSTR1Section[] = ['b2b', 'b2cl', 'b2cs', 'cdnr', 'cdnur', 'exp'];
 
 const EXPORT_TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bgColor: string }> = {
-  'GSTR-1 JSON': { label: 'GSTR-1 JSON', icon: <FileJson className="size-5" />, color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
+  'GSTR-1 JSON': { label: 'GSTR-1 JSON', icon: <FileJson className="size-5" />, color: 'text-blue-700', bgColor: 'bg-blue-50' },
   'GSTR-1 Excel': { label: 'GSTR-1 Excel', icon: <FileSpreadsheet className="size-5" />, color: 'text-amber-700', bgColor: 'bg-amber-50' },
   'Filing Summary PDF': { label: 'Filing Summary PDF', icon: <FileText className="size-5" />, color: 'text-red-700', bgColor: 'bg-red-50' },
-  'Working Papers PDF': { label: 'Working Papers PDF', icon: <FileText className="size-5" />, color: 'text-purple-700', bgColor: 'bg-purple-50' },
-  'GST Summary PDF': { label: 'GST Summary PDF', icon: <FileText className="size-5" />, color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
-  'Compliance Report PDF': { label: 'Compliance Report PDF', icon: <FileText className="size-5" />, color: 'text-blue-700', bgColor: 'bg-blue-50' },
-  'Financial Report PDF': { label: 'Financial Report PDF', icon: <FileText className="size-5" />, color: 'text-purple-700', bgColor: 'bg-purple-50' },
-  'Cash Flow Report PDF': { label: 'Cash Flow Report PDF', icon: <FileText className="size-5" />, color: 'text-teal-700', bgColor: 'bg-teal-50' },
+  'Working Papers PDF': { label: 'Working Papers PDF', icon: <FileText className="size-5" />, color: 'text-blue-700', bgColor: 'bg-blue-50' },
+  'GST Summary PDF': { label: 'GST Summary PDF', icon: <FileText className="size-5" />, color: 'text-blue-700', bgColor: 'bg-blue-50' },
+  'Compliance Report PDF': { label: 'Compliance Report PDF', icon: <FileText className="size-5" />, color: 'text-sky-700', bgColor: 'bg-sky-50' },
+  'Financial Report PDF': { label: 'Financial Report PDF', icon: <FileText className="size-5" />, color: 'text-blue-700', bgColor: 'bg-blue-50' },
+  'Cash Flow Report PDF': { label: 'Cash Flow Report PDF', icon: <FileText className="size-5" />, color: 'text-sky-700', bgColor: 'bg-sky-50' },
 };
 
 const MONTHS = [
@@ -164,6 +177,423 @@ function saveHistory(items: RecentExport[]): void {
   } catch {
     /* ignore quota errors */
   }
+}
+
+// ─── Report Catalog (drives the Export Center UI) ─────────────────────────────
+// A single source of truth for every report card on the page. Each entry maps to
+// an existing handler (or null = "Not Configured"), so the UI reflects reality
+// without ever touching the export API contract.
+
+type ReportHandlerKey =
+  | 'json'
+  | 'csv'
+  | 'report'
+  | 'working-papers'
+  | 'gst-pdf'
+  | 'compliance-pdf'
+  | 'financial-pdf'
+  | 'cashflow-pdf'
+  | null;
+
+interface ReportCardConfig {
+  id: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  exportType: string; // matches EXPORT_TYPE_CONFIG key for last-generated lookup
+  handler: ReportHandlerKey;
+  fileType: 'json' | 'csv' | 'pdf';
+  estimatedSize: string;
+  accent: 'blue' | 'emerald' | 'amber' | 'purple' | 'teal' | 'rose' | 'slate';
+}
+
+interface ReportCategoryConfig {
+  id: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  reports: ReportCardConfig[];
+}
+
+const REPORT_CATALOG: ReportCategoryConfig[] = [
+  {
+    id: 'gst-filing',
+    title: 'GST Filing Package',
+    description: 'GST portal-ready JSON exports + statutory reconciliation reports',
+    icon: FileJson,
+    reports: [
+      {
+        id: 'gstr1-json',
+        title: 'GSTR-1 JSON Export',
+        description: 'GST portal upload format — outward supplies (B2B / B2C / CDN / Exports).',
+        icon: FileJson,
+        exportType: 'GSTR-1 JSON',
+        handler: 'json',
+        fileType: 'json',
+        estimatedSize: '~18 KB',
+        accent: 'blue',
+      },
+      {
+        id: 'gstr3b-json',
+        title: 'GSTR-3B JSON Export',
+        description: 'Monthly summary return — output tax, ITC, net liability.',
+        icon: FileJson,
+        exportType: 'GSTR-3B JSON',
+        handler: null,
+        fileType: 'json',
+        estimatedSize: '~12 KB',
+        accent: 'emerald',
+      },
+      {
+        id: 'gstr2b-recon',
+        title: 'GSTR-2B Reconciliation',
+        description: 'Auto-reconcile purchase register against GSTR-2B from GST portal.',
+        icon: FileCheck2,
+        exportType: 'GSTR-2B Reconciliation',
+        handler: null,
+        fileType: 'pdf',
+        estimatedSize: '~220 KB',
+        accent: 'teal',
+      },
+      {
+        id: 'gstr9-annual',
+        title: 'Annual GSTR-9 Summary',
+        description: 'Annual reconciliation of all monthly / quarterly returns filed.',
+        icon: Calendar,
+        exportType: 'GSTR-9 Annual',
+        handler: null,
+        fileType: 'pdf',
+        estimatedSize: '~340 KB',
+        accent: 'purple',
+      },
+    ],
+  },
+  {
+    id: 'excel-export',
+    title: 'Excel Export',
+    description: 'Spreadsheet exports for accountants — full transactional registers',
+    icon: FileSpreadsheet,
+    reports: [
+      {
+        id: 'sales-register',
+        title: 'Sales Register',
+        description: 'Invoice-by-invoice sales register with GST classification.',
+        icon: FileSpreadsheet,
+        exportType: 'GSTR-1 Excel',
+        handler: 'csv',
+        fileType: 'csv',
+        estimatedSize: '~85 KB',
+        accent: 'amber',
+      },
+      {
+        id: 'purchase-register',
+        title: 'Purchase Register',
+        description: 'Vendor-wise purchase register with ITC eligibility flag.',
+        icon: FileSpreadsheet,
+        exportType: 'Purchase Register',
+        handler: null,
+        fileType: 'csv',
+        estimatedSize: '~95 KB',
+        accent: 'emerald',
+      },
+      {
+        id: 'expense-summary',
+        title: 'Expense Summary',
+        description: 'Category-wise expense breakdown with GST input analysis.',
+        icon: Receipt,
+        exportType: 'Expense Summary',
+        handler: null,
+        fileType: 'csv',
+        estimatedSize: '~45 KB',
+        accent: 'rose',
+      },
+      {
+        id: 'tax-liability',
+        title: 'Tax Liability Summary',
+        description: 'Output vs input tax, net liability, by-rate breakdown.',
+        icon: Wallet,
+        exportType: 'Tax Liability Summary',
+        handler: null,
+        fileType: 'csv',
+        estimatedSize: '~32 KB',
+        accent: 'blue',
+      },
+    ],
+  },
+  {
+    id: 'pdf-summary',
+    title: 'PDF Summary',
+    description: 'Board-ready formatted reports — print or save as PDF',
+    icon: FileText,
+    reports: [
+      {
+        id: 'monthly-business-summary',
+        title: 'Monthly Business Summary',
+        description: 'Revenue, tax liability, and section-wise financial breakdown.',
+        icon: TrendingUp,
+        exportType: 'Financial Report PDF',
+        handler: 'financial-pdf',
+        fileType: 'pdf',
+        estimatedSize: '~280 KB',
+        accent: 'purple',
+      },
+      {
+        id: 'tax-compliance-report',
+        title: 'Tax Compliance Report',
+        description: 'Filing compliance, ITC reconciliation, and risk metrics.',
+        icon: ShieldCheck,
+        exportType: 'Compliance Report PDF',
+        handler: 'compliance-pdf',
+        fileType: 'pdf',
+        estimatedSize: '~310 KB',
+        accent: 'blue',
+      },
+      {
+        id: 'audit-trail-report',
+        title: 'Audit Trail Report',
+        description: 'GSTR-1 / 3B filings + GST engine totals — audit trail of returns.',
+        icon: History,
+        exportType: 'GST Summary PDF',
+        handler: 'gst-pdf',
+        fileType: 'pdf',
+        estimatedSize: '~260 KB',
+        accent: 'teal',
+      },
+      {
+        id: 'cash-flow-report',
+        title: 'Cash Flow Report',
+        description: 'Reconciliation runs, cash inflow, and banking cash position.',
+        icon: Wallet,
+        exportType: 'Cash Flow Report PDF',
+        handler: 'cashflow-pdf',
+        fileType: 'pdf',
+        estimatedSize: '~290 KB',
+        accent: 'emerald',
+      },
+    ],
+  },
+  {
+    id: 'working-papers',
+    title: 'Working Papers',
+    description: 'Detailed working papers with section-wise tax computation',
+    icon: ClipboardCheck,
+    reports: [
+      {
+        id: 'working-papers-bundle',
+        title: 'Working Papers Bundle',
+        description: 'Section-wise tax computation + filing reconciliation summary.',
+        icon: ClipboardCheck,
+        exportType: 'Working Papers PDF',
+        handler: 'working-papers',
+        fileType: 'pdf',
+        estimatedSize: '~420 KB',
+        accent: 'amber',
+      },
+      {
+        id: 'recon-working-papers',
+        title: 'Reconciliation Working Papers',
+        description: 'ITC reconciliation working papers with match / mismatch detail.',
+        icon: FileCheck2,
+        exportType: 'Reconciliation Working Papers',
+        handler: null,
+        fileType: 'pdf',
+        estimatedSize: '~380 KB',
+        accent: 'teal',
+      },
+    ],
+  },
+  {
+    id: 'audit-package',
+    title: 'Audit Package',
+    description: 'Complete audit-ready bundles for statutory auditors',
+    icon: Package,
+    reports: [
+      {
+        id: 'audit-package-bundle',
+        title: 'Audit Package Bundle',
+        description: 'Filing summary + client breakdown + filings table for audit.',
+        icon: Package,
+        exportType: 'Filing Summary PDF',
+        handler: 'report',
+        fileType: 'pdf',
+        estimatedSize: '~520 KB',
+        accent: 'blue',
+      },
+      {
+        id: 'ca-review-package',
+        title: 'CA Review Package',
+        description: 'Comprehensive package for CA review with all supporting docs.',
+        icon: ClipboardCheck,
+        exportType: 'CA Review Package',
+        handler: null,
+        fileType: 'pdf',
+        estimatedSize: '~680 KB',
+        accent: 'purple',
+      },
+    ],
+  },
+];
+
+const TOTAL_REPORTS = REPORT_CATALOG.reduce((sum, c) => sum + c.reports.length, 0);
+const CONFIGURED_REPORTS = REPORT_CATALOG.reduce(
+  (sum, c) => sum + c.reports.filter((r) => r.handler !== null).length,
+  0,
+);
+
+const ACCENT_BG: Record<ReportCardConfig['accent'], string> = {
+  blue: 'bg-[#2563EB]/10 border-[#2563EB]/25',
+  emerald: 'bg-[#3B82F6]/10 border-[#3B82F6]/25',
+  amber: 'bg-[#F59E0B]/10 border-[#F59E0B]/25',
+  purple: 'bg-[#60A5FA]/10 border-[#60A5FA]/25',
+  teal: 'bg-[#60A5FA]/10 border-[#60A5FA]/25',
+  rose: 'bg-[#F43F5E]/10 border-[#F43F5E]/25',
+  slate: 'bg-[#181818] border-[#222222]',
+};
+
+const ACCENT_TEXT: Record<ReportCardConfig['accent'], string> = {
+  blue: 'text-[#60A5FA]',
+  emerald: 'text-[#60A5FA]',
+  amber: 'text-[#FBBF24]',
+  purple: 'text-[#60A5FA]',
+  teal: 'text-[#60A5FA]',
+  rose: 'text-[#FB7185]',
+  slate: 'text-muted-foreground',
+};
+
+// Relative time formatter ("2 hours ago", "Just now", "Never")
+function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return 'Never';
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return 'Never';
+  const now = Date.now();
+  const diff = now - date.getTime();
+  if (diff < 0) return 'Just now';
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return 'Just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hour${hr > 1 ? 's' : ''} ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day} day${day > 1 ? 's' : ''} ago`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo} month${mo > 1 ? 's' : ''} ago`;
+  const yr = Math.floor(mo / 12);
+  return `${yr} year${yr > 1 ? 's' : ''} ago`;
+}
+
+// ─── ReportCard (premium export-center card) ──────────────────────────────────
+
+interface ReportCardProps {
+  report: ReportCardConfig;
+  generating: string | null;
+  lastGeneratedAt: string | null;
+  hasDownload: boolean;
+  onGenerate: () => void;
+  onDownload: () => void;
+}
+
+function ReportCard({
+  report,
+  generating,
+  lastGeneratedAt,
+  hasDownload,
+  onGenerate,
+  onDownload,
+}: ReportCardProps) {
+  const Icon = report.icon;
+  const isConfigured = report.handler !== null;
+  const isGenerating = isConfigured && generating === report.handler;
+  const anyGenerating = generating !== null;
+
+  const statusNode = !isConfigured ? (
+    <span className="gst-status gst-status-neutral">
+      <AlertCircle className="size-3" />
+      Not Configured
+    </span>
+  ) : isGenerating ? (
+    <span className="gst-status gst-status-warning">
+      <RefreshCw className="size-3 animate-spin" />
+      Generating…
+    </span>
+  ) : (
+    <span className="gst-status gst-status-success">
+      <CheckCircle2 className="size-3" />
+      Ready
+    </span>
+  );
+
+  return (
+    <div className="gst-card gst-card-hover h-full flex flex-col">
+      {/* Top: Icon + Title */}
+      <div className="flex items-start gap-3 mb-3">
+        <div
+          className={cn(
+            'flex size-10 items-center justify-center rounded-lg border shrink-0',
+            ACCENT_BG[report.accent],
+          )}
+        >
+          <Icon className={cn('size-5', ACCENT_TEXT[report.accent])} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="gst-card-title text-foreground truncate">{report.title}</h3>
+          <p className="gst-description text-xs mt-1 line-clamp-2 leading-snug">
+            {report.description}
+          </p>
+        </div>
+      </div>
+
+      {/* Status pill */}
+      <div className="mb-3">{statusNode}</div>
+
+      {/* Spacer pushes metadata + actions to the bottom for consistent card heights */}
+      <div className="flex-1" />
+
+      {/* Metadata row */}
+      <div className="grid grid-cols-2 gap-3 py-3 border-t border-b border-[#1F1F1F] mb-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Last Generated
+          </p>
+          <p className="text-xs text-foreground font-medium truncate">
+            {formatRelativeTime(lastGeneratedAt)}
+          </p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Est. Size
+          </p>
+          <p className="text-xs text-foreground font-medium truncate">{report.estimatedSize}</p>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          onClick={onGenerate}
+          disabled={!isConfigured || anyGenerating}
+          loading={isGenerating}
+          className="flex-1"
+        >
+          {!isGenerating && <Sparkles className="size-3.5" />}
+          {isGenerating ? 'Generating…' : isConfigured ? 'Generate' : 'Coming Soon'}
+        </Button>
+        {hasDownload && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onDownload}
+            title="Download last generated file"
+          >
+            <Download className="size-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ─── PDF Export (print-window approach — no heavy deps) ────────────────────────
@@ -231,10 +661,10 @@ function buildPdfHtml(opts: {
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #0f172a; margin: 0; padding: 32px; }
-    .header { border-bottom: 3px solid #10b981; padding-bottom: 16px; margin-bottom: 24px; }
+    .header { border-bottom: 3px solid #2563EB; padding-bottom: 16px; margin-bottom: 24px; }
     .brand { display: flex; align-items: center; gap: 10px; }
-    .brand-mark { width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #10b981, #14b8a6); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 16px; }
-    .brand-name { font-size: 18px; font-weight: 700; color: #10b981; letter-spacing: -0.01em; }
+    .brand-mark { width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #2563EB, #3B82F6); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 16px; }
+    .brand-name { font-size: 18px; font-weight: 700; color: #2563EB; letter-spacing: -0.01em; }
     .brand-tag { font-size: 11px; color: #64748b; margin-top: 2px; }
     h1 { font-size: 22px; margin: 14px 0 4px; color: #0f172a; }
     .subtitle { font-size: 13px; color: #64748b; margin: 0 0 6px; }
@@ -244,7 +674,7 @@ function buildPdfHtml(opts: {
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
     table.kv th { text-align: left; width: 45%; padding: 7px 10px; color: #475569; font-weight: 500; background: #f8fafc; border: 1px solid #e2e8f0; }
     table.kv td { padding: 7px 10px; color: #0f172a; font-weight: 600; border: 1px solid #e2e8f0; }
-    table.grid th { text-align: left; padding: 8px 10px; background: #ecfdf5; color: #047857; font-weight: 600; border: 1px solid #a7f3d0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
+    table.grid th { text-align: left; padding: 8px 10px; background: #eff6ff; color: #1D4ED8; font-weight: 600; border: 1px solid #bfdbfe; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; }
     table.grid td { padding: 7px 10px; color: #0f172a; border: 1px solid #e2e8f0; }
     table.grid tr:nth-child(even) td { background: #f8fafc; }
     .empty { text-align: center; color: #94a3b8; font-style: italic; }
@@ -319,6 +749,11 @@ function openPrintWindow(html: string): boolean {
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function ReportsPage() {
+  // ─── Org + Auth context (for local-workspace API calls) ──────────────────
+  const { organization } = useOrg();
+  const { user } = useAuth();
+  const orgId = organization?.id ?? null;
+
   // ─── State ────────────────────────────────────────────────────────────────
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filings, setFilings] = useState<GSTRFiling[]>([]);
@@ -347,7 +782,12 @@ export default function ReportsPage() {
   const [generating, setGenerating] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewData, setPreviewData] = useState<RecentExport | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('export');
+  const [historyTab, setHistoryTab] = useState<string>('saved');
+
+  // ─── Export Center UI state (search / filter / collapsible config) ─────────
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'ready' | 'not_configured'>('all');
+  const [configOpen, setConfigOpen] = useState(true);
 
   // ─── Live data sources for category tabs ────────────────────────────────
   // Real Invoice Engine™ — org-scoped, real-time invoices + aggregated stats.
@@ -414,9 +854,13 @@ export default function ReportsPage() {
     async function fetchData() {
       setLoading(true);
       try {
+        // Build org-scoped URLs + headers for local-workspace compatibility
+        const actor = JSON.stringify({ uid: user?.uid ?? 'local-user', email: user?.email ?? 'local@gstpilot.dev' });
+        const headers = { 'x-gstpilot-actor': actor };
+        const orgParam = orgId ? `?organizationId=${encodeURIComponent(orgId)}` : '';
         const [invoicesRes, filingsRes] = await Promise.all([
-          fetch('/api/invoices'),
-          fetch('/api/gstr-filing'),
+          fetch(`/api/invoices${orgParam}`, { headers }),
+          fetch(`/api/gstr-filing${orgParam}`, { headers }),
         ]);
 
         if (invoicesRes.ok) {
@@ -434,7 +878,7 @@ export default function ReportsPage() {
       }
     }
     fetchData();
-  }, []);
+  }, [orgId, user?.uid]);
 
   // Extract clients (from old invoices API, the Real Invoice Engine™, and filings)
   useEffect(() => {
@@ -689,15 +1133,79 @@ export default function ReportsPage() {
     };
   }, [fireRecons, invoiceStats, bankIncoming, bankOutgoing, netCashFlow, bankBalance, bankAvailable, pendingReconciliation, matchedCount, partiallyMatchedCount, bankingSummary]);
 
+  // ─── Export Center derived state ──────────────────────────────────────────
+  // Live Firestore subscription for SAVED REPORTS (canonical source going
+  // forward). localStorage history is kept as a secondary list for back-compat.
+  const fireReportsQ = useFireReports();
+  const savedReports: Array<FirestoreReport & { id: string }> = fireReportsQ.data ?? [];
+
+  // Last-generated timestamp lookup for each report card — searches both
+  // localStorage (recentExports) and Firestore (savedReports) for the most
+  // recent matching export. Returns null when a report has never been generated.
+  const findReportLastGenerated = useCallback(
+    (exportType: string): string | null => {
+      const localMatch = recentExports.find((e) => e.exportType === exportType);
+      if (localMatch) return localMatch.generatedAt;
+      const savedMatch = savedReports.find(
+        (r) => String(r.metadata?.exportType ?? r.title ?? r.reportType) === exportType,
+      );
+      if (savedMatch?.generatedAt) return savedMatch.generatedAt as string;
+      return null;
+    },
+    [recentExports, savedReports],
+  );
+
+  // Whether a re-downloadable file exists for a report (only JSON exports
+  // persist their data payload in localStorage — PDFs open in a print window).
+  const hasDownloadForReport = useCallback(
+    (exportType: string, fileType: 'json' | 'csv' | 'pdf'): boolean => {
+      if (fileType !== 'json') return false;
+      return recentExports.some((e) => e.exportType === exportType && !!e.data);
+    },
+    [recentExports],
+  );
+
+  // Most recent generation event across ALL reports — drives the header KPI.
+  const lastGeneratedAny = useMemo(() => {
+    const candidates: string[] = [];
+    recentExports.forEach((e) => e.generatedAt && candidates.push(e.generatedAt));
+    savedReports.forEach((r) => {
+      if (r.generatedAt) candidates.push(r.generatedAt as string);
+    });
+    const valid = candidates.filter((iso) => !isNaN(new Date(iso).getTime()));
+    if (valid.length === 0) return null;
+    return valid.reduce((latest, cur) => (new Date(cur) > new Date(latest) ? cur : latest));
+  }, [recentExports, savedReports]);
+
+  // Filtered catalog — applies search query + status filter to each category,
+  // dropping empty categories so the page never shows an empty section header.
+  const filteredCatalog = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return REPORT_CATALOG.map((category) => ({
+      ...category,
+      reports: category.reports.filter((r) => {
+        const matchesSearch =
+          !q ||
+          r.title.toLowerCase().includes(q) ||
+          r.description.toLowerCase().includes(q);
+        const matchesStatus =
+          statusFilter === 'all' ||
+          (statusFilter === 'ready' && r.handler !== null) ||
+          (statusFilter === 'not_configured' && r.handler === null);
+        return matchesSearch && matchesStatus;
+      }),
+    })).filter((category) => category.reports.length > 0);
+  }, [searchQuery, statusFilter]);
+
+  const totalFilteredReports = filteredCatalog.reduce(
+    (sum, c) => sum + c.reports.length,
+    0,
+  );
+
   // ─── Handlers ────────────────────────────────────────────────────────────
   const toggleSection = (section: GSTR1Section) => {
     setIncludeSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
-
-  // P1-M2: Live Firestore subscription for SAVED REPORTS (canonical source going
-  // forward). localStorage history is kept as a secondary list for back-compat.
-  const fireReportsQ = useFireReports();
-  const savedReports: Array<FirestoreReport & { id: string }> = fireReportsQ.data ?? [];
 
   // P1-M2: persist every report generation to Firestore as a `reports` doc.
   // Failures are logged via toast but do NOT block the export (the user's
@@ -923,7 +1431,7 @@ export default function ReportsPage() {
 
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
 
@@ -1027,7 +1535,7 @@ export default function ReportsPage() {
 
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
 
@@ -1165,7 +1673,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({
@@ -1253,7 +1761,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({
@@ -1345,7 +1853,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({
@@ -1448,7 +1956,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        alert('Pop-up blocked. Please allow pop-ups for GSTPilot to export PDF reports.');
+        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({
@@ -1545,856 +2053,477 @@ export default function ReportsPage() {
   // stale engine, GST, or banking data.
   if (loading || engineLoading || gstLoading || bankingLoading) {
     return (
-      <div className="space-y-6 p-6">
-        <div className="flex items-center gap-3">
-          <Skeleton className="size-10 rounded-lg" />
-          <div className="space-y-2">
-            <Skeleton className="h-6 w-64" />
-            <Skeleton className="h-4 w-48" />
+      <div className="gst-container-wide py-6 md:py-8 space-y-8">
+        <div className="flex items-start gap-4">
+          <Skeleton className="size-12 rounded-xl" />
+          <div className="space-y-2 pt-1">
+            <Skeleton className="h-8 w-72" />
+            <Skeleton className="h-4 w-96 max-w-full" />
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-48 rounded-xl" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
           ))}
         </div>
-        <Skeleton className="h-64 rounded-xl" />
-        <Skeleton className="h-48 rounded-xl" />
+        <Skeleton className="h-14 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Skeleton key={i} className="h-56 rounded-xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
+  // ─── Handler lookup for each catalog report card ─────────────────────────
+  // Maps a catalog entry's handler key to its actual function so the
+  // ReportCard component can fire the right generator with one prop.
+  const handlerFor = (key: ReportHandlerKey): (() => void) => {
+    switch (key) {
+      case 'json':
+        return handleGenerateJSON;
+      case 'csv':
+        return handleGenerateExcel;
+      case 'report':
+        return handleGeneratePDF;
+      case 'working-papers':
+        return handleGenerateWorkingPapers;
+      case 'gst-pdf':
+        return handlePrintGSTSummary;
+      case 'compliance-pdf':
+        return handlePrintCompliance;
+      case 'financial-pdf':
+        return handlePrintFinancial;
+      case 'cashflow-pdf':
+        return handlePrintCashFlow;
+      default:
+        return () => {};
+    }
+  };
+
+  const downloadFor = (exportType: string): (() => void) => {
+    const match = recentExports.find((e) => e.exportType === exportType && e.data);
+    return () => match && handleDownloadExport(match);
+  };
+
   // ─── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
-            <Package className="size-5 text-emerald-700" />
+    <div className="gst-container-wide py-6 md:py-8 space-y-8">
+      {/* ═══════════════════════════════════════════════════════════════════════
+          HEADER — page title + summary KPIs
+      ═══════════════════════════════════════════════════════════════════════ */}
+      <header className="space-y-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[#2563EB]/10 border border-[#2563EB]/25">
+              <Package className="size-6 text-[#60A5FA]" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="gst-page-title">Reports &amp; Export Center</h1>
+              <p className="gst-description mt-1.5 max-w-2xl">
+                Generate, export, and download GST returns, reconciliation reports, and audit-ready
+                packages — all in one place.
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
-              Reports & Filing Packages
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Generate, export, and download GST reports, compliance summaries, and financial statements
-            </p>
+          {lastGeneratedAny && (
+            <div className="gst-card gst-card-compact hidden sm:flex items-center gap-2.5 shrink-0">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-[#2563EB]/10 border border-[#2563EB]/20">
+                <Clock className="size-3.5 text-[#60A5FA]" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Last Activity
+                </p>
+                <p className="text-xs text-foreground font-semibold">
+                  {formatRelativeTime(lastGeneratedAny)}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Summary KPIs */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="gst-card gst-card-compact">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#181818] border border-[#222222]">
+                <Package className="size-4 text-muted-foreground" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Total Reports
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-foreground">{TOTAL_REPORTS}</p>
+              </div>
+            </div>
+          </div>
+          <div className="gst-card gst-card-compact">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#2563EB]/10 border border-[#2563EB]/20">
+                <CheckCircle2 className="size-4 text-[#60A5FA]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Ready
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-[#60A5FA]">
+                  {CONFIGURED_REPORTS}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="gst-card gst-card-compact">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#181818] border border-[#222222]">
+                <Database className="size-4 text-muted-foreground" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Saved Reports
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-foreground">
+                  {savedReports.length}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="gst-card gst-card-compact">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#181818] border border-[#222222]">
+                <History className="size-4 text-muted-foreground" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Local History
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-foreground">
+                  {recentExports.length}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          FILTER BAR — search + status filter
+      ═══════════════════════════════════════════════════════════════════════ */}
+      <div className="gst-card gst-card-compact">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search reports by name or keyword…"
+              className="h-10 pl-9 border-[#222222] bg-[#0F0F0F] focus-visible:border-[#2563EB]/60"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-[#181818] hover:text-foreground"
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="hidden sm:inline mr-1 text-xs text-muted-foreground">Status:</span>
+            {(['all', 'ready', 'not_configured'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatusFilter(s)}
+                className={cn(
+                  'gst-btn gst-btn-sm',
+                  statusFilter === s ? 'gst-btn-primary' : 'gst-btn-ghost',
+                )}
+              >
+                {s === 'all' ? 'All' : s === 'ready' ? 'Ready' : 'Not Configured'}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          Tab Navigation — RESTORED report categories
+          EXPORT CONFIGURATION — collapsible card with client / period / sections
       ═══════════════════════════════════════════════════════════════════════ */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="h-auto flex-wrap">
-          <TabsTrigger value="export" className="gap-1.5">
-            <Package className="size-3.5" /> Export Package
-          </TabsTrigger>
-          <TabsTrigger value="gst" className="gap-1.5">
-            <FileText className="size-3.5" /> GST Reports
-          </TabsTrigger>
-          <TabsTrigger value="compliance" className="gap-1.5">
-            <ShieldCheck className="size-3.5" /> Compliance
-          </TabsTrigger>
-          <TabsTrigger value="financial" className="gap-1.5">
-            <TrendingUp className="size-3.5" /> Financial
-          </TabsTrigger>
-          <TabsTrigger value="cashflow" className="gap-1.5">
-            <Wallet className="size-3.5" /> Cash Flow
-          </TabsTrigger>
-          <TabsTrigger value="history" className="gap-1.5">
-            <Clock className="size-3.5" /> History
-          </TabsTrigger>
-        </TabsList>
-
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB: Export Package (existing UI — preserved)
-        ══════════════════════════════════════════════════════════════════ */}
-        <TabsContent value="export" className="space-y-6 mt-4">
-          {/* Export Options */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {/* GSTR-1 JSON */}
-            <Card className="transition-shadow hover:shadow-md">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-50">
-                    <FileJson className="size-5 text-emerald-700" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">GSTR-1 JSON</CardTitle>
-                    <CardDescription className="text-xs mt-0.5">GST Portal Upload Format</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Generate GSTR-1 return in JSON format for upload to GST portal
-                </p>
-                <Button
-                  onClick={handleGenerateJSON}
-                  disabled={generating !== null}
-                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700"
-                >
-                  {generating === 'json' ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <FileJson className="size-4" />
-                  )}
-                  {generating === 'json' ? 'Generating...' : 'Generate'}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* GSTR-1 Excel */}
-            <Card className="transition-shadow hover:shadow-md">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-amber-50">
-                    <FileSpreadsheet className="size-5 text-amber-700" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">GSTR-1 Excel</CardTitle>
-                    <CardDescription className="text-xs mt-0.5">Spreadsheet Export</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Export GSTR-1 data in Excel format for review and records
-                </p>
-                <Button
-                  onClick={handleGenerateExcel}
-                  disabled={generating !== null}
-                  className="w-full gap-2 bg-amber-600 hover:bg-amber-700"
-                >
-                  {generating === 'csv' ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <FileSpreadsheet className="size-4" />
-                  )}
-                  {generating === 'csv' ? 'Exporting...' : 'Export'}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Filing Summary PDF — RESTORED real PDF export */}
-            <Card className="transition-shadow hover:shadow-md">
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-red-50">
-                    <FileText className="size-5 text-red-700" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Filing Summary PDF</CardTitle>
-                    <CardDescription className="text-xs mt-0.5">Comprehensive Report</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Generate comprehensive filing summary report in PDF format
-                </p>
-                <Button
-                  onClick={handleGeneratePDF}
-                  disabled={generating !== null}
-                  className="w-full gap-2 bg-red-600 hover:bg-red-700"
-                >
-                  {generating === 'report' ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <Printer className="size-4" />
-                  )}
-                  {generating === 'report' ? 'Generating...' : 'Generate PDF'}
-                </Button>
-              </CardContent>
-            </Card>
+      <div className="gst-card">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#181818] border border-[#222222]">
+              <Filter className="size-4 text-[#60A5FA]" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="gst-section-title">Export Configuration</h2>
+              <p className="gst-description text-xs">
+                Applies to GSTR-1 JSON, Sales Register, and Working Papers exports
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setConfigOpen((o) => !o)}
+            className="gst-btn gst-btn-ghost gst-btn-sm shrink-0"
+          >
+            <ChevronDown
+              className={cn('size-4 transition-transform duration-200', configOpen && 'rotate-180')}
+            />
+            {configOpen ? 'Collapse' : 'Expand'}
+          </button>
+        </div>
 
-          {/* Configuration Panel */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Search className="size-4 text-emerald-600" />
-                Export Configuration
-              </CardTitle>
-              <CardDescription>
-                Select the client, period, and sections to include in the export
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {/* Client Selector */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Client</label>
-                  <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Client" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Clients</SelectItem>
-                      {clients.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.tradeName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Month Selector */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Month</label>
-                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Month" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MONTHS.map((m, i) => (
-                        <SelectItem key={i} value={(i + 1).toString().padStart(2, '0')}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Year Selector */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Year</label>
-                  <Select value={selectedYear} onValueChange={setSelectedYear}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[2023, 2024, 2025, 2026].map((y) => (
-                        <SelectItem key={y} value={y.toString()}>
-                          {y}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Return Type */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Return Type</label>
-                  <Select value={returnType} onValueChange={setReturnType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Return Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="GSTR-1">GSTR-1</SelectItem>
-                      <SelectItem value="GSTR-3B">GSTR-3B</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <Separator className="my-4" />
-
-              {/* Section Checkboxes */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Include Sections</label>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                  {SECTION_KEYS.map((section) => (
-                    <div key={section} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`section-${section}`}
-                        checked={includeSections[section]}
-                        onCheckedChange={() => toggleSection(section)}
-                      />
-                      <label
-                        htmlFor={`section-${section}`}
-                        className="text-sm cursor-pointer select-none"
-                      >
-                        {section.toUpperCase()}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Preview Section */}
-          <Card className="border-emerald-200 bg-gradient-to-r from-emerald-50/50 to-teal-50/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base text-emerald-800">
-                <Eye className="size-4" />
-                Export Preview
-              </CardTitle>
-              <CardDescription>
-                Summary of data that will be included in the export for{' '}
-                <span className="font-medium text-emerald-700">{periodToLabel(selectedPeriod)}</span>
-                {selectedClientId !== 'all' && (
-                  <>
-                    {' '}—{' '}
-                    <span className="font-medium text-emerald-700">
-                      {clients.find((c) => c.id === selectedClientId)?.tradeName}
-                    </span>
-                  </>
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="rounded-lg border border-emerald-200 bg-white p-4 text-center">
-                  <p className="text-sm text-emerald-600">Total Invoices</p>
-                  <p className="text-2xl font-bold text-emerald-900">{formatNumber(totalInvoices)}</p>
-                </div>
-                <div className="rounded-lg border border-emerald-200 bg-white p-4 text-center">
-                  <p className="text-sm text-emerald-600">Total Taxable Value</p>
-                  <p className="text-2xl font-bold text-emerald-900">{formatCurrency(totalTaxableValue)}</p>
-                </div>
-                <div className="rounded-lg border border-emerald-200 bg-white p-4 text-center">
-                  <p className="text-sm text-emerald-600">Total Tax</p>
-                  <p className="text-2xl font-bold text-emerald-900">{formatCurrency(totalTax)}</p>
-                </div>
-              </div>
-
-              <Separator className="my-4 bg-emerald-200" />
-
-              {/* Section Breakdown */}
-              <div className="overflow-x-auto rounded-lg border border-emerald-200 bg-white">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-emerald-50/50">
-                      <TableHead className="whitespace-nowrap">Section</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Invoices</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Taxable Value</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Total Tax</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sectionPreviews.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="h-20 text-center text-muted-foreground">
-                          No sections selected
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      sectionPreviews.map((sp) => (
-                        <TableRow key={sp.section} className="hover:bg-emerald-50/30">
-                          <TableCell className="whitespace-nowrap">
-                            <Badge
-                              variant="outline"
-                              className="border-emerald-200 bg-emerald-50 text-emerald-700"
-                            >
-                              {GSTR1_SECTION_LABELS[sp.section]}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-right font-medium">
-                            {formatNumber(sp.invoiceCount)}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-right">
-                            {formatCurrency(sp.taxableValue)}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-right">
-                            {formatCurrency(sp.totalTax)}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* GST Working Papers */}
-          <Card className="border-amber-200 bg-gradient-to-r from-amber-50/50 to-orange-50/50">
-            <CardHeader>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-amber-100">
-                    <FileText className="size-5 text-amber-700" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base text-amber-900">GST Working Papers</CardTitle>
-                    <CardDescription>
-                      Detailed working papers with reconciliation summaries, tax computations, and section-wise breakdowns for audit and review purposes
-                    </CardDescription>
-                  </div>
-                </div>
-                <Button
-                  onClick={handleGenerateWorkingPapers}
-                  disabled={generating !== null}
-                  className="gap-2 bg-amber-600 hover:bg-amber-700 shrink-0"
-                >
-                  {generating === 'working-papers' ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <Printer className="size-4" />
-                  )}
-                  {generating === 'working-papers' ? 'Generating...' : 'Generate Working Papers PDF'}
-                </Button>
-              </div>
-            </CardHeader>
-          </Card>
-        </TabsContent>
-
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB: GST Reports — GSTR-1 + GSTR-3B Summary (RESTORED)
-        ══════════════════════════════════════════════════════════════════ */}
-        <TabsContent value="gst" className="space-y-6 mt-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100">
-                    <FileText className="size-5 text-emerald-700" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">GST Filing Reports</CardTitle>
-                    <CardDescription>
-                      GSTR-1 & GSTR-3B summary based on live returns data
-                    </CardDescription>
-                  </div>
-                </div>
-                <Button
-                  onClick={handlePrintGSTSummary}
-                  disabled={generating !== null}
-                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
-                >
-                  {generating === 'gst-pdf' ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <Printer className="size-4" />
-                  )}
-                  Export PDF
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                {/* GSTR-1 Summary */}
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-emerald-900">GSTR-1 Summary</h3>
-                    <Badge variant="outline" className="border-emerald-300 bg-white text-emerald-700">
-                      {gstFilingSummary.gstr1Total} total
-                    </Badge>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Filed</span>
-                      <span className="font-semibold text-emerald-700">{formatNumber(gstFilingSummary.gstr1Filed)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Pending</span>
-                      <span className="font-semibold text-amber-700">{formatNumber(gstFilingSummary.gstr1Pending)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* GSTR-3B Summary */}
-                <div className="rounded-lg border border-teal-200 bg-teal-50/40 p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-teal-900">GSTR-3B Summary</h3>
-                    <Badge variant="outline" className="border-teal-300 bg-white text-teal-700">
-                      {gstFilingSummary.gstr3bTotal} total
-                    </Badge>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Filed</span>
-                      <span className="font-semibold text-teal-700">{formatNumber(gstFilingSummary.gstr3bFiled)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Pending</span>
-                      <span className="font-semibold text-amber-700">{formatNumber(gstFilingSummary.gstr3bPending)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Output Tax Liability */}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Total Taxable Value</p>
-                  <p className="text-xl font-bold text-foreground">{formatCurrency(gstSummary?.taxableSales ?? 0)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Total Output Tax</p>
-                  <p className="text-xl font-bold text-foreground">{formatCurrency(gstSummary?.totalOutputTax ?? 0)}</p>
-                </div>
-              </div>
-
-              {/* Returns Table */}
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="whitespace-nowrap">Return Type</TableHead>
-                      <TableHead className="whitespace-nowrap">Period</TableHead>
-                      <TableHead className="whitespace-nowrap">Status</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Taxable Value</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Total Tax</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {fireReturns.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="h-20 text-center text-muted-foreground">
-                          No returns data available
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      fireReturns.slice(0, 15).map((r, idx) => (
-                        <TableRow key={r.returnId ?? r.id ?? idx} className="hover:bg-muted/30">
-                          <TableCell className="whitespace-nowrap font-medium">{r.returnType}</TableCell>
-                          <TableCell className="whitespace-nowrap">{r.period}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">{r.status}</Badge>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-right">{formatCurrency(r.totalTaxableValue || 0)}</TableCell>
-                          <TableCell className="whitespace-nowrap text-right">{formatCurrency(r.totalTax || 0)}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB: Compliance Reports (RESTORED)
-        ══════════════════════════════════════════════════════════════════ */}
-        <TabsContent value="compliance" className="space-y-6 mt-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100">
-                    <ShieldCheck className="size-5 text-blue-700" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Compliance Status Report</CardTitle>
-                    <CardDescription>
-                      Filing compliance, ITC reconciliation, and risk metrics across all clients
-                    </CardDescription>
-                  </div>
-                </div>
-                <Button
-                  onClick={handlePrintCompliance}
-                  disabled={generating !== null}
-                  className="gap-2 bg-blue-600 hover:bg-blue-700"
-                >
-                  {generating === 'compliance-pdf' ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <Printer className="size-4" />
-                  )}
-                  Export PDF
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Filing Rate</p>
-                  <p className="text-xl font-bold text-emerald-700">{complianceSummary.filingRate}%</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Filed Returns</p>
-                  <p className="text-xl font-bold text-foreground">{formatNumber(complianceSummary.filedReturns)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Overdue</p>
-                  <p className="text-xl font-bold text-red-700">{formatNumber(complianceSummary.overdueReturns)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Avg Health Score</p>
-                  <p className="text-xl font-bold text-foreground">{formatNumber(complianceSummary.avgHealth)}</p>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">ITC Match Rate</p>
-                  <p className="text-xl font-bold text-emerald-700">{complianceSummary.matchRate}%</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">High-Risk Records</p>
-                  <p className="text-xl font-bold text-amber-700">{formatNumber(complianceSummary.reconHighRisk)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Critical Issues</p>
-                  <p className="text-xl font-bold text-red-700">{formatNumber(complianceSummary.criticalIssues)}</p>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="whitespace-nowrap">Metric</TableHead>
-                      <TableHead className="whitespace-nowrap">Value</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow><TableCell className="whitespace-nowrap">Total Returns</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.totalReturns)}</TableCell></TableRow>
-                    <TableRow><TableCell className="whitespace-nowrap">Filed Returns</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.filedReturns)}</TableCell></TableRow>
-                    <TableRow><TableCell className="whitespace-nowrap">Draft Returns</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.draftReturns)}</TableCell></TableRow>
-                    <TableRow><TableCell className="whitespace-nowrap">Overdue Returns</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.overdueReturns)}</TableCell></TableRow>
-                    <TableRow><TableCell className="whitespace-nowrap">Reconciliation Runs</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.reconCount)}</TableCell></TableRow>
-                    <TableRow><TableCell className="whitespace-nowrap">Warnings</TableCell><TableCell className="font-medium">{formatNumber(complianceSummary.warnings)}</TableCell></TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB: Financial Reports (RESTORED)
-        ══════════════════════════════════════════════════════════════════ */}
-        <TabsContent value="financial" className="space-y-6 mt-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100">
-                    <TrendingUp className="size-5 text-purple-700" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Financial Summary Report</CardTitle>
-                    <CardDescription>
-                      Revenue, tax liability, and section-wise financial breakdown
-                    </CardDescription>
-                  </div>
-                </div>
-                <Button
-                  onClick={handlePrintFinancial}
-                  disabled={generating !== null}
-                  className="gap-2 bg-purple-600 hover:bg-purple-700"
-                >
-                  {generating === 'financial-pdf' ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <Printer className="size-4" />
-                  )}
-                  Export PDF
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Total Revenue</p>
-                  <p className="text-xl font-bold text-foreground">{formatCurrency(financialSummary.totalRevenue)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Taxable Value</p>
-                  <p className="text-xl font-bold text-foreground">{formatCurrency(financialSummary.totalTaxable)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Total Tax Volume</p>
-                  <p className="text-xl font-bold text-purple-700">{formatCurrency(financialSummary.totalTaxVolume)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Invoice Count</p>
-                  <p className="text-xl font-bold text-foreground">{formatNumber(financialSummary.invoiceCount)}</p>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">CGST</p>
-                  <p className="text-lg font-bold text-foreground">{formatCurrency(financialSummary.cgstTotal)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">SGST</p>
-                  <p className="text-lg font-bold text-foreground">{formatCurrency(financialSummary.sgstTotal)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">IGST</p>
-                  <p className="text-lg font-bold text-foreground">{formatCurrency(financialSummary.igstTotal)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Cess</p>
-                  <p className="text-lg font-bold text-foreground">{formatCurrency(financialSummary.cessTotal)}</p>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="whitespace-nowrap">Section</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Invoices</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Taxable Value</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Tax</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {financialSummary.bySection.map((s) => (
-                      <TableRow key={s.section} className="hover:bg-muted/30">
-                        <TableCell className="whitespace-nowrap font-medium">
-                          {GSTR1_SECTION_LABELS[s.section] ?? s.section.toUpperCase()}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{formatNumber(s.count)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(s.taxable)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-right">{formatCurrency(s.tax)}</TableCell>
-                      </TableRow>
+        {configOpen && (
+          <div className="mt-5 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Client
+                </label>
+                <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                  <SelectTrigger className="bg-[#0F0F0F] border-[#222222]">
+                    <SelectValue placeholder="Select Client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Clients</SelectItem>
+                    {clients.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.tradeName}
+                      </SelectItem>
                     ))}
-                  </TableBody>
-                </Table>
+                  </SelectContent>
+                </Select>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Month
+                </label>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="bg-[#0F0F0F] border-[#222222]">
+                    <SelectValue placeholder="Select Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map((m, i) => (
+                      <SelectItem key={i} value={(i + 1).toString().padStart(2, '0')}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Year
+                </label>
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                  <SelectTrigger className="bg-[#0F0F0F] border-[#222222]">
+                    <SelectValue placeholder="Select Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[2023, 2024, 2025, 2026].map((y) => (
+                      <SelectItem key={y} value={y.toString()}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Return Type
+                </label>
+                <Select value={returnType} onValueChange={setReturnType}>
+                  <SelectTrigger className="bg-[#0F0F0F] border-[#222222]">
+                    <SelectValue placeholder="Return Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GSTR-1">GSTR-1</SelectItem>
+                    <SelectItem value="GSTR-3B">GSTR-3B</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB: Cash Flow Reports (RESTORED)
-        ══════════════════════════════════════════════════════════════════ */}
-        <TabsContent value="cashflow" className="space-y-6 mt-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-teal-100">
-                    <Wallet className="size-5 text-teal-700" />
+            <Separator className="bg-[#1F1F1F]" />
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Include Sections
+              </label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                {SECTION_KEYS.map((section) => (
+                  <label
+                    key={section}
+                    htmlFor={`section-${section}`}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] px-3 py-2 transition-colors hover:border-[#2A2A2A]"
+                  >
+                    <Checkbox
+                      id={`section-${section}`}
+                      checked={includeSections[section]}
+                      onCheckedChange={() => toggleSection(section)}
+                    />
+                    <span className="select-none text-xs font-medium">
+                      {section.toUpperCase()}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <Separator className="bg-[#1F1F1F]" />
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] p-3">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Total Invoices
+                </p>
+                <p className="mt-0.5 text-lg font-bold text-foreground tabular-nums">
+                  {formatNumber(totalInvoices)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] p-3">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Taxable Value
+                </p>
+                <p className="mt-0.5 text-lg font-bold text-foreground tabular-nums">
+                  {formatCurrency(totalTaxableValue)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] p-3">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Total Tax
+                </p>
+                <p className="mt-0.5 text-lg font-bold text-foreground tabular-nums">
+                  {formatCurrency(totalTax)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          REPORTS CATALOG — 5 categories of premium report cards
+      ═══════════════════════════════════════════════════════════════════════ */}
+      {totalFilteredReports === 0 ? (
+        <div className="gst-card">
+          <div className="gst-empty-state">
+            <div className="gst-empty-state-icon">
+              <Search className="size-7 text-muted-foreground" />
+            </div>
+            <p className="gst-empty-state-title">No reports match your search</p>
+            <p className="gst-empty-state-desc">
+              Try a different keyword or change the status filter to see more reports.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setStatusFilter('all');
+              }}
+              className="gst-btn gst-btn-sm gst-btn-primary"
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
+      ) : (
+        filteredCatalog.map((category, catIdx) => {
+          const CategoryIcon = category.icon;
+          return (
+            <section key={category.id} className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#181818] border border-[#222222]">
+                    <CategoryIcon className="size-4 text-[#60A5FA]" />
                   </div>
-                  <div>
-                    <CardTitle className="text-base">Cash Flow Analysis Report</CardTitle>
-                    <CardDescription>
-                      ITC reconciliation, match rates, and cash flow impact analysis
-                    </CardDescription>
+                  <div className="min-w-0">
+                    <h2 className="gst-section-title truncate">{category.title}</h2>
+                    <p className="gst-description truncate text-xs">{category.description}</p>
                   </div>
                 </div>
-                <Button
-                  onClick={handlePrintCashFlow}
-                  disabled={generating !== null}
-                  className="gap-2 bg-teal-600 hover:bg-teal-700"
+                <Badge
+                  variant="outline"
+                  className="shrink-0 text-[11px] uppercase tracking-wider"
                 >
-                  {generating === 'cashflow-pdf' ? (
-                    <RefreshCw className="size-4 animate-spin" />
-                  ) : (
-                    <Printer className="size-4" />
-                  )}
-                  Export PDF
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Total Records</p>
-                  <p className="text-xl font-bold text-foreground">{formatNumber(cashFlowSummary.totalRecords)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Matched</p>
-                  <p className="text-xl font-bold text-emerald-700">{formatNumber(cashFlowSummary.matched)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Unmatched</p>
-                  <p className="text-xl font-bold text-red-700">{formatNumber(cashFlowSummary.unmatched)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Match Rate</p>
-                  <p className="text-xl font-bold text-teal-700">{cashFlowSummary.matchRate}%</p>
-                </div>
+                  {category.reports.length}{' '}
+                  {category.reports.length === 1 ? 'report' : 'reports'}
+                </Badge>
               </div>
 
-              <Separator />
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">Partial Matches</p>
-                  <p className="text-lg font-bold text-amber-700">{formatNumber(cashFlowSummary.partial)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">High-Risk Records</p>
-                  <p className="text-lg font-bold text-red-700">{formatNumber(cashFlowSummary.highRisk)}</p>
-                </div>
-                <div className="rounded-lg border bg-white p-4">
-                  <p className="text-xs text-muted-foreground">ITC Difference</p>
-                  <p className="text-lg font-bold text-foreground">{formatCurrency(cashFlowSummary.itcDifference)}</p>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="whitespace-nowrap">Sources</TableHead>
-                      <TableHead className="whitespace-nowrap">Period</TableHead>
-                      <TableHead className="whitespace-nowrap">Status</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Total</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">Matched</TableHead>
-                      <TableHead className="whitespace-nowrap text-right">ITC Diff</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {cashFlowSummary.byRecon.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="h-20 text-center text-muted-foreground">
-                          No reconciliation runs available
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      cashFlowSummary.byRecon.map((r, idx) => (
-                        <TableRow key={idx} className="hover:bg-muted/30">
-                          <TableCell className="whitespace-nowrap text-sm">{r.sources}</TableCell>
-                          <TableCell className="whitespace-nowrap text-sm">{r.period}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">{r.status}</Badge>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-right text-sm">{formatNumber(r.total)}</TableCell>
-                          <TableCell className="whitespace-nowrap text-right text-sm">{formatNumber(r.matched)}</TableCell>
-                          <TableCell className="whitespace-nowrap text-right text-sm">{formatCurrency(r.itcDiff)}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB: Report History (RESTORED — now persisted to localStorage + Firestore)
-        ══════════════════════════════════════════════════════════════════ */}
-        <TabsContent value="history" className="space-y-6 mt-4">
-          {/* ═══ SAVED REPORTS (Firestore — canonical source going forward) ═══ */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Database className="size-4 text-emerald-600" />
-                  <div>
-                    <CardTitle className="text-base">Saved Reports</CardTitle>
-                    <CardDescription>
-                      All reports persisted to Firestore — accessible across devices &amp; sessions
-                    </CardDescription>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {category.reports.map((report, idx) => (
+                  <div
+                    key={report.id}
+                    className="gst-animate-in"
+                    style={{ animationDelay: `${(catIdx * 4 + idx) * 50}ms` }}
+                  >
+                    <ReportCard
+                      report={report}
+                      generating={generating}
+                      lastGeneratedAt={findReportLastGenerated(report.exportType)}
+                      hasDownload={hasDownloadForReport(report.exportType, report.fileType)}
+                      onGenerate={handlerFor(report.handler)}
+                      onDownload={downloadFor(report.exportType)}
+                    />
                   </div>
-                </div>
-                {savedReports.length > 0 && (
-                  <Badge variant="outline" className="text-xs">
-                    {savedReports.length} saved
-                  </Badge>
-                )}
+                ))}
               </div>
-            </CardHeader>
-            <CardContent>
+            </section>
+          );
+        })
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          HISTORY & SAVED REPORTS — Firestore + localStorage
+      ═══════════════════════════════════════════════════════════════════════ */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#181818] border border-[#222222]">
+            <History className="size-4 text-[#60A5FA]" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="gst-section-title">History &amp; Saved Reports</h2>
+            <p className="gst-description text-xs">
+              All previously generated reports — saved to the cloud or stored locally in this browser
+            </p>
+          </div>
+        </div>
+
+        <Tabs value={historyTab} onValueChange={setHistoryTab}>
+          <TabsList className="h-auto">
+            <TabsTrigger value="saved" className="gap-1.5">
+              <Database className="size-3.5" />
+              Saved Reports
+              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[11px]">
+                {savedReports.length}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="local" className="gap-1.5">
+              <Clock className="size-3.5" />
+              Local History
+              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[11px]">
+                {recentExports.length}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* ── SAVED REPORTS (Firestore) ── */}
+          <TabsContent value="saved" className="mt-4">
+            <div className="gst-card">
+              <div className="mb-4">
+                <h3 className="gst-card-title">Saved Reports</h3>
+                <p className="gst-description text-xs">
+                  Persisted to the cloud — accessible across devices &amp; sessions
+                </p>
+              </div>
+
               {fireReportsQ.loading ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map((i) => (
@@ -2402,12 +2531,12 @@ export default function ReportsPage() {
                   ))}
                 </div>
               ) : fireReportsQ.error ? (
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50/50 p-3 text-sm text-red-700">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
                   <span>Failed to load saved reports: {fireReportsQ.error}</span>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs gap-1.5 border-red-300 text-red-700 hover:bg-red-100"
+                    className="h-7 gap-1.5 border-red-500/30 text-xs text-red-400 hover:bg-red-500/10"
                     onClick={() => window.location.reload()}
                   >
                     <RefreshCw className="size-3" />
@@ -2415,39 +2544,54 @@ export default function ReportsPage() {
                   </Button>
                 </div>
               ) : savedReports.length === 0 ? (
-                <EmptyState
-                  icon={Database}
-                  title="No saved reports yet"
-                  description="Generate your first report to see it here."
-                />
+                <div className="gst-empty-state">
+                  <div className="gst-empty-state-icon">
+                    <Database className="size-7 text-muted-foreground" />
+                  </div>
+                  <p className="gst-empty-state-title">No saved reports yet</p>
+                  <p className="gst-empty-state-desc">
+                    Generate your first report above — it will be saved to the cloud automatically
+                    for access across all your devices.
+                  </p>
+                </div>
               ) : (
-                <div className="overflow-x-auto rounded-lg border">
+                <div className="max-h-96 overflow-y-auto rounded-lg border border-[#1F1F1F]">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-muted/50">
+                      <TableRow className="bg-[#0F0F0F] hover:bg-[#0F0F0F]">
                         <TableHead className="whitespace-nowrap">Report Type</TableHead>
                         <TableHead className="whitespace-nowrap">Client</TableHead>
                         <TableHead className="whitespace-nowrap">Period</TableHead>
-                        <TableHead className="whitespace-nowrap">Generated At</TableHead>
+                        <TableHead className="whitespace-nowrap">Generated</TableHead>
                         <TableHead className="whitespace-nowrap">Size</TableHead>
-                        <TableHead className="whitespace-nowrap">Actions</TableHead>
+                        <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {savedReports.map((report) => {
-                        const exportType = String(report.metadata?.exportType ?? report.title ?? report.reportType);
+                        const exportType = String(
+                          report.metadata?.exportType ?? report.title ?? report.reportType,
+                        );
                         const config = EXPORT_TYPE_CONFIG[exportType];
-                        const sizeLabel = String(report.metadata?.fileSizeLabel ?? (
-                          report.fileSize > 0 ? `${(report.fileSize / 1024).toFixed(1)} KB` : '—'
-                        ));
+                        const sizeLabel = String(
+                          report.metadata?.fileSizeLabel ??
+                            (report.fileSize > 0
+                              ? `${(report.fileSize / 1024).toFixed(1)} KB`
+                              : '—'),
+                        );
                         return (
-                          <TableRow key={report.reportId} className="hover:bg-muted/30">
+                          <TableRow key={report.reportId} className="hover:bg-[#0F0F0F]">
                             <TableCell className="whitespace-nowrap">
                               <div className="flex items-center gap-2">
-                                <div className={`flex size-7 items-center justify-center rounded ${config?.bgColor ?? 'bg-slate-50'}`}>
+                                <div
+                                  className={cn(
+                                    'flex size-7 items-center justify-center rounded',
+                                    config?.bgColor ?? 'bg-white/[0.03]',
+                                  )}
+                                >
                                   {config?.icon ?? <FileText className="size-3.5" />}
                                 </div>
-                                <span className="font-medium text-sm">{exportType}</span>
+                                <span className="text-sm font-medium">{exportType}</span>
                               </div>
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-sm">
@@ -2458,14 +2602,16 @@ export default function ReportsPage() {
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                               {report.generatedAt
-                                ? new Date(report.generatedAt as string).toLocaleString()
+                                ? formatRelativeTime(report.generatedAt as string)
                                 : '—'}
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-sm">
-                              <Badge variant="outline" className="text-xs">{sizeLabel}</Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {sizeLabel}
+                              </Badge>
                             </TableCell>
-                            <TableCell className="whitespace-nowrap">
-                              <div className="flex items-center gap-1">
+                            <TableCell className="whitespace-nowrap text-right">
+                              <div className="inline-flex items-center gap-1">
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -2494,90 +2640,88 @@ export default function ReportsPage() {
                   </Table>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </TabsContent>
 
-          {/* ═══ LOCAL HISTORY (localStorage — back-compat) ═══ */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className="size-4 text-amber-600" />
-                  <div>
-                    <CardTitle className="text-base">Report History</CardTitle>
-                    <CardDescription>
-                      Last {HISTORY_LIMIT} generated & exported reports — local browser history
-                    </CardDescription>
-                  </div>
+          {/* ── LOCAL HISTORY (localStorage) ── */}
+          <TabsContent value="local" className="mt-4">
+            <div className="gst-card">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="gst-card-title">Local Report History</h3>
+                  <p className="gst-description text-xs">
+                    Last {HISTORY_LIMIT} generated reports — stored only in this browser
+                  </p>
                 </div>
                 {recentExports.length > 0 && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleClearHistory}
-                    className="gap-1.5 text-red-600 hover:text-red-700 hover:border-red-300"
+                    className="gap-1.5 text-red-500 hover:border-red-500/30 hover:text-red-700"
                   >
                     <Trash2 className="size-3.5" />
                     Clear All
                   </Button>
                 )}
               </div>
-            </CardHeader>
-            <CardContent>
+
               {recentExports.length === 0 ? (
-                <ProfessionalEmptyState
-                  icon={BarChart3}
-                  title="No reports generated yet"
-                  description="Use the Export Package tab to generate your first GST, compliance, financial, or cash-flow report — completed exports will appear here for quick re-download."
-                  accent="violet"
-                  compact
-                  action={{
-                    label: 'Open Export Package',
-                    onClick: () => setActiveTab('export'),
-                  }}
-                />
+                <div className="gst-empty-state">
+                  <div className="gst-empty-state-icon">
+                    <Clock className="size-7 text-muted-foreground" />
+                  </div>
+                  <p className="gst-empty-state-title">No reports generated yet</p>
+                  <p className="gst-empty-state-desc">
+                    Generate a report above — completed exports will appear here for quick
+                    re-download.
+                  </p>
+                </div>
               ) : (
-                <div className="overflow-x-auto rounded-lg border">
+                <div className="max-h-96 overflow-y-auto rounded-lg border border-[#1F1F1F]">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-muted/50">
+                      <TableRow className="bg-[#0F0F0F] hover:bg-[#0F0F0F]">
                         <TableHead className="whitespace-nowrap">Report Type</TableHead>
                         <TableHead className="whitespace-nowrap">Client</TableHead>
                         <TableHead className="whitespace-nowrap">Period</TableHead>
-                        <TableHead className="whitespace-nowrap">Generated At</TableHead>
+                        <TableHead className="whitespace-nowrap">Generated</TableHead>
                         <TableHead className="whitespace-nowrap">File Size</TableHead>
-                        <TableHead className="whitespace-nowrap">Actions</TableHead>
+                        <TableHead className="whitespace-nowrap text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {recentExports.map((exp) => {
                         const config = EXPORT_TYPE_CONFIG[exp.exportType];
                         return (
-                          <TableRow key={exp.id} className="hover:bg-muted/30">
+                          <TableRow key={exp.id} className="hover:bg-[#0F0F0F]">
                             <TableCell className="whitespace-nowrap">
                               <div className="flex items-center gap-2">
-                                <div className={`flex size-7 items-center justify-center rounded ${config?.bgColor ?? 'bg-slate-50'}`}>
+                                <div
+                                  className={cn(
+                                    'flex size-7 items-center justify-center rounded',
+                                    config?.bgColor ?? 'bg-white/[0.03]',
+                                  )}
+                                >
                                   {config?.icon ?? <FileText className="size-3.5" />}
                                 </div>
-                                <span className="font-medium text-sm">{exp.exportType}</span>
+                                <span className="text-sm font-medium">{exp.exportType}</span>
                               </div>
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-sm">
                               {exp.clientName}
                             </TableCell>
-                            <TableCell className="whitespace-nowrap text-sm">
-                              {exp.period}
-                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-sm">{exp.period}</TableCell>
                             <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                              {new Date(exp.generatedAt).toLocaleString()}
+                              {formatRelativeTime(exp.generatedAt)}
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-sm">
                               <Badge variant="outline" className="text-xs">
                                 {exp.fileSize}
                               </Badge>
                             </TableCell>
-                            <TableCell className="whitespace-nowrap">
-                              <div className="flex items-center gap-1">
+                            <TableCell className="whitespace-nowrap text-right">
+                              <div className="inline-flex items-center gap-1">
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -2615,32 +2759,34 @@ export default function ReportsPage() {
                   </Table>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </section>
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          Preview Dialog (kept for export-package view-as-JSON)
+          PREVIEW DIALOG (preserved for export-package view-as-JSON)
       ═══════════════════════════════════════════════════════════════════════ */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Eye className="size-4 text-emerald-600" />
+              <Eye className="size-4 text-[#60A5FA]" />
               Export Preview — {previewData?.exportType}
             </DialogTitle>
           </DialogHeader>
           {previewData?.data ? (
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <pre className="max-h-96 overflow-auto text-xs whitespace-pre-wrap break-words">
+            <div className="rounded-lg border border-[#1F1F1F] bg-[#0F0F0F] p-4">
+              <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">
                 {JSON.stringify(previewData.data, null, 2)}
               </pre>
             </div>
           ) : (
             <div className="py-8 text-center text-muted-foreground">
               <p className="text-sm">Preview not available for this export type</p>
-              <p className="text-xs mt-1">The PDF was opened in your browser's print dialog</p>
+              <p className="mt-1 text-xs">
+                The PDF was opened in your browser&apos;s print dialog
+              </p>
             </div>
           )}
         </DialogContent>

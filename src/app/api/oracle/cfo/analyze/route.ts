@@ -18,6 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { loadLiveBusinessData, type ToolContext } from '@/lib/oracle-cfo/tools';
 import { routeIntent } from '@/lib/oracle-cfo/intent';
 import { buildDecisionCard } from '@/lib/oracle-cfo/explain';
@@ -27,6 +28,11 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  // ─── AUTH GUARD (ORACLE-AUTH-GUARDS) ──
+  const authResult = await requireAuth(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   const startedAt = Date.now();
   let body: any = {};
   try {
@@ -47,6 +53,10 @@ export async function POST(request: NextRequest) {
     userEmail: String(body.userEmail ?? 'preview@gstpilot.in'),
     userRole: (body.userRole as ToolContext['userRole']) ?? 'manager',
   };
+
+  const orgId0 = String(body.organizationId ?? body.orgId ?? body.firmId ?? '');
+  const orgResult = await requireOrgMembership(uid, orgId0);
+  if (orgResult instanceof NextResponse) return orgResult;
 
   try {
     // ─── 1. Load live business data ──────────────────────────────────────

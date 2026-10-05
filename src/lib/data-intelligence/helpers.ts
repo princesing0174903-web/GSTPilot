@@ -10,16 +10,33 @@ export function parseJson<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
   try {
     return JSON.parse(raw) as T;
-  } catch {
+  } catch (err) {
+    // Distinguish "field was empty" from "field contained malformed JSON".
+    // Most callers stash DB stringified arrays here, so corruption is real.
+    console.warn(
+      '[data-intelligence/helpers] parseJson failed — returning fallback:',
+      err instanceof Error ? err.message : err,
+    );
     return fallback;
   }
 }
 
-/** Safe Prisma accessor — returns [] if the model call fails (e.g. empty table). */
+/**
+ * Safe Prisma accessor — returns [] if the model call fails.
+ *
+ * NOTE: this still returns an empty array (preserving the existing contract)
+ * but now logs the failure so "no rows exist" stays distinguishable from
+ * "the DB query threw". Without this log, downstream consumers cannot tell
+ * whether the table is empty or whether the connection is unreachable.
+ */
 export async function safeFindMany<T>(fn: () => Promise<T[]>): Promise<T[]> {
   try {
     return await fn();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[data-intelligence/helpers] safeFindMany failed — returning []:',
+      err instanceof Error ? err.message : err,
+    );
     return [];
   }
 }
@@ -27,7 +44,11 @@ export async function safeFindMany<T>(fn: () => Promise<T[]>): Promise<T[]> {
 export async function safeCount(fn: () => Promise<number>): Promise<number> {
   try {
     return await fn();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[data-intelligence/helpers] safeCount failed — returning 0:',
+      err instanceof Error ? err.message : err,
+    );
     return 0;
   }
 }
@@ -35,7 +56,11 @@ export async function safeCount(fn: () => Promise<number>): Promise<number> {
 export async function safeAggregate<T>(fn: () => Promise<T>): Promise<T | null> {
   try {
     return await fn();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[data-intelligence/helpers] safeAggregate failed — returning null:',
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }

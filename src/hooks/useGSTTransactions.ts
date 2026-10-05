@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot — useGSTTransactions() Hook
@@ -87,7 +88,7 @@ export function useGSTTransactions(options?: {
   period?: string;
   transactionType?: GSTTransactionType;
 }): UseGSTTransactionsResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
 
   const [transactions, setTransactions] = useState<GSTTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,7 +107,7 @@ export function useGSTTransactions(options?: {
 
   // ── Real-time subscription ──
   useEffect(() => {
-    if (!orgId) {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setTransactions([]);
       setLoading(false);
       setError(null);
@@ -139,7 +140,7 @@ export function useGSTTransactions(options?: {
     );
 
     return () => unsubscribe();
-  }, [orgId, options?.period, transactionType, retryTick]);
+  }, [orgId, isPreviewMode, options?.period, transactionType, retryTick]);
 
   // ── Retry handler ──
   const retry = useCallback(() => {

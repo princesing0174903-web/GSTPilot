@@ -17,10 +17,14 @@
  * this module is compiled on-demand AFTER the user authenticates.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useApp } from '@/contexts/AppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import dynamic from 'next/dynamic'
+import { getViewMeta } from '@/lib/navigation-registry'
+import { ChevronRight, Menu } from 'lucide-react'
+import { sendVerificationEmail } from '@/lib/auth'
+import { boot } from '@/lib/perf/boot-tracer'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -33,23 +37,42 @@ import {
 import { Zap, LogOut, User, Settings, MailCheck, Search, Bell, Sun, Moon } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { LeftNav } from '@/components/layout/LeftNav'
-import { FloatingDock } from '@/components/layout/FloatingDock'
-import { NotificationsSheet } from '@/components/layout/NotificationsSheet'
-import { OraclePanel } from '@/components/oracle/OraclePanel'
-import { OracleDockSidebar, readInitialOracleState } from '@/components/oracle/OracleDockSidebar'
-import { BrandLogo } from '@/components/brand'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+// NOTE: OraclePanel + OracleDockSidebar removed — Oracle is now a full-page
+// experience at /oracle, launched by <OracleLauncher /> (mounted globally in
+// providers.tsx). No more docked sidebar popup.
+// NOTE (Task 9): BrandLogo import removed — the duplicate brand mark that
+// lived in the top bar has been removed. Branding now lives ONLY in the
+// sidebar (LeftNav.tsx), so the content area starts with the breadcrumb.
 import { AmbientBackground } from '@/components/layout/AmbientBackground'
-import CommandPalette from '@/components/command-palette/CommandPalette'
+import { ViewErrorBoundary } from '@/components/error/ViewErrorBoundary'
+import { PremiumPageLoader } from '@/components/ui/premium-loading'
 
-// DashboardViews is itself a lazy-loaded registry of 150 view components.
+// ── LAZY-LOADED SHELL COMPONENTS ─────────────────────────────────────────
+// CommandPalette (1400 lines) + NotificationsSheet are heavy and only used
+// on demand (⌘K press / bell click). Loading them eagerly adds ~2–4s to the
+// dashboard shell compile on a cold dev server. By deferring them to their
+// own chunks, the shell renders faster and the palette/sheet compile in the
+// background after the user is already interactive.
+//
+// Both are gated by user interaction (open state), so they're never rendered
+// until the user actually needs them — and by then the chunk is almost
+// certainly already cached from the background compile.
+const CommandPalette = dynamic(
+  () => import('@/components/command-palette/CommandPalette').then((m) => ({ default: m.default })),
+  { ssr: false, loading: () => null },
+)
+const NotificationsSheet = dynamic(
+  () => import('@/components/layout/NotificationsSheet').then((m) => ({ default: m.NotificationsSheet })),
+  { ssr: false, loading: () => null },
+)
+
+// DashboardViews is a lazy-loaded registry of ~21 real view components.
 // Keeping it dynamic means this shell file only compiles the layout chrome,
-// not every dashboard view.
+// not every dashboard view. (Product Mode · Step 0: fakes are feature-flagged
+// off and no longer in the build graph.)
 const DashboardViews = dynamic(() => import('@/components/DashboardViews'), {
-  loading: () => (
-    <div className="flex h-full min-h-[60vh] items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-    </div>
-  ),
+  loading: () => <PremiumPageLoader />,
   ssr: false,
 })
 
@@ -61,11 +84,54 @@ export function DashboardContent() {
   const { currentView, setCurrentView } = useApp()
   const { user, logout } = useAuth()
 
-  // ── Oracle docked sidebar state (persisted to localStorage) ──────────────────
-  // Lazy initial state — readInitialOracleState is SSR-safe (returns false on
-  // the server) so this avoids the cascading-render effect entirely.
-  const [oracleOpen, setOracleOpen] = useState(readInitialOracleState)
+  // Dashboard shell mounted — log the milestone once.
+  useEffect(() => {
+    boot.mark('dashboard shell rendered')
+  }, [])
+
+  // ── Notifications sheet state ──────────────────────────────────────────────
+  // Oracle is now a full page (/oracle), not a docked sidebar popup.
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  // ── Mobile sidebar (Sheet) state — visible only below the md breakpoint,
+  // where the persistent 64px rail would eat too much of the screen. ──
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
+  // ── SCROLL LOCK (POLISH-04) ───────────────────────────────────────────────
+  // While the dashboard shell is mounted, lock the document scroll. Only the
+  // inner panels (LeftNav nav list, <main> workspace, sheets/dialogs) scroll —
+  // never the body. This prevents the "random page scroll" / "double scroll"
+  // bug where flung scroll inside a panel chains to the document.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    document.body.classList.add('gst-app-shell')
+    return () => {
+      document.body.classList.remove('gst-app-shell')
+    }
+  }, [])
+
+  // ── Command Palette bridge (Phase 2) ──────────────────────────────────────
+  // The CommandPalette lives in a different component subtree and can't reach
+  // `setNotificationsOpen` directly. It dispatches window events; we listen
+  // here and toggle the relevant sheet. This makes cmd-open-notifications +
+  // cmd-open-ai-copilot actually do something (previously they just closed
+  // the palette without opening their target).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onOpenNotifications = () => setNotificationsOpen(true)
+    const onOpenCopilot = () => {
+      // Copilot lives at /oracle?view=oracle — navigate there. The Oracle
+      // page itself focuses its input on mount, so a simple view switch is
+      // enough to "open" it.
+      setCurrentView('oracle')
+    }
+    window.addEventListener('gstpilot:open-notifications', onOpenNotifications as EventListener)
+    window.addEventListener('gstpilot:open-copilot', onOpenCopilot as EventListener)
+    return () => {
+      window.removeEventListener('gstpilot:open-notifications', onOpenNotifications as EventListener)
+      window.removeEventListener('gstpilot:open-copilot', onOpenCopilot as EventListener)
+    }
+  }, [setCurrentView])
+
 
   const userInitials = user?.name
     ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -73,53 +139,81 @@ export function DashboardContent() {
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-      {/* ═══ V16 Ambient Background — aurora + particles + network lines ═══ */}
+      {/* ═══ Ambient Background — pure flat black (no decorations) ═══ */}
       <AmbientBackground />
 
+      {/* ═══ Skip-to-content link (a11y) — visible only when focused ═══ */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-[#2563EB] focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:shadow-lg"
+      >
+        Skip to content
+      </a>
+
       {/* ═══ TOP BAR ═══ */}
-      <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-background/60 px-4 backdrop-blur-xl md:px-6">
-        {/* Brand + subtitle — official GSTPilot winged logo */}
+      <header className="relative z-10 flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-black px-4 md:px-6">
+        {/* Mobile sidebar toggle (visible below lg). The desktop rail is
+            rendered in the two-column workspace below. */}
         <button
-          onClick={() => setCurrentView('dashboard')}
-          className="flex items-center gap-2.5 rounded-lg outline-none transition-opacity hover:opacity-80"
-          aria-label="GSTPilot Infinity — Home"
+          onClick={() => setMobileNavOpen(true)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60 lg:hidden"
+          aria-label="Open navigation menu"
         >
-          <BrandLogo variant="icon" theme="dark" size={28} animated={false} disableGlow />
-          <div className="hidden flex-col items-start leading-none sm:flex">
-            <span className="text-sm font-semibold tracking-tight text-foreground">
-              GSTPilot Infinity<span className="accent-text">™</span>
-            </span>
-            <span className="text-[10px] font-medium text-muted-foreground">
-              The Financial Brain of India
-            </span>
-          </div>
+          <Menu className="h-5 w-5" />
         </button>
+
+        {/* Breadcrumb — content area starts directly here.
+            NOTE (Task 9): The duplicate GSTPilot brand mark that used to live
+            in the top bar has been removed. Branding now appears ONLY inside
+            the sidebar (LeftNav.tsx), so the content area begins cleanly with
+            the breadcrumb. On the dashboard view the breadcrumb shows just
+            "Home"; on sub-pages it shows "Home / {View Label}". */}
+        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <button
+            onClick={() => setCurrentView('dashboard')}
+            className="rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
+            aria-label="Go to home"
+          >
+            Home
+          </button>
+          {currentView !== 'dashboard' && (
+            <>
+              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" aria-hidden="true" />
+              <span className="truncate rounded-md px-1.5 py-1 font-medium text-foreground">
+                {getViewMeta(currentView).label}
+              </span>
+            </>
+          )}
+        </div>
 
         {/* Right cluster: Search · Notifications · Theme · Profile */}
         <div className="ml-auto flex items-center gap-1.5">
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
-            className="flex h-8 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-xs text-muted-foreground transition-colors hover:bg-white/[0.07] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
-            aria-label="Search"
+            className="flex h-8 items-center gap-2 rounded-lg border border-[#222222] bg-[#111111] px-2.5 text-xs text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
+            aria-label="Search (Cmd+K)"
           >
-            <Search className="h-3.5 w-3.5" />
+            <Search className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="hidden sm:inline">Search</span>
-            <kbd className="hidden rounded bg-white/[0.06] px-1 py-0.5 text-[9px] font-semibold sm:inline">⌘K</kbd>
+            <kbd className="hidden rounded bg-[#1A1A1A] px-1 py-0.5 text-[9px] font-semibold sm:inline">⌘K</kbd>
           </button>
           <button
-            onClick={() => { setNotificationsOpen(true); setOracleOpen(false) }}
-            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+            onClick={() => setNotificationsOpen(true)}
+            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
             aria-label="Notifications"
           >
-            <Bell className="h-4 w-4" />
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-cyan-400" />
+            <Bell className="h-4 w-4" aria-hidden="true" />
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#2563EB]" aria-hidden="true" />
           </button>
           <ThemeToggle />
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors hover:bg-white/[0.05]">
+            <DropdownMenuTrigger
+              className="flex items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors hover:bg-[#181818] focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
+              aria-label="Account menu"
+            >
               <Avatar className="h-7 w-7">
-                <AvatarImage src={user?.picture} alt={user?.name || 'User'} />
-                <AvatarFallback className="accent-gradient-soft accent-text text-[11px] font-semibold">
+                <AvatarImage src={user?.picture} alt={user?.name || 'User avatar'} />
+                <AvatarFallback className="bg-[#2563EB]/15 text-[#3B82F6] border border-[#2563EB]/25 text-[11px] font-semibold">
                   {userInitials}
                 </AvatarFallback>
               </Avatar>
@@ -130,8 +224,8 @@ export function DashboardContent() {
             <DropdownMenuContent align="end" className="w-56">
               <div className="flex items-center gap-2 p-2">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.picture} alt={user?.name || 'User'} />
-                  <AvatarFallback className="accent-gradient-soft accent-text text-xs font-semibold">
+                  <AvatarImage src={user?.picture} alt={user?.name || 'User avatar'} />
+                  <AvatarFallback className="bg-[#2563EB]/15 text-[#3B82F6] border border-[#2563EB]/25 text-xs font-semibold">
                     {userInitials}
                   </AvatarFallback>
                 </Avatar>
@@ -142,16 +236,16 @@ export function DashboardContent() {
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="gap-2" onClick={() => setCurrentView('settings')}>
-                <User className="h-4 w-4" />
+                <User className="h-4 w-4" aria-hidden="true" />
                 Profile
               </DropdownMenuItem>
               <DropdownMenuItem className="gap-2" onClick={() => setCurrentView('settings')}>
-                <Settings className="h-4 w-4" />
+                <Settings className="h-4 w-4" aria-hidden="true" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={logout} className="gap-2 text-red-400 focus:text-red-300 focus:bg-red-500/10">
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4" aria-hidden="true" />
                 Sign Out
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -160,39 +254,62 @@ export function DashboardContent() {
       </header>
 
       {/* ═══ TWO-COLUMN WORKSPACE ═══ */}
-      <div className="relative z-10 flex min-h-0 flex-1 gap-3 p-3">
-        {/* LEFT NAV */}
-        <div className="shrink-0">
+      <div className="relative z-10 flex min-h-0 flex-1">
+        {/* LEFT NAV — LeftNav itself manages h-full; no extra scroll wrapper here.
+            The sidebar's own <nav> has overflow-hidden, and its primary-nav
+            <div> handles its own overflow-y-auto (see LeftNav.tsx).
+            Hidden below lg — the mobile Sheet (rendered below) takes over. */}
+        <div className="hidden shrink-0 lg:block">
           <LeftNav />
         </div>
 
-        {/* MAIN WORKSPACE */}
-        <main className="min-w-0 flex-1 overflow-y-auto rounded-3xl pb-24 custom-scrollbar">
-          <DashboardViews view={currentView} />
+        {/* MAIN WORKSPACE — own independent vertical scroll. No pb-24 (that was
+            compensating for body scroll, which we now prevent via
+            overflow-hidden on the root). The custom-scrollbar class keeps the
+            rail thin + dark. */}
+        <main id="main-content" role="main" className="min-w-0 flex-1 overflow-y-auto custom-scrollbar">
+          {/* DEMO WORKSPACE BANNER — shown when user signed in via "Explore the
+              platform" (provider === 'demo'). Makes it unambiguously clear that
+              all data visible is sample/demo data, NOT real financial records. */}
+          {user?.provider === 'demo' && (
+            <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-medium text-amber-300 backdrop-blur-sm">
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/20 text-[10px] font-bold">D</span>
+              <span>
+                <strong>DEMO WORKSPACE</strong> — All data shown is sample data for exploration only.
+                This is not a real financial account.
+              </span>
+            </div>
+          )}
+          <ViewErrorBoundary
+            key={currentView}
+            viewName={getViewMeta(currentView)?.label || currentView}
+          >
+            <DashboardViews view={currentView} />
+          </ViewErrorBoundary>
         </main>
       </div>
 
-      {/* ═══ PREMIUM FLOATING DOCK (Oracle · Notifications · Help) ═══ */}
-      <FloatingDock
-        onOracleToggle={() => {
-          setOracleOpen((v) => !v)
-          setNotificationsOpen(false)
-        }}
-        oracleOpen={oracleOpen}
-        onNotificationsToggle={() => {
-          setNotificationsOpen((v) => !v)
-          setOracleOpen(false)
-        }}
-        notificationsOpen={notificationsOpen}
-      />
+      {/* ═══ MOBILE NAV SHEET — renders the same LeftNav in expanded mode ═══ */}
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent
+          side="left"
+          className="w-[280px] max-w-[85vw] gap-0 border-r border-[#1A1A1A] bg-[#0A0A0A] p-0"
+        >
+          {/* SheetTitle is required by Radix Dialog for a11y — visually hidden
+              because the sidebar's own brand header serves as the visible label. */}
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <div className="h-full">
+            <LeftNav forceExpanded onNavigate={() => setMobileNavOpen(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
 
-      {/* ═══ ORACLE DOCKED SIDEBAR (slide-in right on desktop, bottom sheet on mobile) ═══ */}
-      <OracleDockSidebar
-        open={oracleOpen}
-        onClose={() => setOracleOpen(false)}
-      >
-        <OraclePanel onNavigate={(view) => { setCurrentView(view); setOracleOpen(false) }} />
-      </OracleDockSidebar>
+      {/* ═══ FLOATING DOCK REMOVED ═══ */}
+      {/* The bottom-right floating Notification bell + Help buttons have been
+          removed entirely from the right side. Notifications remain accessible
+          via the top-bar Bell (Header) and Help via the ⌘K Command Palette.
+          The FloatingDock component is kept in src/components/layout/ for
+          reference but is no longer rendered anywhere. */}
 
       {/* ═══ NOTIFICATIONS SHEET (wired to /api/notifications) ═══ */}
       <NotificationsSheet
@@ -214,7 +331,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+      className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
       aria-label="Toggle theme"
     >
       {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -230,7 +347,6 @@ export function EmailVerificationBanner() {
   const handleResend = async () => {
     setSending(true)
     try {
-      const { sendVerificationEmail } = await import('@/lib/auth')
       const { error } = await sendVerificationEmail()
       if (!error) setSent(true)
     } catch {
@@ -241,11 +357,11 @@ export function EmailVerificationBanner() {
   }
 
   return (
-    <div className="bg-cyan-500/10 border-b border-cyan-500/25 px-4 py-3">
+    <div className="bg-[#2563EB]/10 border-b border-[#2563EB]/25 px-4 py-3">
       <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto">
         <div className="flex items-center gap-2.5">
-          <MailCheck className="h-5 w-5 text-cyan-300 shrink-0" />
-          <p className="text-sm text-cyan-100">
+          <MailCheck className="h-5 w-5 text-[#3B82F6] shrink-0" />
+          <p className="text-sm text-[#93C5FD]">
             {sent
               ? 'Verification email sent! Check your inbox.'
               : 'Please verify your email address to access all features.'}
@@ -256,14 +372,14 @@ export function EmailVerificationBanner() {
             <button
               onClick={handleResend}
               disabled={sending}
-              className="text-xs font-semibold text-cyan-200 hover:text-cyan-100 underline disabled:opacity-50"
+              className="text-xs font-semibold text-[#3B82F6] hover:text-[#60A5FA] underline disabled:opacity-50"
             >
               {sending ? 'Sending...' : 'Resend email'}
             </button>
           )}
           <button
             onClick={logout}
-            className="text-xs text-cyan-300 hover:text-cyan-100 font-medium"
+            className="text-xs text-[#3B82F6] hover:text-[#60A5FA] font-medium"
           >
             Sign out
           </button>

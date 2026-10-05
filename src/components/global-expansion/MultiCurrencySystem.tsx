@@ -288,9 +288,9 @@ interface TrendSeries {
 }
 
 const TREND_SERIES: TrendSeries[] = [
-  { key: 'usdInr', label: 'USD → INR', color: '#10b981', glow: '#10b98144', format: (v) => v.toFixed(2) },
+  { key: 'usdInr', label: 'USD → INR', color: '#2563EB', glow: '#2563EB44', format: (v) => v.toFixed(2) },
   { key: 'usdEur', label: 'USD → EUR', color: '#14b8a6', glow: '#14b8a644', format: (v) => v.toFixed(3) },
-  { key: 'usdGbp', label: 'USD → GBP', color: '#06b6d4', glow: '#06b6d444', format: (v) => v.toFixed(3) },
+  { key: 'usdGbp', label: 'USD → GBP', color: '#3B82F6', glow: '#3B82F644', format: (v) => v.toFixed(3) },
   { key: 'usdJpy', label: 'USD → JPY', color: '#a78bfa', glow: '#a78bfa44', format: (v) => v.toFixed(1) },
 ];
 

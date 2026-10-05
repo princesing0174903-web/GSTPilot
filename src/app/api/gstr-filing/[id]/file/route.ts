@@ -52,18 +52,17 @@ export async function POST(
     // ── Step 1: Resolve the active GSTN provider ──────────────────────────
     const provider = getGSTProvider()
 
-    // ── Step 2: Enforce — mock provider cannot file ──────────────────────
-    // The mock provider can simulate read-only sync operations (returns,
+    // ── Step 2: Enforce — sandbox provider cannot file ────────────────────
+    // The sandbox provider can simulate read-only sync operations (returns,
     // notices, ledgers) but CANNOT file returns. Filing requires the official
     // GSTN API with real credentials. We never fake a successful filing.
     if (!provider.isLive) {
       return NextResponse.json(
         {
           error:
-            'Cannot file GST returns in mock mode. The active provider is "Mock GSTN Provider" — ' +
-            'it can simulate read-only sync operations but cannot file returns. ' +
-            'Set GSTN_PROVIDER=official and configure GSTN API credentials ' +
-            '(GSTN_CLIENT_ID, GSTN_CLIENT_SECRET) to file returns. ' +
+            'Live GSTN integration required to file. Your return has been prepared and validated — ' +
+            'to file directly with the GST portal, configure GSTN API credentials ' +
+            '(GSTN_CLIENT_ID, GSTN_CLIENT_SECRET, GSTN_PROVIDER=official). ' +
             'GSTPilot never simulates successful government filings.',
           code: 'MOCK_PROVIDER_CANNOT_FILE',
           provider: provider.name,

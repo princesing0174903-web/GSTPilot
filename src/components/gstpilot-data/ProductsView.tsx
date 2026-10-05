@@ -378,7 +378,7 @@ export default function ProductsView() {
                               <p className="truncate font-medium text-white">
                                 {p.name}
                                 {p.isService && (
-                                  <Badge variant="outline" className="ml-2 border-violet-500/30 bg-violet-500/5 text-violet-300">
+                                  <Badge variant="outline" className="ml-2 border-cyan-500/30 bg-cyan-500/5 text-cyan-300">
                                     Service
                                   </Badge>
                                 )}

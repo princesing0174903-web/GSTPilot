@@ -8,16 +8,26 @@
 // Step 1 of the GST connect flow — requests GSTN to send an OTP to the
 // registered mobile/email. The client then writes a `gst_connections` doc with
 // authStatus='otp_requested' and prompts the user for the OTP.
+//
+// SECURITY:
+//   • requireAuth — must be signed in.
+//   • requireOrgMembership — must be an active member of `organizationId`.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
 import { initiateConnection } from '@/lib/gstn-provider/server/orchestrator';
 import { GSTNError, friendlyGSTNError } from '@/lib/gstn-provider/errors';
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  // ── 1. Authentication ─────────────────────────────────────────────────────
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+  const { uid } = authResult;
+
   try {
     const body = await req.json();
     const { organizationId, gstin, username } = body as {
@@ -32,6 +42,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // ── 2. Authorization — caller must be a member of organizationId ─────────
+    const memberResult = await requireOrgMembership(uid, organizationId);
+    if (memberResult instanceof NextResponse) return memberResult;
+
     if (!gstin || gstin.trim().length !== 15) {
       return NextResponse.json(
         { ok: false, error: 'A valid 15-character GSTIN is required.' },

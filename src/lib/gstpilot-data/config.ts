@@ -4,35 +4,167 @@
 // Single source of truth for the Firestore collection paths the
 // Customers / Products / Invoices modules write to.
 //
-// The user has manually created these collections in Firebase Firestore:
+// IMPORTANT — ORG-SCOPED PATHS (MULTI-TENANT):
+//   Every Firestore path is now dynamically built from the authenticated
+//   user's organizationId. The OLD code hardcode `organizations/GSTpilot_SAAS/...`
+//   which caused FirebaseError: Missing or insufficient permissions because
+//   the user is NOT a member of the `GSTpilot_SAAS` org — they are a member of
+//   their OWN org (e.g. `preview-org` or a real Firestore org id).
 //
-//   organizations
-//      └── GSTpilot_SAAS              ← organization document
-//             ├── customers           ← subcollection
-//             ├── products            ← subcollection
-//             └── invoices            ← subcollection
+//   The Firestore security rules require:
+//     isOrgMember(orgId)  →  the path's orgId must match an org the user belongs to
 //
-// Firestore is the ONLY source of truth. No mock data, no local JSON,
-// no placeholder arrays. Every list reads via onSnapshot(); every write
-// goes directly to these paths.
+//   So every read/write MUST use:
+//     currentUser → organization membership → organizationId → Firestore path
+//
+//   The path builders below accept an `organizationId` parameter. Callers
+//   (hooks) obtain it from OrgContext and pass it through. If no orgId is
+//   provided, the functions return empty results (honest empty state) rather
+//   than writing to a hardcoded path.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * The fixed organization document id the user created in Firestore.
- * All three modules live as subcollections under this document.
+ * Synthetic / placeholder organization ids that must NEVER be used as real
+ * Firestore paths. When OrgContext cannot resolve a real org (Firestore
+ * unreachable, no membership, etc.), it falls back to a synthetic `preview-org`
+ * demo org so the UI can render. Subscribing to
+ * `organizations/preview-org/customers` always fails with `permission-denied`
+ * because no `organization_members/preview-org_{uid}` doc exists — so every
+ * gstpilot-data service short-circuits to an empty result for these ids.
+ *
+ * This list also includes the legacy hardcoded ids that were removed during
+ * the multi-tenant migration (`GSTpilot_SAAS`, `demo`, `test`, `defaultOrg`,
+ * `organization123`). Any caller that still passes one of these gets a null
+ * path → honest empty state → NO Firestore read → NO permission error.
+ */
+const SYNTHETIC_ORG_IDS = new Set<string>([
+  'preview-org',
+  'demo',
+  'test',
+  'defaultOrg',
+  'organization123',
+  'GSTpilot_SAAS',
+]);
+
+/**
+ * True if the given org id is a known synthetic / placeholder id that must
+ * never be used as a real Firestore path. Exposed so hooks can also check
+ * (defense-in-depth) before subscribing.
+ *
+ * Also returns true for local workspace IDs (prefixed `local-`) which are
+ * created when Firestore is unreachable — these have no Firestore backing.
+ */
+export function isSyntheticOrgId(
+  organizationId: string | null | undefined,
+): boolean {
+  if (!organizationId) return true;
+  if (SYNTHETIC_ORG_IDS.has(organizationId)) return true;
+  // Local workspace IDs (created when Firestore is unreachable)
+  if (organizationId.startsWith('local-')) return true;
+  return false;
+}
+
+/**
+ * Returns true when the gstpilot-data Firestore hooks should short-circuit
+ * to an empty result (no subscription, no permission-denied error).
+ *
+ * True when:
+ *   - the app is running in preview mode (no real Firestore backing), OR
+ *   - the org id is null/empty, OR
+ *   - the org id is synthetic (preview-org, demo, …) or local- (client-only).
+ *
+ * Used by every `useGSTpilot*` hook as the single guard before subscribing.
+ */
+export function shouldSkipFirestore(
+  organizationId: string | null | undefined,
+  isPreviewMode: boolean,
+): boolean {
+  if (isPreviewMode) return true;
+  if (!organizationId) return true;
+  return isSyntheticOrgId(organizationId);
+}
+
+/**
+ * Build the Firestore collection path for a given org's subcollection.
+ *
+ *   organizations/{organizationId}/{subcollection}
+ *
+ * Returns null when:
+ *   - organizationId is null/empty/whitespace, OR
+ *   - organizationId is a known synthetic id (preview-org, demo, test,
+ *     defaultOrg, organization123, GSTpilot_SAAS).
+ *
+ * A null return means the caller MUST short-circuit to an empty result
+ * (reads) or throw a friendly "no org selected" error (writes). This is the
+ * single chokepoint that prevents every gstpilot-data service from firing a
+ * doomed Firestore read in preview mode.
+ */
+export function orgCollectionPath(
+  organizationId: string | null | undefined,
+  subcollection: string,
+): string | null {
+  if (!organizationId || !organizationId.trim()) return null;
+  if (isSyntheticOrgId(organizationId)) return null;
+  return `organizations/${organizationId}/${subcollection}`;
+}
+
+/**
+ * Build the Firestore document path for a specific doc in an org subcollection.
+ *
+ *   organizations/{organizationId}/{subcollection}/{docId}
+ */
+export function orgDocPath(
+  organizationId: string | null | undefined,
+  subcollection: string,
+  docId: string,
+): string | null {
+  const base = orgCollectionPath(organizationId, subcollection);
+  if (!base) return null;
+  return `${base}/${docId}`;
+}
+
+// ─── Subcollection names (single source of truth) ────────────────────────────
+
+export const CUSTOMERS_SUB = 'customers';
+export const PRODUCTS_SUB = 'products';
+export const INVOICES_SUB = 'invoices';
+export const VENDORS_SUB = 'vendors';
+export const EXPENSES_SUB = 'expenses';
+export const PAYMENTS_SUB = 'payments';
+export const COUNTERS_SUB = 'counters';
+export const ACTIVITIES_SUB = 'activities';
+
+/**
+ * DEPRECATED — kept only for backward compatibility with any caller that
+ * hasn't been migrated yet. Returns the literal 'GSTpilot_SAAS' string.
+ * New code MUST use orgCollectionPath(realOrgId, ...) instead.
+ *
+ * @deprecated Use orgCollectionPath(organizationId, subcollection) instead.
  */
 export const ORG_ID = 'GSTpilot_SAAS';
 
-/** Root organization document path. */
+/**
+ * DEPRECATED — same as above. New code should call:
+ *   orgCollectionPath(orgId, CUSTOMERS_SUB)
+ *
+ * @deprecated Use orgCollectionPath(organizationId, CUSTOMERS_SUB) instead.
+ */
 export const ORG_PATH = `organizations/${ORG_ID}`;
 
-/** Subcollection paths — used by collection(db, ...). */
+/**
+ * DEPRECATED — hardcoded collection paths. New code should use the dynamic
+ * path builders with the real organizationId.
+ *
+ * @deprecated Use orgCollectionPath(orgId, ...) instead.
+ */
 export const CUSTOMERS_COLLECTION = `${ORG_PATH}/customers`;
 export const PRODUCTS_COLLECTION = `${ORG_PATH}/products`;
 export const INVOICES_COLLECTION = `${ORG_PATH}/invoices`;
 export const VENDORS_COLLECTION = `${ORG_PATH}/vendors`;
 export const EXPENSES_COLLECTION = `${ORG_PATH}/expenses`;
 export const PAYMENTS_COLLECTION = `${ORG_PATH}/payments`;
+export const COUNTERS_COLLECTION = `${ORG_PATH}/counters`;
+export const INVOICE_COUNTER_DOC = `${ORG_PATH}/counters/invoiceCounter`;
 
 /** Standard GST rates (%) supported by the invoice line items. */
 export const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28] as const;

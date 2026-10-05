@@ -64,11 +64,13 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/gst-utils';
 import { toast } from 'sonner';
-import {
-  createReconciliation,
-  resolveMismatch,
-  dismissRecommendation,
-} from '@/lib/firestore-service';
+// NOTE: createReconciliation / resolveMismatch / dismissRecommendation were
+// previously imported from '@/lib/firestore-service' and wrote directly to
+// Firestore. That caused "Missing or insufficient permissions" because the
+// Firestore security rules require an organization_members/{orgId}_{uid} doc
+// to exist for every tenant-scoped write. The entire reconciliation pipeline
+// is now Prisma-backed via /api/reconciliation (POST action:'run', PUT, etc.)
+// and /api/banking/reconcile. No Firestore calls are made from this page.
 import type {
   FirestoreReconciliation,
   FirestoreClient,
@@ -80,6 +82,8 @@ import type { MatchStatus, RiskLevel } from '@/types/gst';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
 import { useApp } from '@/contexts/AppContext';
+import { useClients, type ClientOption } from '@/hooks/useClients';
+import { useConnectedSources } from '@/hooks/useConnectedSources';
 
 // ─── API response shapes (subset of Prisma models) ─────────────────────────
 
@@ -151,22 +155,8 @@ interface ApiReconciliationResult {
   } | null;
 }
 
-interface ApiClient {
-  id: string;
-  gstin: string;
-  tradeName: string;
-  legalName?: string | null;
-  status: string;
-  healthScore: number;
-  createdAt: string;
-  updatedAt: string;
-  _aggregations?: {
-    totalInvoices: number;
-    filedReturns: number;
-    pendingReturns: number;
-    matchPercentage: number;
-  };
-}
+// ApiClient is now sourced from the shared useClients() hook (ClientOption).
+// This guarantees the dropdown receives the exact shape /api/clients returns.
 
 // Maps a ReconciliationRun + its results to the FirestoreReconciliation shape used by the UI.
 function mapApiRunToRecon(run: ApiReconciliationRun, results: ApiReconciliationResult[]): FirestoreReconciliation & { id: string } {
@@ -193,7 +183,7 @@ function mapApiRunToRecon(run: ApiReconciliationRun, results: ApiReconciliationR
 }
 
 // Maps a ReconciliationResult row to the ReconMismatch shape used by the UI.
-function mapApiResultToMismatch(r: ApiReconciliationResult): ReconMismatch {
+function mapApiResultToMismatch(r: ApiReconciliationResult): ReconMismatch & { resultId: string } {
   // Parse the JSON mismatches string to extract booksAmount, portalAmount, difference.
   let booksAmount = r.invoice?.totalAmount ?? 0;
   let portalAmount = 0;
@@ -244,10 +234,11 @@ function mapApiResultToMismatch(r: ApiReconciliationResult): ReconMismatch {
     resolved: r.resolved ?? false,
     resolvedBy: r.resolvedBy ?? null,
     resolvedAt: r.resolvedAt ?? null,
+    resultId: r.id,
   };
 }
 
-function mapApiClient(c: ApiClient): FirestoreClient & { id: string } {
+function mapApiClient(c: ClientOption): FirestoreClient & { id: string } {
   return {
     id: c.id,
     clientId: c.id,
@@ -304,16 +295,6 @@ const slideInRight = {
   hidden: { opacity: 0, x: 20 },
   visible: { opacity: 1, x: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
 };
-
-// ──────────────────────────────────────────────
-// Source options for reconciliation
-// ──────────────────────────────────────────────
-const SOURCE_OPTIONS = [
-  'GSTR-2B vs Purchase Register',
-  'GSTR-1 vs Sales Register',
-  'GSTR-2B vs GSTR-1',
-  'Purchase Register vs Sales Register',
-];
 
 // ──────────────────────────────────────────────
 // Period generator (last 12 months)
@@ -413,7 +394,7 @@ function MatchRateRing({
         </defs>
         {matchPercent > 0 && (
           <motion.circle
-            cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#10b981"
+            cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#2563EB"
             strokeWidth={strokeWidth} strokeLinecap="round"
             strokeDasharray={`${matchLen} ${circumference - matchLen}`} strokeDashoffset={0}
             initial={{ strokeDasharray: `0 ${circumference}` }}
@@ -469,15 +450,36 @@ export default function ReconciliationPage() {
 
   // ── Real API-backed state (replaces former Firestore hooks) ─────────
   const [reconciliations, setReconciliations] = useState<(FirestoreReconciliation & { id: string })[]>([]);
-  const [clients, setClients] = useState<(FirestoreClient & { id: string })[]>([]);
   const [aiRecommendations, setAiRecommendations] = useState<FirestoreAIRecommendation[]>([]);
   const [reconsLoading, setReconsLoading] = useState(true);
-  const [clientsLoading, setClientsLoading] = useState(true);
   const [recsLoading, setRecsLoading] = useState(true);
   const [reconsError, setReconsError] = useState<string | null>(null);
-  const [clientsError, setClientsError] = useState<string | null>(null);
   const [recsError, setRecsError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // ── Clients list (tenant-scoped via useClients → /api/clients?organizationId) ──
+  // This fixes the root cause of the empty Client dropdown: the API requires
+  // an organizationId query param, and the shared hook threads the current
+  // org id from OrgContext into the request. Loading / empty / error flags
+  // drive the dropdown's spinner / options / "No clients found" / error states.
+  const {
+    clients: rawClients,
+    loading: clientsLoading,
+    error: clientsError,
+    refetch: refetchClients,
+  } = useClients();
+  const clients = useMemo(
+    () => rawClients.map(mapApiClient),
+    [rawClients],
+  );
+
+  // ── Connected data sources (tenant-scoped via useConnectedSources) ──
+  // Replaces the former hardcoded SOURCE_OPTIONS array. The hook fires
+  // the Zoho / Google Workspace / Bank status endpoints in parallel and
+  // always returns the GST Portal + Manual Entry built-ins so the
+  // dropdown is never empty. The string `value` (e.g. 'zoho', 'gst') is
+  // what gets persisted to ReconciliationRun.sources.
+  const { sources: connectedSources, loading: sourcesLoading } = useConnectedSources();
 
   useEffect(() => {
     let cancelled = false;
@@ -507,26 +509,9 @@ export default function ReconciliationPage() {
     return () => { cancelled = true; };
   }, [refreshKey]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setClientsLoading(true);
-    fetch('/api/clients')
-      .then(r => r.ok ? r.json() : { clients: [] })
-      .then(data => {
-        if (cancelled) return;
-        const items: ApiClient[] = Array.isArray(data?.clients) ? data.clients : [];
-        setClients(items.map(mapApiClient));
-        setClientsError(null);
-        setClientsLoading(false);
-      })
-      .catch(err => {
-        if (cancelled) return;
-        setClients([]);
-        setClientsError(err instanceof Error ? err.message : 'Failed to load clients');
-        setClientsLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [refreshKey]);
+  // NOTE: Clients are loaded by the useClients() hook above (tenant-scoped).
+  // When a new reconciliation is created we bump refreshKey to reload the
+  // runs list, and also refetch clients so any newly-added client appears.
 
   // AI Recommendations have no backing REST API yet — leave the list empty so
   // the existing "No active recommendations" empty state renders truthfully.
@@ -585,7 +570,7 @@ export default function ReconciliationPage() {
 
   // ── All mismatches from all reconciliations (flattened) ──
   const allMismatches = useMemo(() => {
-    const items: Array<ReconMismatch & { reconId: string; reconDocId: string; clientId: string; period: string }> = [];
+    const items: Array<ReconMismatch & { reconId: string; reconDocId: string; clientId: string; period: string; resultId: string }> = [];
     for (const r of reconciliations) {
       for (const m of r.mismatches) {
         items.push({ ...m, reconId: r.reconId, reconDocId: r.id, clientId: r.clientId, period: r.period });
@@ -624,28 +609,54 @@ export default function ReconciliationPage() {
     }
     setCreating(true);
     try {
-      await createReconciliation({
-        clientId: selectedClientId,
-        period: selectedPeriod,
-        sources: selectedSource,
+      // Prisma-backed: POST /api/reconciliation with action:'run' creates a
+      // ReconciliationRun, fetches the client's invoices, creates a
+      // ReconciliationResult for each, updates invoice match status, and
+      // writes an audit log — all in Prisma/SQLite, no Firestore.
+      const res = await fetch('/api/reconciliation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'run',
+          clientId: selectedClientId,
+          period: selectedPeriod,
+          sources: selectedSource,
+        }),
       });
-      toast.success('Reconciliation run started successfully');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      toast.success(data?.message || 'Reconciliation run started successfully');
       setDialogOpen(false);
       setSelectedClientId('');
       setSelectedPeriod('');
       setSelectedSource('');
       setRefreshKey(k => k + 1);
+      refetchClients();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create reconciliation');
     } finally {
       setCreating(false);
     }
-  }, [selectedClientId, selectedPeriod, selectedSource]);
+  }, [selectedClientId, selectedPeriod, selectedSource, refetchClients]);
 
-  const handleResolveMismatch = useCallback(async (reconId: string, invoiceNumber: string) => {
+  const handleResolveMismatch = useCallback(async (resultId: string, invoiceNumber: string) => {
     setResolvingInvoice(invoiceNumber);
     try {
-      await resolveMismatch(reconId, invoiceNumber);
+      // Prisma-backed: PUT /api/reconciliation marks the ReconciliationResult
+      // as resolved, sets resolvedBy/resolvedAt, updates workflowStatus to
+      // 'resolved', and writes an audit log.
+      const res = await fetch('/api/reconciliation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: resultId, resolvedBy: 'user' }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
       toast.success(`Mismatch for invoice ${invoiceNumber} resolved`);
       setRefreshKey(k => k + 1);
     } catch (err) {
@@ -658,7 +669,10 @@ export default function ReconciliationPage() {
   const handleDismissRecommendation = useCallback(async (recId: string) => {
     setDismissingRecId(recId);
     try {
-      await dismissRecommendation(recId);
+      // AI recommendations are currently derived client-side (no backing REST
+      // collection). Dismissal is a local filter — the recommendation is
+      // removed from the visible list for this session.
+      setAiRecommendations(prev => prev.filter(r => r.recId !== recId));
       toast.success('Recommendation dismissed');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to dismiss recommendation');
@@ -754,11 +768,21 @@ export default function ReconciliationPage() {
                   <Select value={selectedClientId} onValueChange={setSelectedClientId}>
                     <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                     <SelectContent>
-                      {clients.map(c => (
-                        <SelectItem key={c.id} value={c.clientId}>
-                          {c.tradeName} — {c.gstin}
-                        </SelectItem>
-                      ))}
+                      {clientsLoading ? (
+                        <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading clients…
+                        </div>
+                      ) : clientsError ? (
+                        <div className="px-2 py-3 text-xs text-red-600">{clientsError}</div>
+                      ) : clients.length === 0 ? (
+                        <div className="px-2 py-3 text-xs text-muted-foreground">No clients found</div>
+                      ) : (
+                        clients.map(c => (
+                          <SelectItem key={c.id} value={c.clientId}>
+                            {c.tradeName} — {c.gstin}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -778,11 +802,20 @@ export default function ReconciliationPage() {
                   <Select value={selectedSource} onValueChange={setSelectedSource}>
                     <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
                     <SelectContent>
-                      {SOURCE_OPTIONS.map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
+                      {sourcesLoading ? (
+                        <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading sources…
+                        </div>
+                      ) : (
+                        connectedSources.map(s => (
+                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Only connected data sources are shown. Connect more in Integrations.
+                  </p>
                 </div>
               </div>
               <DialogFooter>
@@ -862,11 +895,21 @@ export default function ReconciliationPage() {
                 <Select value={selectedClientId} onValueChange={setSelectedClientId}>
                   <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                   <SelectContent>
-                    {clients.map(c => (
-                      <SelectItem key={c.id} value={c.clientId}>
-                        {c.tradeName} — {c.gstin}
-                      </SelectItem>
-                    ))}
+                    {clientsLoading ? (
+                      <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading clients…
+                      </div>
+                    ) : clientsError ? (
+                      <div className="px-2 py-3 text-xs text-red-600">{clientsError}</div>
+                    ) : clients.length === 0 ? (
+                      <div className="px-2 py-3 text-xs text-muted-foreground">No clients found</div>
+                    ) : (
+                      clients.map(c => (
+                        <SelectItem key={c.id} value={c.clientId}>
+                          {c.tradeName} — {c.gstin}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -886,11 +929,20 @@ export default function ReconciliationPage() {
                 <Select value={selectedSource} onValueChange={setSelectedSource}>
                   <SelectTrigger><SelectValue placeholder="Select source" /></SelectTrigger>
                   <SelectContent>
-                    {SOURCE_OPTIONS.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
+                    {sourcesLoading ? (
+                      <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading sources…
+                      </div>
+                    ) : (
+                      connectedSources.map(s => (
+                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Only connected data sources are shown. Connect more in Integrations.
+                </p>
               </div>
             </div>
             <DialogFooter>
@@ -1073,7 +1125,7 @@ export default function ReconciliationPage() {
                                     variant="outline"
                                     className="h-6 text-[10px] px-2 gap-1"
                                     disabled={resolvingInvoice === m.invoiceNumber}
-                                    onClick={() => handleResolveMismatch(m.reconId, m.invoiceNumber)}
+                                    onClick={() => handleResolveMismatch(m.resultId, m.invoiceNumber)}
                                   >
                                     {resolvingInvoice === m.invoiceNumber ? (
                                       <Loader2 className="h-3 w-3 animate-spin" />

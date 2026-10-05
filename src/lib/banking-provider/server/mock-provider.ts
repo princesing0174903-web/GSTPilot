@@ -238,7 +238,10 @@ function generateTransactions(
 // ─── MockBankProvider ─────────────────────────────────────────────────────────
 
 export class MockBankProvider implements IBankProvider {
-  readonly name = 'Mock Banking Provider';
+  // Premium, honest labelling: this is a "Sandbox" provider (real software
+  // running on seeded test data), not a "mock". The UI surfaces this name to
+  // users, so it must read as a deliberate testing environment.
+  readonly name = 'Sandbox Banking Environment';
   readonly provider = 'mock' as const;
   readonly isLive = false;
 

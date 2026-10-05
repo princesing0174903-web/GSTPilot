@@ -1,814 +1,984 @@
 'use client';
 
-import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Card,
-  CardContent,
-} from '@/components/ui/card';
-import {
-  Badge,
-} from '@/components/ui/badge';
-import {
-  Button,
-} from '@/components/ui/button';
-import {
-  Input,
-} from '@/components/ui/input';
-import {
-  Skeleton,
-} from '@/components/ui/skeleton';
-import {
-  ScrollArea,
-} from '@/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  CloudUpload,
-  FileText,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  ShieldCheck,
-  FileUp,
-  Upload,
-  AlertCircle,
-  ThumbsUp,
-  Inbox,
-  Loader2,
-  Search,
-  Trash2,
-  FileSpreadsheet,
-  FileJson,
-  TrendingUp,
-  Clock,
-  ShieldAlert,
-} from 'lucide-react';
-import type {
-  FirestoreInvoice,
-  FirestoreClient,
-  FirestoreDocument,
-} from '@/lib/firestore-schema';
-import type {
-  InvoiceStatus,
-  RiskLevel,
-  MatchStatus,
-  InvoiceType,
-} from '@/types/gst';
-import {
-  MATCH_STATUS_CONFIG,
-  RISK_LEVEL_CONFIG,
-  INVOICE_TYPE_TO_SECTION,
-} from '@/types/gst';
-import {
-  formatCurrency,
-  formatNumber,
-} from '@/lib/gst-utils';
-import {
-  useFireInvoices,
-  useFireClients,
-  useFireDocuments,
-} from '@/hooks/use-firestore';
-import {
-  createInvoice,
-  approveInvoice,
-  deleteInvoice,
-} from '@/lib/firestore-service';
-import { useDocuments } from '@/hooks/useDocuments';
-import { validateFile } from '@/lib/firebase/storage-service';
-import { toast } from 'sonner';
-import { EmptyState } from '@/components/shared/EmptyState';
-import { ProfessionalEmptyState } from '@/components/shared/ProfessionalEmptyState';
-import { useApp } from '@/contexts/AppContext';
+// ═══════════════════════════════════════════════════════════════════════════════
+// GSTPilot — Invoice Workspace (Billion-Dollar Enterprise Edition)
+//
+// A production-grade invoicing surface comparable to Zoho Books / TallyPrime /
+// QuickBooks. Composed entirely from premium sub-components:
+//
+//   • InvoiceKpiCards        — 7 KPI cards with sparklines + trends
+//   • InvoiceFilters         — debounced search + filter presets + advanced
+//   • InvoiceTable           — sortable sticky table with bulk + per-row actions
+//   • InvoicePagination      — 10/25/50/100 paging
+//   • InvoiceBuilder         — premium Create/Edit dialog with smart GST items
+//   • InvoiceA4Preview       — A4 paper preview (used inside the details Sheet)
+//   • InvoiceDetailsSheet    — slide-over with Overview/Items/GST/Payments/Preview/History
+//   • InvoiceOraclePanel     — Oracle AI insights (payment prediction, risk, fixes)
+//   • InvoiceSkeletons       — premium shimmer
+//   • InvoiceEmptyState      — beautiful onboarding empty state
+//   • InvoiceErrorState      — never exposes raw backend errors
+//
+// All data flows through `useInvoicesApi()` + `useClientsApi()` (Prisma REST).
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── Animation Variants ───────────────────────────────────────────────────────
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Plus,
+  Sparkles,
+  RefreshCw,
+  FileText,
+  X,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { useApp } from '@/contexts/AppContext';
+import { useOrg } from '@/contexts/OrgContext';
+import {
+  useInvoicesApi,
+  type ApiInvoice,
+} from '@/hooks/useInvoicesApi';
+import { useClientsApi } from '@/hooks/useClientsApi';
+import { AskOracleButton } from '@/components/oracle/AskOracleButton';
+import { formatCurrency } from '@/lib/gst-utils';
+
+// Sub-components
+import { InvoiceKpiCards, computeInvoiceKpis } from './InvoiceKpiCards';
+import {
+  InvoiceFilters,
+  DEFAULT_FILTERS,
+  type InvoiceFiltersState,
+} from './InvoiceFilters';
+import {
+  InvoiceTable,
+  InvoicePagination,
+  type SortState,
+} from './InvoiceTable';
+import { InvoiceBuilder } from './InvoiceBuilder';
+import { InvoiceDetailsSheet } from './InvoiceDetailsSheet';
+import { InvoiceOraclePanel } from './InvoiceOraclePanel';
+import {
+  InvoiceWorkspaceSkeleton,
+  OraclePanelSkeleton,
+} from './InvoiceSkeletons';
+import { InvoiceEmptyState, InvoiceErrorState } from './InvoiceEmptyErrorStates';
+
+// ─── Animation ────────────────────────────────────────────────────────────────
 
 const fadeInUp = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 12 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' as const } },
 };
 
-const staggerContainer = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.07 },
-  },
-};
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const staggerItem = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' as const } },
-};
+function applyFilters(
+  invoices: ApiInvoice[],
+  filters: InvoiceFiltersState,
+  clientMap: Map<string, { tradeName: string; gstin: string }>,
+): ApiInvoice[] {
+  const q = filters.search.trim().toLowerCase();
+  return invoices.filter((inv) => {
+    // Search across invoice #, client, GSTIN, amount, date, notes
+    if (q) {
+      const client = clientMap.get(inv.clientId);
+      const haystack = [
+        inv.invoiceNumber,
+        inv.buyerName,
+        inv.buyerGstin,
+        inv.sellerGstin,
+        client?.tradeName,
+        client?.gstin,
+        inv.invoiceDate,
+        inv.dueDate,
+        inv.status,
+        inv.paymentStatus,
+        String(inv.totalAmount ?? ''),
+        String(inv.taxableValue ?? ''),
+        String(inv.gstAmount ?? ''),
+        inv.notes,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
 
-// ─── Status Badge Configs ─────────────────────────────────────────────────────
-
-const STATUS_BADGE: Record<InvoiceStatus, { label: string; className: string }> = {
-  draft: { label: 'Draft', className: 'bg-slate-100 text-slate-700 border-slate-200' },
-  approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  filed: { label: 'Filed', className: 'bg-blue-50 text-blue-700 border-blue-200' },
-  cancelled: { label: 'Cancelled', className: 'bg-red-50 text-red-700 border-red-200' },
-};
-
-const RISK_BADGE: Record<RiskLevel, { label: string; className: string }> = {
-  low: { label: 'Low', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  medium: { label: 'Medium', className: 'bg-amber-50 text-amber-700 border-amber-200' },
-  high: { label: 'High', className: 'bg-orange-50 text-orange-700 border-orange-200' },
-  critical: { label: 'Critical', className: 'bg-red-50 text-red-700 border-red-200' },
-};
-
-// ─── Helper ───────────────────────────────────────────────────────────────────
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1048576).toFixed(1)} MB`;
+    if (filters.status !== 'all') {
+      if (inv.status !== filters.status) return false;
+    }
+    if (filters.paymentStatus !== 'all') {
+      if (inv.paymentStatus !== filters.paymentStatus) return false;
+    }
+    if (filters.clientId !== 'all') {
+      if (inv.clientId !== filters.clientId) return false;
+    }
+    if (filters.gstRate !== 'all') {
+      // We don't have a direct gstRate on the invoice, so derive from amounts.
+      // taxRate ≈ gstAmount / taxableValue * 100
+      const taxable = inv.taxableValue ?? 0;
+      const gst = inv.gstAmount ?? 0;
+      const rate = taxable > 0 ? Math.round((gst / taxable) * 100) : 0;
+      if (String(rate) !== filters.gstRate) return false;
+    }
+    if (filters.risk !== 'all') {
+      if (inv.riskLevel !== filters.risk) return false;
+    }
+    if (filters.dateFrom) {
+      const d = inv.invoiceDate ? new Date(inv.invoiceDate) : new Date(inv.createdAt);
+      if (d < new Date(filters.dateFrom)) return false;
+    }
+    if (filters.dateTo) {
+      const d = inv.invoiceDate ? new Date(inv.invoiceDate) : new Date(inv.createdAt);
+      if (d > new Date(filters.dateTo + 'T23:59:59')) return false;
+    }
+    if (filters.amountMin) {
+      if ((inv.totalAmount ?? 0) < Number(filters.amountMin)) return false;
+    }
+    if (filters.amountMax) {
+      if ((inv.totalAmount ?? 0) > Number(filters.amountMax)) return false;
+    }
+    return true;
+  });
 }
 
-function getFileIcon(fileName: string) {
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  if (ext === 'json') return <FileJson className="size-4 text-amber-500" />;
-  if (ext === 'csv' || ext === 'xlsx') return <FileSpreadsheet className="size-4 text-emerald-500" />;
-  return <FileText className="size-4 text-slate-500" />;
+function sortInvoices(
+  invoices: ApiInvoice[],
+  sort: SortState,
+  clientMap: Map<string, { tradeName: string; gstin: string }>,
+): ApiInvoice[] {
+  const dir = sort.dir === 'asc' ? 1 : -1;
+  const sorted = [...invoices].sort((a, b) => {
+    switch (sort.key) {
+      case 'invoiceNumber':
+        return (a.invoiceNumber ?? '').localeCompare(b.invoiceNumber ?? '', undefined, { numeric: true }) * dir;
+      case 'client': {
+        const na = clientMap.get(a.clientId)?.tradeName ?? a.buyerName ?? '';
+        const nb = clientMap.get(b.clientId)?.tradeName ?? b.buyerName ?? '';
+        return na.localeCompare(nb) * dir;
+      }
+      case 'buyerGstin':
+        return (a.buyerGstin ?? '').localeCompare(b.buyerGstin ?? '') * dir;
+      case 'invoiceDate': {
+        const da = a.invoiceDate ? new Date(a.invoiceDate).getTime() : new Date(a.createdAt).getTime();
+        const db = b.invoiceDate ? new Date(b.invoiceDate).getTime() : new Date(b.createdAt).getTime();
+        return (da - db) * dir;
+      }
+      case 'dueDate': {
+        const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+        const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+        return (da - db) * dir;
+      }
+      case 'taxableValue':
+        return ((a.taxableValue ?? 0) - (b.taxableValue ?? 0)) * dir;
+      case 'gstAmount':
+        return ((a.gstAmount ?? 0) - (b.gstAmount ?? 0)) * dir;
+      case 'totalAmount':
+        return ((a.totalAmount ?? 0) - (b.totalAmount ?? 0)) * dir;
+      case 'status':
+        return (a.status ?? '').localeCompare(b.status ?? '') * dir;
+      case 'paymentStatus':
+        return (a.paymentStatus ?? '').localeCompare(b.paymentStatus ?? '') * dir;
+      case 'riskLevel':
+        return (a.riskLevel ?? '').localeCompare(b.riskLevel ?? '') * dir;
+      default:
+        return 0;
+    }
+  });
+  return sorted;
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function InvoiceWorkspacePage() {
-  // ── App navigation ──
   const { setCurrentView } = useApp();
+  const { organization } = useOrg();
 
-  // ── Firestore data hooks ──
-  const { data: invoices, loading: invoicesLoading, error: invoicesError } = useFireInvoices();
-  const { data: clients, loading: clientsLoading, error: clientsError } = useFireClients();
-  const { data: documents, loading: documentsLoading } = useFireDocuments();
+  // ── Data hooks ──
+  const {
+    invoices,
+    loading: invoicesLoading,
+    error: invoicesError,
+    refetch: refetchInvoices,
+    createInvoice,
+    updateInvoice,
+    deleteInvoice,
+    markPaid,
+    duplicateInvoice,
+    fetchInsights,
+    sendInvoice,
+    generatePdf,
+    saving,
+  } = useInvoicesApi();
 
-  // ── Client map for name lookups ──
+  const {
+    clients,
+    loading: clientsLoading,
+    refetch: refetchClients,
+  } = useClientsApi();
+
+  // ── Client map ──
   const clientMap = useMemo(() => {
-    const map = new Map<string, FirestoreClient & { id: string }>();
+    const m = new Map<string, { tradeName: string; gstin: string }>();
     for (const c of clients) {
-      map.set(c.clientId, c);
+      m.set(c.id, { tradeName: c.tradeName, gstin: c.gstin });
     }
-    return map;
+    return m;
   }, [clients]);
 
-  // ── Upload State ──
-  // useDocuments() drives real uploads to Firebase Storage (org-isolated,
-  // category='invoices') and surfaces live per-file progress through the
-  // `uploads` array. We project that array into the legacy {id,name,progress}
-  // shape so the existing progress UI stays untouched.
-  const { uploads, uploadMany, isUploading } = useDocuments('invoices');
-  const uploadingFiles = useMemo(
-    () => uploads.map(u => ({ id: u.id, name: u.fileName, progress: Math.round(u.progress) })),
-    [uploads],
+  // ── Filters + sort + search (debounced) ──
+  const [filters, setFilters] = useState<InvoiceFiltersState>(DEFAULT_FILTERS);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [sort, setSort] = useState<SortState>({ key: 'invoiceDate', dir: 'desc' });
+
+  // Debounced search
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(filters.search), 250);
+    return () => clearTimeout(t);
+  }, [filters.search]);
+
+  const effectiveFilters = useMemo(
+    () => ({ ...filters, search: debouncedSearch }),
+    [filters, debouncedSearch],
   );
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Filter State ──
-  const [clientFilter, setClientFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [riskFilter, setRiskFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  // ── Filtered + sorted invoices ──
+  const filteredInvoices = useMemo(
+    () => applyFilters(invoices, effectiveFilters, clientMap),
+    [invoices, effectiveFilters, clientMap],
+  );
 
-  // ── Action State ──
-  const [approvingId, setApprovingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const sortedInvoices = useMemo(
+    () => sortInvoices(filteredInvoices, sort, clientMap),
+    [filteredInvoices, sort, clientMap],
+  );
 
-  // ── Loading ──
-  const loading = invoicesLoading || clientsLoading;
+  // ── Pagination ──
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
-  // ── Summary Metrics ──
-  const summary = useMemo(() => {
-    const total = invoices.length;
-    const approved = invoices.filter(i => i.status === 'approved').length;
-    const pending = invoices.filter(i => i.status === 'draft').length;
-    const taxVolume = invoices.reduce((sum, i) => sum + i.totalAmount, 0);
-    const riskItems = invoices.filter(i => i.riskLevel === 'high' || i.riskLevel === 'critical').length;
-    return { total, approved, pending, taxVolume, riskItems };
-  }, [invoices]);
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [effectiveFilters]);
 
-  // ── Filtered Invoices ──
-  const filteredInvoices = useMemo(() => {
-    return invoices.filter(inv => {
-      if (clientFilter !== 'all' && inv.clientId !== clientFilter) return false;
-      if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
-      if (riskFilter !== 'all' && inv.riskLevel !== riskFilter) return false;
-      if (typeFilter !== 'all' && inv.invoiceType !== typeFilter) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const clientName = clientMap.get(inv.clientId)?.tradeName ?? '';
-        const matchesNumber = inv.invoiceNumber.toLowerCase().includes(q);
-        const matchesBuyer = (inv.buyerName ?? '').toLowerCase().includes(q);
-        const matchesClient = clientName.toLowerCase().includes(q);
-        if (!matchesNumber && !matchesBuyer && !matchesClient) return false;
+  const paginatedInvoices = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return sortedInvoices.slice(start, start + pageSize);
+  }, [sortedInvoices, page, pageSize]);
+
+  // ── KPIs ──
+  const kpis = useMemo(() => computeInvoiceKpis(invoices), [invoices]);
+
+  // ── Selection ──
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [effectiveFilters]);
+
+  // ── Details Sheet ──
+  const [detailsInvoice, setDetailsInvoice] = useState<ApiInvoice | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  // ── Delete confirmation dialog (replaces window.confirm) ──
+  const [deleteTarget, setDeleteTarget] = useState<ApiInvoice | null>(null);
+
+  const handleRowClick = useCallback((inv: ApiInvoice) => {
+    setDetailsInvoice(inv);
+    setDetailsOpen(true);
+  }, []);
+
+  // ── Builder Dialog ──
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [editInvoice, setEditInvoice] = useState<ApiInvoice | null>(null);
+
+  const handleOpenCreate = useCallback(() => {
+    setEditInvoice(null);
+    setBuilderOpen(true);
+  }, []);
+
+  const handleOpenEdit = useCallback((inv: ApiInvoice) => {
+    setEditInvoice(inv);
+    setBuilderOpen(true);
+    setDetailsOpen(false);
+  }, []);
+
+  // ── Builder submit ──
+  const handleBuilderSubmit = useCallback(
+    async (payload: Record<string, unknown>) => {
+      const isEdit = Boolean(editInvoice);
+      const status = (payload.status as 'draft' | 'sent') ?? 'draft';
+      try {
+        // Normalize line items — pass ALL fields the builder emits so the
+        // backend can persist cess, discount, unit, hsn, etc. (previously
+        // only description/hsn/qty/price/gstRate were sent — cess & discount
+        // were silently dropped, causing GST mismatches on re-open).
+        const normalizedItems = (payload.items as Array<Record<string, unknown>>)?.map((it) => ({
+          description: (it.description as string) ?? '',
+          hsnCode: (it.hsnCode as string) || undefined,
+          quantity: Number(it.quantity ?? 1),
+          unit: (it.unit as string) || undefined,
+          unitPrice: Number(it.unitPrice ?? 0),
+          gstRate: Number(it.gstRate ?? 0),
+          cessRate: it.cessRate !== undefined ? Number(it.cessRate) : undefined,
+          discount: it.discountPct !== undefined ? Number(it.discountPct) : undefined,
+        }));
+
+        if (isEdit && editInvoice) {
+          // Edit: PATCH — pass all document fields.
+          await updateInvoice(editInvoice.id, {
+            clientId: payload.clientId,
+            buyerGstin: payload.buyerGstin,
+            buyerName: payload.customerName,
+            invoiceDate: payload.date,
+            dueDate: payload.dueDate,
+            invoiceNumber: payload.invoiceNumber,
+            invoiceType: payload.invoiceType,
+            notes: payload.notes,
+            notesFinance: payload.notesFinance,
+            terms: payload.terms,
+            bankDetails: payload.bankDetails,
+            placeOfSupply: payload.placeOfSupply,
+            reverseCharge: payload.reverseCharge,
+            items: normalizedItems,
+            status: status === 'sent' ? 'sent' : undefined,
+          });
+          toast.success('Invoice updated');
+        } else {
+          // Create: POST — pass all document fields.
+          await createInvoice({
+            cloud: true,
+            clientId: payload.clientId as string | undefined,
+            customerName: payload.customerName as string,
+            buyerGstin: payload.buyerGstin as string | undefined,
+            sellerGstin: payload.sellerGstin as string | undefined,
+            date: payload.date as string | undefined,
+            dueDate: payload.dueDate as string | undefined,
+            invoiceNumber: payload.invoiceNumber as string | undefined,
+            invoiceType: payload.invoiceType as string | undefined,
+            items: normalizedItems,
+            notes: payload.notes as string | undefined,
+            notesFinance: payload.notesFinance as string | undefined,
+            terms: payload.terms as string | undefined,
+            bankDetails: payload.bankDetails as string | undefined,
+            placeOfSupply: payload.placeOfSupply as string | undefined,
+            reverseCharge: payload.reverseCharge as boolean | undefined,
+            isInterState: payload.isInterState as boolean | undefined,
+          });
+          toast.success(status === 'sent' ? 'Invoice created & sent' : 'Invoice created');
+        }
+        setBuilderOpen(false);
+        setEditInvoice(null);
+        refetchInvoices();
+      } catch (err) {
+        console.error('[InvoiceWorkspacePage] builder submit failed:', err);
+        toast.error('Unable to save this invoice. Please try again.');
       }
-      return true;
-    });
-  }, [invoices, clientFilter, statusFilter, riskFilter, typeFilter, searchQuery, clientMap]);
+    },
+    [editInvoice, createInvoice, updateInvoice, refetchInvoices],
+  );
 
-  // ── Upload Handlers ──
-  // Pre-flight each file with the shared `validateFile` helper (100 MB cap +
-  // supported extensions), then delegate to useDocuments().uploadMany() which
-  // uploads to Firebase Storage (organizations/{orgId}/invoices/...) and writes
-  // a Firestore `documents` metadata row. Live progress is tracked in the
-  // `uploads` array and surfaced through `uploadingFiles` above.
-  const handleUpload = useCallback(async (files: File[]) => {
-    const valid: File[] = [];
-    for (const file of files) {
-      const err = validateFile(file);
-      if (err) {
-        toast.error(`${file.name}: ${err}`);
-        continue;
+  // ── Per-row actions ──
+  const handleAction = useCallback(
+    async (action: string, inv: ApiInvoice) => {
+      switch (action) {
+        case 'view':
+          setDetailsInvoice(inv);
+          setDetailsOpen(true);
+          break;
+        case 'edit':
+          handleOpenEdit(inv);
+          break;
+        case 'send': {
+          const result = await sendInvoice(inv.id, 'email');
+          if (result) {
+            // Surface the actual delivery status — never fake "sent" when the
+            // email wasn't delivered (Gmail disconnected, no customer email, etc.)
+            if (result.delivered) {
+              toast.success(`Invoice ${inv.invoiceNumber} emailed to customer`);
+            } else if (result.deliveryNote) {
+              toast.warning(`Invoice ${inv.invoiceNumber} marked as sent`, { description: result.deliveryNote });
+            } else {
+              toast.success(`Invoice ${inv.invoiceNumber} marked as sent`);
+            }
+            refetchInvoices();
+          } else {
+            toast.error('Unable to send invoice');
+          }
+          break;
+        }
+        case 'send-whatsapp': {
+          const result = await sendInvoice(inv.id, 'whatsapp');
+          if (result) {
+            toast.success(`Invoice ${inv.invoiceNumber} marked as sent`, { description: result.deliveryNote || undefined });
+            refetchInvoices();
+          } else {
+            toast.error('Unable to send invoice');
+          }
+          break;
+        }
+        case 'mark-paid': {
+          const ok = await markPaid(inv.id);
+          if (ok) {
+            toast.success(`Invoice ${inv.invoiceNumber} marked as paid`);
+            refetchInvoices();
+          } else {
+            toast.error('Unable to mark invoice as paid');
+          }
+          break;
+        }
+        case 'duplicate': {
+          const ok = await duplicateInvoice(inv.id);
+          if (ok) {
+            toast.success('Invoice duplicated');
+            refetchInvoices();
+          } else {
+            toast.error('Unable to duplicate invoice');
+          }
+          break;
+        }
+        case 'pdf': {
+          const result = await generatePdf(inv.id);
+          if (result?.html) {
+            // Open the HTML in a new window for print/save as PDF.
+            const w = window.open('', '_blank', 'width=800,height=900');
+            if (w) {
+              w.document.write(result.html);
+              w.document.close();
+              setTimeout(() => w.print(), 500);
+            }
+            toast.success('PDF generated');
+          } else {
+            toast.error('Unable to generate PDF');
+          }
+          break;
+        }
+        case 'print': {
+          // Use the same PDF HTML generation for print.
+          const result = await generatePdf(inv.id);
+          if (result?.html) {
+            const w = window.open('', '_blank', 'width=800,height=900');
+            if (w) {
+              w.document.write(result.html);
+              w.document.close();
+              setTimeout(() => w.print(), 500);
+            }
+          } else {
+            toast.error('Unable to print invoice');
+          }
+          break;
+        }
+        case 'cancel': {
+          // FIX (B9): 'archived' is not a valid status. Use 'cancelled'.
+          const ok = await updateInvoice(inv.id, { status: 'cancelled' });
+          if (ok) {
+            toast.success(`Invoice ${inv.invoiceNumber} cancelled`);
+            refetchInvoices();
+          } else {
+            toast.error('Unable to cancel invoice');
+          }
+          break;
+        }
+        case 'archive': {
+          // Backward-compat alias — treat 'archive' as 'cancel'.
+          const ok = await updateInvoice(inv.id, { status: 'cancelled' });
+          if (ok) {
+            toast.success(`Invoice ${inv.invoiceNumber} cancelled`);
+            refetchInvoices();
+          }
+          break;
+        }
+        case 'delete': {
+          // Defer to the AlertDialog — actual deletion runs in onConfirmDelete.
+          setDeleteTarget(inv);
+          break;
+        }
+        default:
+          console.warn('[InvoiceWorkspacePage] unknown action:', action);
       }
-      valid.push(file);
-    }
-    if (valid.length === 0) return;
+    },
+    [sendInvoice, markPaid, duplicateInvoice, generatePdf, updateInvoice, deleteInvoice, refetchInvoices, detailsInvoice, handleOpenEdit],
+  );
 
-    try {
-      const uploaded = await uploadMany(valid, { category: 'invoices' });
-      const failed = valid.length - uploaded.length;
-      if (uploaded.length > 0) {
-        toast.success(`${uploaded.length} file${uploaded.length !== 1 ? 's' : ''} uploaded to Firebase Storage`);
+  // ── Delete confirmation handler (drives the AlertDialog) ──
+  const onConfirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const ok = await deleteInvoice(deleteTarget.id);
+    if (ok) {
+      toast.success('Invoice deleted');
+      if (detailsInvoice?.id === deleteTarget.id) {
+        setDetailsOpen(false);
       }
-      if (failed > 0) {
-        toast.error(`${failed} file${failed !== 1 ? 's' : ''} failed to upload`);
+      refetchInvoices();
+    } else {
+      toast.error('Unable to delete invoice');
+    }
+    setDeleteTarget(null);
+  }, [deleteTarget, deleteInvoice, detailsInvoice, refetchInvoices]);
+
+  // ── Bulk actions ──
+  const handleBulkAction = useCallback(
+    async (action: string) => {
+      if (selectedIds.size === 0) return;
+      const ids = Array.from(selectedIds);
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const id of ids) {
+        try {
+          if (action === 'send') {
+            const ok = await sendInvoice(id, 'email');
+            if (ok) successCount++;
+            else failCount++;
+          } else if (action === 'mark-paid') {
+            const ok = await markPaid(id);
+            if (ok) successCount++;
+            else failCount++;
+          } else if (action === 'archive' || action === 'cancel') {
+            // FIX (B9): 'archived' is not a valid status. Use 'cancelled'.
+            const ok = await updateInvoice(id, { status: 'cancelled' });
+            if (ok) successCount++;
+            else failCount++;
+          } else if (action === 'delete') {
+            const ok = await deleteInvoice(id);
+            if (ok) successCount++;
+            else failCount++;
+          } else if (action === 'pdf') {
+            const inv = invoices.find((i) => i.id === id);
+            if (inv) {
+              const result = await generatePdf(id);
+              if (result?.html) {
+                const w = window.open('', '_blank');
+                if (w) {
+                  w.document.write(result.html);
+                  w.document.close();
+                }
+                successCount++;
+              } else {
+                failCount++;
+              }
+            }
+          }
+        } catch {
+          failCount++;
+        }
       }
-    } catch (err) {
-      toast.error(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
-  }, [uploadMany]);
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
+      if (action === 'export-csv') {
+        handleExportCsv(invoices.filter((i) => selectedIds.has(i.id)));
+        return;
+      }
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) handleUpload(files);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) handleUpload(files);
-    e.target.value = '';
-  };
-
-  // ── Invoice action handlers ──
-  const handleApprove = async (invoiceId: string, invoiceNumber: string) => {
-    setApprovingId(invoiceId);
-    try {
-      await approveInvoice(invoiceId);
-      toast.success(`Invoice ${invoiceNumber} approved`);
-    } catch (err) {
-      toast.error(`Failed to approve: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setApprovingId(null);
-    }
-  };
-
-  const handleDelete = async (invoiceId: string, invoiceNumber: string) => {
-    setDeletingId(invoiceId);
-    try {
-      await deleteInvoice(invoiceId);
-      toast.success(`Invoice ${invoiceNumber} deleted`);
-    } catch (err) {
-      toast.error(`Failed to delete: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  // ── Loading Skeleton ──
-  if (loading) {
-    return (
-      <div className="space-y-6 p-4 md:p-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-7 w-56" />
-            <Skeleton className="h-4 w-72" />
-          </div>
-          <Skeleton className="h-9 w-48" />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-xl" />
-          ))}
-        </div>
-        <Skeleton className="h-96 rounded-xl" />
-      </div>
-    );
-  }
-
-  // ── Error state ──
-  if (invoicesError || clientsError) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <AlertCircle className="size-10 text-red-400 mb-4" />
-        <h3 className="text-lg font-semibold text-foreground">Failed to load data</h3>
-        <p className="text-sm text-muted-foreground mt-1 max-w-md">
-          {invoicesError || clientsError}
-        </p>
-      </div>
-    );
-  }
-
-  // ── Empty state when no invoices exist ──
-  // `isUploading` is true while any file is mid-upload, so we never flash the
-  // empty state at the user while their first upload is in flight.
-  if (invoices.length === 0 && !isUploading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
-        <div className="space-y-6 p-4 md:p-6 lg:p-8">
-          <motion.div
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                Invoice Workspace
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Upload, extract, and validate GST invoices
-              </p>
-            </div>
-          </motion.div>
-
-          <ProfessionalEmptyState
-            icon={FileUp}
-            title="No invoices yet"
-            description="Upload your first purchase or sales document — GSTPilot will extract, validate, and match each invoice automatically."
-            accent="emerald"
-            action={{
-              label: 'Upload your first document',
-              onClick: () => fileInputRef.current?.click(),
-              icon: Upload,
-            }}
-            secondaryAction={{
-              label: 'Add a client first',
-              onClick: () => setCurrentView('clients'),
-            }}
-          />
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
-      </div>
-    );
-  }
-
-  // ─── Summary Cards ────────────────────────────────────────────────────────────
-
-  const summaryCards = [
-    {
-      title: 'Total Invoices',
-      value: formatNumber(summary.total),
-      icon: FileText,
-      color: 'text-slate-600',
-      bgColor: 'bg-slate-50',
+      toast.success(
+        `${successCount} invoice${successCount !== 1 ? 's' : ''} ${action === 'delete' ? 'deleted' : 'updated'}${
+          failCount > 0 ? `, ${failCount} failed` : ''
+        }`,
+      );
+      setSelectedIds(new Set());
+      refetchInvoices();
     },
-    {
-      title: 'Approved',
-      value: formatNumber(summary.approved),
-      icon: CheckCircle2,
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-50',
+    [selectedIds, sendInvoice, markPaid, updateInvoice, deleteInvoice, generatePdf, invoices, refetchInvoices],
+  );
+
+  // ── Export CSV ──
+  const handleExportCsv = useCallback((invList: ApiInvoice[]) => {
+    const headers = [
+      'Invoice #',
+      'Client',
+      'GSTIN',
+      'Date',
+      'Due Date',
+      'Taxable',
+      'CGST',
+      'SGST',
+      'IGST',
+      'CESS',
+      'Total',
+      'Status',
+      'Payment',
+      'Risk',
+    ];
+    const rows = invList.map((inv) => [
+      inv.invoiceNumber,
+      clientMap.get(inv.clientId)?.tradeName ?? inv.buyerName ?? '',
+      inv.buyerGstin ?? '',
+      inv.invoiceDate ?? '',
+      inv.dueDate ?? '',
+      inv.taxableValue ?? 0,
+      inv.cgst ?? 0,
+      inv.sgst ?? 0,
+      inv.igst ?? 0,
+      inv.cess ?? 0,
+      inv.totalAmount ?? 0,
+      inv.status,
+      inv.paymentStatus,
+      inv.riskLevel,
+    ]);
+    const csv = [headers, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gstpilot-invoices-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${invList.length} invoice${invList.length !== 1 ? 's' : ''} to CSV`);
+  }, [clientMap]);
+
+  // ── Oracle one-click fix handler ──
+  const handleOracleFix = useCallback(
+    async (
+      _fixId: string,
+      endpoint: string,
+      method: 'POST' | 'PATCH',
+      body: Record<string, unknown>,
+    ) => {
+      try {
+        const url = endpoint.startsWith('/api/')
+          ? endpoint
+          : `/api/invoices/${endpoint}`;
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        toast.success('Oracle fix applied successfully');
+        refetchInvoices();
+      } catch (err) {
+        console.error('[Oracle fix] failed:', err);
+        toast.error('Unable to apply this fix. Please try again.');
+      }
     },
-    {
-      title: 'Pending',
-      value: formatNumber(summary.pending),
-      icon: Clock,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50',
-    },
-    {
-      title: 'Tax Volume',
-      value: formatCurrency(summary.taxVolume),
-      icon: TrendingUp,
-      color: 'text-teal-600',
-      bgColor: 'bg-teal-50',
-    },
-    {
-      title: 'Risk Items',
-      value: formatNumber(summary.riskItems),
-      icon: ShieldAlert,
-      color: summary.riskItems > 0 ? 'text-red-600' : 'text-slate-600',
-      bgColor: summary.riskItems > 0 ? 'bg-red-50' : 'bg-slate-50',
-    },
-  ];
+    [refetchInvoices],
+  );
+
+  // ── Loading state ──
+  const isLoading = invoicesLoading || clientsLoading;
+
+  // ── Determine the selected invoice for the Oracle panel ──
+  const oracleInvoiceId = detailsInvoice?.id ?? null;
+
+  // ── Selected client for the details sheet ──
+  const detailsClient = detailsInvoice
+    ? clients.find((c) => c.id === detailsInvoice.clientId) ?? null
+    : null;
+
+  // ── Organization info ──
+  const orgInfo = organization
+    ? { name: organization.name, gstin: organization.gstin ?? '', address: undefined as string | undefined }
+    : null;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50/80 to-white">
-      <div className="space-y-6 p-4 md:p-6 lg:p-8">
-        {/* ── Header ── */}
-        <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Invoice Workspace
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {invoices.length} invoice{invoices.length !== 1 ? 's' : ''} &middot; {documents.length} document{documents.length !== 1 ? 's' : ''}
-            </p>
+    <div className="h-full flex flex-col bg-black text-foreground">
+      {/* ── Header ── */}
+      <header className="sticky top-0 z-30 backdrop-blur-xl bg-black/70 border-b border-white/[0.06]">
+        <div className="px-4 md:px-6 py-3 flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center justify-center h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-500/5 ring-1 ring-blue-400/20">
+              <FileText className="h-4 w-4 text-blue-300" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base md:text-lg font-semibold tracking-tight text-foreground truncate">
+                Invoices
+              </h1>
+              <p className="text-[11px] text-muted-foreground hidden sm:block">
+                {invoices.length} total · {kpis.paid} paid · {kpis.outstanding > 0 ? `${formatCurrency(kpis.outstanding)} outstanding` : 'all settled'}
+              </p>
+            </div>
           </div>
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            className="bg-emerald-600 hover:bg-emerald-700 gap-2"
-          >
-            <Upload className="size-4" />
-            Upload Document
-          </Button>
-        </motion.div>
 
-        {/* ── Summary Cards ── */}
-        <motion.div
-          variants={staggerContainer}
-          initial="hidden"
-          animate="visible"
-          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"
-        >
-          {summaryCards.map((card) => (
-            <motion.div key={card.title} variants={staggerItem}>
-              <Card className="border-0 shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center size-9 rounded-lg ${card.bgColor}`}>
-                      <card.icon className={`size-4 ${card.color}`} />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground font-medium">{card.title}</p>
-                      <p className="text-lg font-bold tracking-tight">{card.value}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </motion.div>
-
-        {/* ── Upload Area ── */}
-        <motion.div variants={fadeInUp} initial="hidden" animate="visible">
-          <Card className={`border-2 border-dashed transition-colors ${
-            isDragging ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-200 bg-white'
-          }`}>
-            <CardContent className="p-6">
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className="flex flex-col items-center gap-3 text-center"
-              >
-                <div className="flex items-center justify-center size-12 rounded-xl bg-slate-50">
-                  <CloudUpload className="size-6 text-slate-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    Drag & drop files here, or{' '}
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="text-emerald-600 hover:text-emerald-700 font-semibold underline underline-offset-2"
-                    >
-                      browse
-                    </button>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Supports JSON, CSV, XLSX, PDF &middot; Max 10MB per file
-                  </p>
-                </div>
-
-                {/* Uploading files indicator */}
-                <AnimatePresence>
-                  {uploadingFiles.length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="w-full max-w-md mt-2 space-y-2"
-                    >
-                      {uploadingFiles.map(f => (
-                        <div key={f.id} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
-                          {getFileIcon(f.name)}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium truncate">{f.name}</p>
-                            <div className="w-full h-1.5 bg-slate-200 rounded-full mt-1">
-                              <motion.div
-                                className="h-full bg-emerald-500 rounded-full"
-                                initial={{ width: 0 }}
-                                animate={{ width: `${f.progress}%` }}
-                                transition={{ duration: 0.3 }}
-                              />
-                            </div>
-                          </div>
-                          <span className="text-xs text-muted-foreground">{f.progress}%</span>
-                        </div>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.doc,.docx"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
-
-        {/* ── Filters ── */}
-        <motion.div
-          variants={fadeInUp}
-          initial="hidden"
-          animate="visible"
-          className="flex flex-col sm:flex-row gap-3"
-        >
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by invoice # or buyer name..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-white"
-            />
+          <div className="ml-auto flex items-center gap-2">
+            <AskOracleButton context="invoices" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                refetchInvoices();
+                refetchClients();
+              }}
+              className="h-9 border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] text-foreground"
+              aria-label="Refresh"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span className="hidden md:inline ml-1.5">Refresh</span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleOpenCreate}
+              className="h-9 bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 font-semibold"
+            >
+              <Plus className="h-4 w-4 mr-1.5" />
+              <span className="hidden sm:inline">New Invoice</span>
+              <span className="sm:hidden">New</span>
+            </Button>
           </div>
-          <Select value={clientFilter} onValueChange={setClientFilter}>
-            <SelectTrigger className="w-full sm:w-[180px] bg-white">
-              <SelectValue placeholder="All Clients" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Clients</SelectItem>
-              {clients.map(c => (
-                <SelectItem key={c.clientId} value={c.clientId}>
-                  {c.tradeName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] bg-white">
-              <SelectValue placeholder="All Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="filed">Filed</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={riskFilter} onValueChange={setRiskFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] bg-white">
-              <SelectValue placeholder="All Risk" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Risk</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="critical">Critical</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-full sm:w-[150px] bg-white">
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {Object.keys(INVOICE_TYPE_TO_SECTION).map(t => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </motion.div>
+        </div>
+      </header>
 
-        {/* ── Invoice Table ── */}
-        <motion.div variants={fadeInUp} initial="hidden" animate="visible">
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-0">
-              {filteredInvoices.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <Inbox className="size-10 text-slate-300 mb-3" />
-                  <p className="text-sm font-medium text-foreground">No invoices match your filters</p>
-                  <p className="text-xs text-muted-foreground mt-1">Try adjusting your search or filter criteria</p>
-                </div>
+      {/* ── Main Content ── */}
+      <main className="flex-1 px-4 md:px-6 py-6">
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6">
+          {/* Left column: KPIs + Filters + Table */}
+          <div className="space-y-4 md:space-y-6 min-w-0">
+            <AnimatePresence mode="wait">
+              {isLoading ? (
+                <motion.div key="loading" initial="hidden" animate="visible" exit="hidden" variants={fadeInUp}>
+                  <InvoiceWorkspaceSkeleton />
+                </motion.div>
+              ) : invoicesError ? (
+                <motion.div key="error" initial="hidden" animate="visible" exit="hidden" variants={fadeInUp}>
+                  <InvoiceErrorState
+                    message={invoicesError}
+                    onRetry={() => {
+                      refetchInvoices();
+                      refetchClients();
+                    }}
+                    onGoBack={() => setCurrentView('dashboard')}
+                  />
+                </motion.div>
+              ) : invoices.length === 0 ? (
+                <motion.div key="empty" initial="hidden" animate="visible" exit="hidden" variants={fadeInUp}>
+                  <InvoiceEmptyState
+                    onCreate={handleOpenCreate}
+                    onImport={() => toast.info('Import coming soon — use the Create dialog for now.')}
+                    onConnectZoho={() => toast.info('Zoho Books sync is available in Settings → Integrations.')}
+                  />
+                </motion.div>
               ) : (
-                <ScrollArea className="max-h-[600px]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50/50">
-                        <TableHead className="text-xs font-semibold">Invoice #</TableHead>
-                        <TableHead className="text-xs font-semibold">Date</TableHead>
-                        <TableHead className="text-xs font-semibold">Client</TableHead>
-                        <TableHead className="text-xs font-semibold">Type</TableHead>
-                        <TableHead className="text-xs font-semibold text-right">Taxable Value</TableHead>
-                        <TableHead className="text-xs font-semibold text-right">Tax</TableHead>
-                        <TableHead className="text-xs font-semibold text-right">Total</TableHead>
-                        <TableHead className="text-xs font-semibold">Status</TableHead>
-                        <TableHead className="text-xs font-semibold">Risk</TableHead>
-                        <TableHead className="text-xs font-semibold text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <AnimatePresence>
-                        {filteredInvoices.map((inv) => {
-                          const client = clientMap.get(inv.clientId);
-                          const clientName = client?.tradeName ?? inv.buyerName ?? 'Unknown';
-                          const statusCfg = STATUS_BADGE[inv.status as InvoiceStatus] ?? STATUS_BADGE.draft;
-                          const riskCfg = RISK_BADGE[inv.riskLevel as RiskLevel] ?? RISK_BADGE.low;
-                          const matchCfg = MATCH_STATUS_CONFIG[inv.matchStatus as MatchStatus];
-                          const totalTax = inv.cgst + inv.sgst + inv.igst + inv.cess;
-                          const isApproving = approvingId === inv.id;
-                          const isDeleting = deletingId === inv.id;
-                          const isActionLoading = isApproving || isDeleting;
+                <motion.div
+                  key="content"
+                  initial="hidden"
+                  animate="visible"
+                  exit="hidden"
+                  variants={fadeInUp}
+                  className="space-y-4 md:space-y-6 min-w-0"
+                >
+                  {/* KPI Cards */}
+                  <InvoiceKpiCards kpis={kpis} />
 
-                          return (
-                            <motion.tr
-                              key={inv.id}
-                              initial={{ opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, x: -20 }}
-                              transition={{ duration: 0.2 }}
-                              className="hover:bg-slate-50/50 border-b transition-colors"
-                            >
-                              <TableCell>
-                                <div className="flex flex-col">
-                                  <span className="font-medium text-sm">{inv.invoiceNumber}</span>
-                                  {matchCfg && (
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border inline-block w-fit mt-0.5 ${matchCfg.bgColor} ${matchCfg.color}`}>
-                                      {matchCfg.label}
-                                    </span>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-sm text-muted-foreground">
-                                {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex flex-col">
-                                  <span className="text-sm font-medium">{clientName}</span>
-                                  {inv.buyerGstin && (
-                                    <span className="text-[10px] text-muted-foreground">{inv.buyerGstin}</span>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="text-[10px] font-medium bg-slate-50">
-                                  {inv.invoiceType}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right text-sm">
-                                {formatCurrency(inv.taxableValue)}
-                              </TableCell>
-                              <TableCell className="text-right text-sm">
-                                {formatCurrency(totalTax)}
-                              </TableCell>
-                              <TableCell className="text-right text-sm font-semibold">
-                                {formatCurrency(inv.totalAmount)}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className={`text-[10px] font-medium ${statusCfg.className}`}>
-                                  {statusCfg.label}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className={`text-[10px] font-medium ${riskCfg.className}`}>
-                                  {RISK_LEVEL_CONFIG[inv.riskLevel as RiskLevel]?.icon ?? ''} {riskCfg.label}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  {inv.status === 'draft' && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 px-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                                      onClick={() => handleApprove(inv.id, inv.invoiceNumber)}
-                                      disabled={isActionLoading}
-                                    >
-                                      {isApproving ? (
-                                        <Loader2 className="size-3.5 animate-spin" />
-                                      ) : (
-                                        <ThumbsUp className="size-3.5" />
-                                      )}
-                                    </Button>
-                                  )}
-                                  {(inv.status === 'draft' || inv.status === 'approved') && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-50"
-                                      onClick={() => handleDelete(inv.id, inv.invoiceNumber)}
-                                      disabled={isActionLoading}
-                                    >
-                                      {isDeleting ? (
-                                        <Loader2 className="size-3.5 animate-spin" />
-                                      ) : (
-                                        <Trash2 className="size-3.5" />
-                                      )}
-                                    </Button>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </motion.tr>
-                          );
-                        })}
-                      </AnimatePresence>
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
+                  {/* Filters */}
+                  <InvoiceFilters
+                    filters={filters}
+                    onFiltersChange={setFilters}
+                    clients={clients}
+                    totalInvoices={invoices.length}
+                    filteredCount={filteredInvoices.length}
+                    selectedCount={selectedIds.size}
+                  />
+
+                  {/* Table or Filtered Empty State */}
+                  {filteredInvoices.length === 0 ? (
+                    <InvoiceEmptyState
+                      onCreate={handleOpenCreate}
+                      hasFilters
+                      onClearFilters={() => setFilters({ ...DEFAULT_FILTERS })}
+                    />
+                  ) : (
+                    <>
+                      <InvoiceTable
+                        invoices={paginatedInvoices}
+                        clients={clients}
+                        selectedIds={selectedIds}
+                        onSelectionChange={setSelectedIds}
+                        onRowClick={handleRowClick}
+                        onAction={handleAction}
+                        onBulkAction={handleBulkAction}
+                        sort={sort}
+                        onSortChange={setSort}
+                        searchQuery={debouncedSearch}
+                        saving={saving}
+                      />
+
+                      <InvoicePagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={sortedInvoices.length}
+                        onPageChange={setPage}
+                        onPageSizeChange={setPageSize}
+                      />
+                    </>
+                  )}
+                </motion.div>
               )}
-            </CardContent>
-          </Card>
-        </motion.div>
+            </AnimatePresence>
+          </div>
 
-        {/* ── Recent Documents ── */}
-        {documents.length > 0 && (
-          <motion.div variants={fadeInUp} initial="hidden" animate="visible">
-            <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
-                <h3 className="text-sm font-semibold text-foreground mb-3">Recent Documents</h3>
-                <ScrollArea className="max-h-48">
-                  <div className="space-y-2">
-                    {documents.slice(0, 10).map((doc) => {
-                      const client = clientMap.get(doc.clientId);
-                      return (
-                        <div key={doc.id} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                          {getFileIcon(doc.fileName)}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{doc.fileName}</p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {client?.tradeName ?? 'Unknown'} &middot; {formatFileSize(doc.fileSize)} &middot; {doc.documentType.replace(/_/g, ' ')}
-                            </p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] ${
-                              doc.status === 'extracted'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : doc.status === 'processing'
-                                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                : doc.status === 'failed'
-                                ? 'bg-red-50 text-red-700 border-red-200'
-                                : 'bg-slate-50 text-slate-700 border-slate-200'
-                            }`}
-                          >
-                            {doc.status}
-                          </Badge>
-                          {doc.extractedInvoiceCount > 0 && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {doc.extractedInvoiceCount} invoice{doc.extractedInvoiceCount !== 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
+          {/* Right column: Oracle AI panel (sticky on desktop) */}
+          <aside className="hidden xl:block">
+            <div className="sticky top-20 space-y-4">
+              {isLoading ? (
+                <OraclePanelSkeleton />
+              ) : invoices.length === 0 ? null : (
+                <InvoiceOraclePanel
+                  invoiceId={oracleInvoiceId}
+                  fetchInsights={fetchInsights}
+                  onOneClickFix={handleOracleFix}
+                />
+              )}
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      {/* ── Footer ── */}
+      <footer className="mt-auto border-t border-white/[0.06] bg-black/70 backdrop-blur-xl">
+        <div className="px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-3 w-3 text-blue-400" />
+            <span>Powered by GSTPilot Infinity™ · Oracle AI™ insights</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setCurrentView('dashboard')}
+              className="hover:text-foreground transition-colors"
+            >
+              Dashboard
+            </button>
+            <span className="text-muted-foreground/40">·</span>
+            <button
+              onClick={() => setCurrentView('returns')}
+              className="hover:text-foreground transition-colors"
+            >
+              Returns
+            </button>
+            <span className="text-muted-foreground/40">·</span>
+            <button
+              onClick={() => setCurrentView('settings')}
+              className="hover:text-foreground transition-colors"
+            >
+              Settings
+            </button>
+          </div>
+        </div>
+      </footer>
+
+      {/* ── Details Sheet (slide-over) ── */}
+      <InvoiceDetailsSheet
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        invoice={detailsInvoice}
+        client={detailsClient}
+        organization={orgInfo}
+        onEdit={() => detailsInvoice && handleOpenEdit(detailsInvoice)}
+        onSendEmail={() => detailsInvoice && handleAction('send', detailsInvoice)}
+        onMarkPaid={() => detailsInvoice && handleAction('mark-paid', detailsInvoice)}
+        onDuplicate={() => detailsInvoice && handleAction('duplicate', detailsInvoice)}
+        onPrint={() => detailsInvoice && handleAction('print', detailsInvoice)}
+        onDownloadPdf={() => detailsInvoice && handleAction('pdf', detailsInvoice)}
+        onShare={() => {
+          if (!detailsInvoice) return;
+          const url = `${window.location.origin}/api/invoices/${detailsInvoice.id}/insights`;
+          if (navigator.share) {
+            navigator.share({ title: `Invoice ${detailsInvoice.invoiceNumber}`, url }).catch(() => {});
+          } else {
+            navigator.clipboard?.writeText(url);
+            toast.success('Invoice link copied to clipboard');
+          }
+        }}
+        onArchive={() => detailsInvoice && handleAction('archive', detailsInvoice)}
+        onDelete={() => detailsInvoice && handleAction('delete', detailsInvoice)}
+        fetchInsights={fetchInsights}
+        saving={saving}
+      />
+
+      {/* ── Builder Dialog ── */}
+      <InvoiceBuilder
+        open={builderOpen}
+        onOpenChange={(open) => {
+          setBuilderOpen(open);
+          if (!open) setEditInvoice(null);
+        }}
+        clients={clients}
+        initialInvoice={editInvoice}
+        organization={orgInfo ? { name: orgInfo.name, gstin: orgInfo.gstin } : null}
+        onSubmit={handleBuilderSubmit}
+        saving={saving}
+        onCreateClient={() => {
+          toast.info('Open the Customers module to add a new client.');
+          setCurrentView('clients');
+        }}
+      />
+
+      {/* Delete confirmation dialog (replaces window.confirm) */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete invoice {deleteTarget?.invoiceNumber}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p className="text-muted-foreground">
+                  This action cannot be undone. The invoice and all its line items will be permanently removed from your records.
+                </p>
+                {deleteTarget && (
+                  <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-1.5">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Customer</span>
+                      <span className="font-medium text-foreground text-right truncate max-w-[60%]">
+                        {deleteTarget.buyerName || '—'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Invoice #</span>
+                      <span className="font-medium text-foreground">{deleteTarget.invoiceNumber}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Total Amount</span>
+                      <span className="font-semibold text-foreground">
+                        {formatCurrency(deleteTarget.totalAmount ?? 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Status</span>
+                      <span className="font-medium text-foreground capitalize">{deleteTarget.status}</span>
+                    </div>
                   </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  A record of this deletion will be kept in the audit log for compliance.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onConfirmDelete}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

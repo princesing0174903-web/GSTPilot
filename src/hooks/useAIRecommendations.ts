@@ -1,158 +1,221 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — useAIRecommendations() Hook
+// GSTPilot — useAIRecommendations() Hook
 //
-// Real-time subscription to AI-generated recommendations for the current org.
-// Recommendations are persisted in the `ai_memory` Firestore collection with
-// `type='recommendation'` — the orchestrator stores the full Recommendation
-// object in the memory's `metadata` field. This hook:
-//   1. Subscribes via `subscribeToMemoriesByType(orgId, 'recommendation', cb, 50)`.
-//   2. Maps each AIMemory.metadata back to a Recommendation shape.
-//   3. Sorts by priority (high→medium→low) then createdAt desc.
-//   4. `refresh()` calls POST /api/ai/recommendations to regenerate + persist
-//      fresh recommendations — the subscription surfaces them automatically.
+// Real recommendations derived from the Business Snapshot + targeted Prisma
+// queries (replaces the previous Firestore subscription model).
 //
-// Mirrors useBanking.ts structure.
+// The hook now calls GET /api/recommendations?organizationId=... which:
+//   1. Reads the canonical Business Snapshot (single source of truth).
+//   2. Runs the pure rules engine (snapshot-level checks).
+//   3. Runs async Prisma enrichment (overdue-tomorrow invoices, revenue drop,
+//      customer payment delays, top-customer concentration).
+//   4. Merges + sorts by priority (critical → high → medium → low) then
+//      dueInDays (sooner first).
+//
+// The hook:
+//   • Auto-fetches on mount + when the org changes.
+//   • Auto-refreshes every 60s (matches the snapshot's cache TTL).
+//   • Refreshes on window focus (so new invoices/payments surface quickly).
+//   • Exposes `refresh()` to force a re-fetch after a known mutation.
+//
+// Local- org IDs (prefix `local-`) ALSO work — the snapshot returns zeros and
+// the Prisma queries return empty arrays, so most rules do not fire. The
+// `isLocalOrgId` helper is kept (imported) for any future gating that needs to
+// distinguish local vs real orgs, but it no longer disables recommendations.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrg } from '@/contexts/OrgContext';
-import {
-  subscribeToMemoriesByType,
-  type Recommendation,
-  type RecommendationPriority,
-} from '@/lib/ai-provider';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
+import { fetchWithTimeout } from '@/lib/async';
+import type {
+  Recommendation,
+  RecommendationPriority,
+  RecommendationType,
+} from '@/lib/recommendations/engine';
 
-// ─── Priority ranking ──────────────────────────────────────────────────────
-// high → medium → low (lower rank = higher priority).
-const PRIORITY_RANK: Record<RecommendationPriority, number> = {
-  high: 0,
-  medium: 1,
-  low: 2,
-};
+// Re-export the new types so existing import sites (`import type { Recommendation }
+// from '@/hooks/useAIRecommendations'`) keep working without churn.
+export type { Recommendation, RecommendationPriority, RecommendationType };
 
-/**
- * Map an AIMemory.metadata payload back to a Recommendation. The orchestrator
- * stores the full Recommendation object verbatim in `metadata`, so we just
- * shape-cast with defensive defaults.
- */
-function metadataToRecommendation(
-  memoryId: string,
-  metadata: Record<string, unknown>,
-  fallbackCreatedAt: string,
-): Recommendation {
-  const meta = metadata as Partial<Recommendation>;
-  return {
-    id: String(meta.id ?? memoryId),
-    organizationId: String(meta.organizationId ?? ''),
-    type: meta.type ?? 'review_overdue',
-    priority: meta.priority ?? 'medium',
-    title: String(meta.title ?? ''),
-    description: String(meta.description ?? ''),
-    rationale: String(meta.rationale ?? ''),
-    actionLabel: String(meta.actionLabel ?? 'Review'),
-    actionType: String(meta.actionType ?? ''),
-    relatedEntityId: meta.relatedEntityId ?? undefined,
-    relatedEntityType: meta.relatedEntityType ?? undefined,
-    dueDate: meta.dueDate ?? undefined,
-    status: meta.status ?? 'active',
-    createdAt: String(meta.createdAt ?? fallbackCreatedAt),
-  };
-}
-
-/**
- * Sort recommendations: priority rank asc (high first), then createdAt desc.
- */
-function sortRecommendations(recs: Recommendation[]): Recommendation[] {
-  return [...recs].sort((a, b) => {
-    const rankA = PRIORITY_RANK[a.priority] ?? 99;
-    const rankB = PRIORITY_RANK[b.priority] ?? 99;
-    if (rankA !== rankB) return rankA - rankB;
-    return (b.createdAt ?? '').localeCompare(a.createdAt ?? '');
-  });
-}
-
-// ─── Hook return type ──────────────────────────────────────────────────────
+// ─── Hook return type ──────────────────────────────────────────────────────────
 
 export interface UseAIRecommendationsResult {
-  /** Sorted recommendations (high→medium→low, then newest first). */
+  /** Sorted recommendations (critical → high → medium → low, then dueInDays). */
   recommendations: Recommendation[];
-  /** True until the first subscription snapshot arrives. */
+  /** True until the first fetch resolves. */
   loading: boolean;
-  /** Error string from refresh() failure, or null. */
+  /** Error string from the fetch, or null. */
   error: string | null;
-  /** Regenerate + persist fresh recommendations (POST /api/ai/recommendations). */
+  /** Force a re-fetch (e.g. after recording a payment). */
   refresh: () => Promise<void>;
 }
 
-// ─── Hook ──────────────────────────────────────────────────────────────────
+// ─── Hook ──────────────────────────────────────────────────────────────────────
+
+const REFRESH_INTERVAL_MS = 60_000; // 60 seconds — matches snapshot cache TTL
+const FETCH_TIMEOUT_MS = 30_000;
+
+// ── Module-level request deduplication ─────────────────────────────────────
+// Multiple components (DashboardPage + OracleDailyBrief) mount this hook
+// concurrently. Without dedup, each instance fires its own fetch → duplicate
+// /api/recommendations calls on every dashboard mount (confirmed in dev.log:
+// pairs of identical requests within ~10ms of each other). Mirrors the
+// `useBusinessSnapshot` pattern: concurrent callers share the same in-flight
+// promise; second instance hydrates instantly from the module-level cache.
+interface CacheEntry {
+  promise: Promise<Recommendation[]>;
+  timestamp: number;
+}
+const inflightCache = new Map<string, CacheEntry>();
+const latestRecommendations = new Map<string, Recommendation[]>();
 
 export function useAIRecommendations(): UseAIRecommendationsResult {
   const { organization } = useOrg();
   const orgId = organization?.id ?? null;
 
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>(() => {
+    // Hydrate from module-level cache so a second instance (e.g.
+    // OracleDailyBrief) shows data instantly without a duplicate fetch.
+    if (orgId && latestRecommendations.has(orgId)) {
+      return latestRecommendations.get(orgId)!;
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState(() => {
+    // If we have cached data, don't show a loading state.
+    if (orgId && latestRecommendations.has(orgId)) return false;
+    return true;
+  });
   const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
-  // Subscription ref (for cleanup).
-  const unsubRef = useRef<(() => void) | null>(null);
-
-  // ─── Real-time subscription ──────────────────────────────────────────────
+  const orgIdRef = useRef<string | null>(orgId);
+  orgIdRef.current = orgId;
+  const abortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    unsubRef.current?.();
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, []);
 
-    if (!orgId) {
-      setRecommendations([]);
-      setLoading(false);
-      setError(null);
+  const fetchRecommendations = useCallback(async () => {
+    // Per-instance single-flight: skip if a previous fetch is still pending
+    // on THIS hook instance (e.g. rapid refresh clicks).
+    if (inFlightRef.current) return;
+    const currentOrgId = orgIdRef.current;
+    if (!currentOrgId) {
+      if (mountedRef.current) {
+        setRecommendations([]);
+        setLoading(false);
+        setError(null);
+      }
       return;
     }
 
-    setLoading(true);
+    // ── Module-level deduplication ──
+    // If a fetch for this org is already in-flight (e.g. another component
+    // mounted this hook), share its promise instead of firing a second request.
+    const existing = inflightCache.get(currentOrgId);
+    let promise: Promise<Recommendation[]>;
+    if (existing && Date.now() - existing.timestamp < FETCH_TIMEOUT_MS) {
+      promise = existing.promise;
+    } else {
+      const url = `/api/recommendations?organizationId=${encodeURIComponent(currentOrgId)}`;
+      promise = (async () => {
+        const res = await fetchWithTimeout(url, {
+          cache: 'no-store',
+          timeoutMs: FETCH_TIMEOUT_MS,
+        });
+        const data = (await res.json()) as {
+          recommendations?: Recommendation[];
+          error?: string;
+        };
+        const recs = data.recommendations ?? [];
+        latestRecommendations.set(currentOrgId, recs);
+        return recs;
+      })();
+      inflightCache.set(currentOrgId, { promise, timestamp: Date.now() });
+      promise.finally(() => inflightCache.delete(currentOrgId));
+    }
 
-    unsubRef.current = subscribeToMemoriesByType(
-      orgId,
-      'recommendation',
-      (memories) => {
-        const mapped = memories.map((m) =>
-          metadataToRecommendation(m.id, m.metadata ?? {}, m.createdAt),
-        );
-        setRecommendations(sortRecommendations(mapped));
-        setLoading(false);
+    inFlightRef.current = true;
+    if (abortRef.current) abortRef.current.abort();
+    // Note: we don't pass our own AbortController to fetchWithTimeout here
+    // because the promise is shared across hook instances — aborting one
+    // instance's request would abort it for all. The shared fetch relies on
+    // the 30s timeout inside fetchWithTimeout for cancellation.
+
+    try {
+      const recs = await promise;
+      if (mountedRef.current) {
+        setRecommendations(recs);
         setError(null);
-      },
-      50,
-    );
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') return;
+      const msg = err instanceof Error ? err.message : 'Failed to load recommendations.';
+      if (mountedRef.current) {
+        setError(msg);
+        // Degrade gracefully — keep showing the previous list rather than
+        // flashing an empty state on transient network errors.
+      }
+    } finally {
+      inFlightRef.current = false;
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, []);
 
-    return () => {
-      unsubRef.current?.();
-      unsubRef.current = null;
+  // ── Initial fetch + refetch when org changes or refresh() is called ──
+  // Only show loading state if we don't have cached data — avoids a brief
+  // loading flicker when a second hook instance (e.g. OracleDailyBrief)
+  // mounts and hydrates from the module-level cache.
+  useEffect(() => {
+    if (mountedRef.current && !latestRecommendations.has(orgId ?? '')) {
+      setLoading(true);
+    }
+    void fetchRecommendations();
+  }, [orgId, refreshTick, fetchRecommendations]);
+
+  // ── Auto-refresh every 60s ──
+  useEffect(() => {
+    if (!orgId) return;
+    const interval = setInterval(() => {
+      void fetchRecommendations();
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [orgId, fetchRecommendations]);
+
+  // ── Refresh on window focus ──
+  useEffect(() => {
+    const handleFocus = () => {
+      if (orgIdRef.current) void fetchRecommendations();
     };
-  }, [orgId]);
-
-  // ─── Mutation: refresh ────────────────────────────────────────────────────
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [fetchRecommendations]);
 
   const refresh = useCallback(async (): Promise<void> => {
-    if (!orgId) return;
-    setError(null);
-    try {
-      const res = await fetch('/api/ai/recommendations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId: orgId }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error ?? 'Failed to refresh AI recommendations.');
-      }
-      // The Firestore subscription will surface the new recommendations
-      // automatically — no need to setRecommendations() here.
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      setError(msg);
+    setRefreshTick((t) => t + 1);
+  }, []);
+
+  // `isLocalOrgId` is intentionally retained (per task spec) — it documents
+  // that local- workspace org IDs are supported by the recommendations API
+  // (snapshot + Prisma queries return empty for them). We log it once per org
+  // change so the dev console makes the local-vs-real distinction visible.
+  useEffect(() => {
+    if (orgId && isLocalOrgId(orgId)) {
+      console.debug('[useAIRecommendations] local-workspace org — recommendations will be derived from Prisma data only (no Firestore).');
     }
   }, [orgId]);
 

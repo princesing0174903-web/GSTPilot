@@ -292,8 +292,8 @@ function CircularGauge({ value }: { value: number | null }) {
     >
       <defs>
         <linearGradient id="dnaGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="50%" stopColor="#06b6d4" />
+          <stop offset="0%" stopColor="#2563EB" />
+          <stop offset="50%" stopColor="#3B82F6" />
           <stop offset="100%" stopColor="#3b82f6" />
         </linearGradient>
       </defs>
@@ -336,7 +336,7 @@ function ScoreCard({ score, index }: { score: DnaScore; index: number }) {
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: index * 0.08, ease: 'easeOut' as const }}
-      className="glass-surface rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-[0_0_32px_-8px_rgba(6,182,212,0.18)] transition-shadow"
+      className="glass-surface rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-[0_0_32px_-8px_rgba(59,130,246,0.18)] transition-shadow"
     >
       <div className="flex items-center justify-center gap-1.5 mb-4">
         <Icon className="h-3.5 w-3.5 accent-text" />
@@ -605,7 +605,7 @@ export default function BusinessDNApage() {
     <div className="relative min-h-screen">
       {/* Radial glow background */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.08),_transparent_60%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,_rgba(37,99,235,0.08),_transparent_60%)]"
         aria-hidden
       />
 
@@ -618,7 +618,7 @@ export default function BusinessDNApage() {
           className="mb-8 sm:mb-10"
         >
           <div className="flex items-center gap-2.5">
-            <span className="h-2.5 w-2.5 rounded-full accent-gradient shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
+            <span className="h-2.5 w-2.5 rounded-full accent-gradient shadow-[0_0_12px_rgba(37,99,235,0.6)]" />
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
               Business Digital DNA&trade;
             </h1>

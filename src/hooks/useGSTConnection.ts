@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot Real GSTN Integration™ — useGSTConnection() Hook
@@ -103,7 +104,7 @@ export interface UseGSTConnectionResult {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useGSTConnection(): UseGSTConnectionResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const { user } = useAuth();
   const orgId = organization?.id ?? null;
 
@@ -140,7 +141,7 @@ export function useGSTConnection(): UseGSTConnectionResult {
     unsubCreditRef.current?.();
     unsubLiabilityRef.current?.();
 
-    if (!orgId) {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setConnection(null);
       setProfile(null);
       setReturns([]);
@@ -191,9 +192,7 @@ export function useGSTConnection(): UseGSTConnectionResult {
       unsubCreditRef.current?.();
       unsubLiabilityRef.current?.();
     };
-  }, [orgId]);
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
+  }, [orgId, isPreviewMode]);
 
   const createdBy = {
     uid: user?.id ?? '',
@@ -345,7 +344,7 @@ export function useGSTConnection(): UseGSTConnectionResult {
       await fetch('/api/gstn/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ encryptedSession: connection.encryptedSession }),
+        body: JSON.stringify({ organizationId: orgId, encryptedSession: connection.encryptedSession }),
       });
       // Cascade-delete all GST data for this connection.
       await cascadeDisconnect(orgId, connection.id);
@@ -369,7 +368,7 @@ export function useGSTConnection(): UseGSTConnectionResult {
       const res = await fetch('/api/gstn/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ encryptedSession: connection.encryptedSession }),
+        body: JSON.stringify({ organizationId: orgId, encryptedSession: connection.encryptedSession }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {

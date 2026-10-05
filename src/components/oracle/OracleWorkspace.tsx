@@ -51,6 +51,7 @@ import { CFOAssistantPanel } from '@/components/oracle-cfo/CFOAssistantPanel';
 import { InvoiceActionCard } from '@/components/oracle-cfo/InvoiceActionCard';
 import { PaymentLinkActionCard } from '@/components/oracle-cfo/PaymentLinkActionCard';
 import { CommunicationActionCard } from '@/components/oracle-cfo/CommunicationActionCard';
+import { StructuredQueryCard } from '@/components/oracle/StructuredQueryCard';
 import { useOrg } from '@/contexts/OrgContext';
 import type { OracleMessage, OracleChatRequest, OracleStreamChunk, OracleActionChip } from './oracle-types';
 
@@ -581,6 +582,7 @@ export function OracleWorkspace({
         // return / invoice state (built into the system prompt as
         // "LIVE DASHBOARD DATA (legacy)").
         context: {
+          organizationId: orgCtx.organization?.id ?? 'preview-org',
           dashboardMetrics: {
             totalClients: dashboardMetrics.totalClients,
             activeClients: dashboardMetrics.activeClients,
@@ -640,6 +642,20 @@ export function OracleWorkspace({
               continue;
             }
             if (chunk.language) setActiveLanguage(chunk.language);
+            if (chunk.structured) {
+              // ── Structured data card (Task 4) ──
+              // The server emits this as the FIRST SSE event when the user's
+              // message matches a structured-query intent. Store it on the
+              // oracle message so it can be rendered above the text answer
+              // by the OracleMessageBubble component.
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === oracleId
+                    ? { ...m, structuredQuery: chunk.structured }
+                    : m,
+                ),
+              );
+            }
             if (chunk.token) {
               acc += chunk.token;
               setMessages((prev) =>
@@ -823,7 +839,7 @@ export function OracleWorkspace({
                   className="text-[13px] font-semibold leading-tight tracking-tight text-white"
                   style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif' }}
                 >
-                  GSTPilot<span style={{ color: '#22D3EE' }}>™</span>
+                  GSTPilot<span style={{ color: '#3B82F6' }}>™</span>
                 </p>
                 <p className="text-[10px] font-bold uppercase leading-tight tracking-wider text-white/50">
                   Oracle
@@ -854,7 +870,7 @@ export function OracleWorkspace({
                         className="absolute left-0 top-1/2 hidden h-7 w-[3px] -translate-y-1/2 rounded-full lg:block"
                         style={{
                           background:
-                            'linear-gradient(180deg, #10b981 0%, #059669 100%)',
+                            'linear-gradient(180deg, #2563EB 0%, #1D4ED8 100%)',
                         }}
                       />
                     )}
@@ -1147,7 +1163,7 @@ export function OracleWorkspace({
                       disabled={!input.trim()}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-lg shadow-emerald-500/20 transition-all hover:opacity-90 disabled:opacity-30 disabled:shadow-none"
                       style={{
-                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                        background: 'linear-gradient(135deg, #10B981 0%, #047857 100%)',
                       }}
                       aria-label="Send"
                     >
@@ -1376,6 +1392,17 @@ function MessageBubble({
           </div>
         )}
 
+        {/* ─── Structured data card (Task 4) ──────────────────────────────
+            When the user's message matches a structured-query intent
+            ("unpaid invoices", "top customers", "GST payable", etc.), the
+            server emits the structured result as the FIRST SSE event of the
+            stream. We render the card ABOVE the conversational text answer
+            so the user sees real data instantly while the LLM still writes
+            a natural-language explanation below. */}
+        {message.structuredQuery && (
+          <StructuredQueryCard result={message.structuredQuery} />
+        )}
+
         {isEmptyStreaming ? (
           <OracleThinkingIndicator size={28} />
         ) : (
@@ -1405,7 +1432,7 @@ function MessageBubble({
                 type="button"
                 onClick={() => a.view && onNavigate(a.view)}
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:brightness-110"
-                style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
+                style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
               >
                 <ArrowRight className="h-3 w-3" />
                 {a.label}
@@ -1438,7 +1465,7 @@ function MessageBubble({
             answer into a real, audited business action. */}
         {!message.streaming && cfoAnalyzing && (
           <div className="mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs text-white/50"
-            style={{ borderColor: 'rgba(16,185,129,0.2)', background: 'rgba(16,185,129,0.03)' }}>
+            style={{ borderColor: 'rgba(37,99,235,0.2)', background: 'rgba(37,99,235,0.03)' }}>
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
@@ -1705,9 +1732,10 @@ function buildActionChips(content: string): OracleActionChip[] | undefined {
   if (/(insight|recommend|suggest|advice|forecast|predict)/.test(lower)) {
     chips.push({ label: 'AI Insights', intent: 'open_insights', view: 'ai-insights' });
   }
-  // Connections / connect data
+  // Connections / connect data — the old 'connections' view has been removed.
+  // Route to the real Google Workspace integration page instead.
   if (/(connect|integration|gstn|sync|link your|link the)/.test(lower)) {
-    chips.push({ label: 'Connect Services', intent: 'open_connections', view: 'connections' });
+    chips.push({ label: 'Connect Google', intent: 'open_connections', view: 'google-workspace' });
   }
   // Settings / profile
   if (/(setting|profile|account|configur|preference)/.test(lower)) {

@@ -2,7 +2,13 @@
 // GSTPilot Infinity™ — Products Firestore Service
 //
 // CRUD + real-time subscription for product documents at:
-//   organizations/GSTpilot_SAAS/products/{productId}
+//   organizations/{organizationId}/products/{productId}
+//
+// ORG-SCOPED (MULTI-TENANT):
+//   Every function accepts an `organizationId` parameter (from OrgContext).
+//   The Firestore path is built dynamically — NEVER hardcoded.
+//   If organizationId is null/empty, functions return empty results
+//   (honest empty state) instead of writing to a fallback path.
 //
 // Firestore is the ONLY source of truth. No mock data, no localStorage.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -22,7 +28,12 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { PRODUCTS_COLLECTION, DEFAULT_GST_RATE } from './config';
+import {
+  orgCollectionPath,
+  orgDocPath,
+  PRODUCTS_SUB,
+  DEFAULT_GST_RATE,
+} from './config';
 import { sanitizeGstRate } from './gst';
 import type {
   Product,
@@ -75,17 +86,30 @@ function buildPayload(input: CreateProductInput) {
   };
 }
 
+/** No-op unsubscribe — returned when organizationId is null (preview mode). */
+const noopUnsubscribe: Unsubscribe = () => {};
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Subscribe to ALL products in real-time (onSnapshot).
+ * Subscribe to ALL products in real-time (onSnapshot) for the given org.
+ *
+ * If `organizationId` is null/empty (preview mode / no org), calls onData([])
+ * immediately and returns a no-op unsubscribe — does NOT touch Firestore.
  */
 export function subscribeProducts(
+  organizationId: string | null | undefined,
   onData: (products: Product[]) => void,
   onError?: (err: Error) => void,
 ): Unsubscribe {
+  const path = orgCollectionPath(organizationId, PRODUCTS_SUB);
+  if (!path) {
+    onData([]);
+    return noopUnsubscribe;
+  }
+
   const q = query(
-    collection(db, PRODUCTS_COLLECTION),
+    collection(db, path),
     orderBy('name'),
   );
   return onSnapshot(
@@ -99,20 +123,29 @@ export function subscribeProducts(
   );
 }
 
-/** Fetch a single product by id. */
-export async function getProduct(id: string): Promise<Product | null> {
-  const snap = await getDoc(doc(db, PRODUCTS_COLLECTION, id));
+/** Fetch a single product by id (one-shot). */
+export async function getProduct(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<Product | null> {
+  const path = orgDocPath(organizationId, PRODUCTS_SUB, id);
+  if (!path) return null;
+  const snap = await getDoc(doc(db, path));
   if (!snap.exists()) return null;
   return toProduct(snap.id, snap.data() as Record<string, unknown>);
 }
 
 /**
  * Fetch ALL products in one shot (server-side / API-route friendly).
- * Returns an empty array on permission-denied / unavailable (preview mode).
+ * Returns an empty array on permission-denied / unavailable / no org.
  */
-export async function getProductsOnce(): Promise<Product[]> {
+export async function getProductsOnce(
+  organizationId: string | null | undefined,
+): Promise<Product[]> {
+  const path = orgCollectionPath(organizationId, PRODUCTS_SUB);
+  if (!path) return [];
   try {
-    const q = query(collection(db, PRODUCTS_COLLECTION), orderBy('name'));
+    const q = query(collection(db, path), orderBy('name'));
     const snap = await getDocs(q);
     const list: Product[] = [];
     snap.forEach((d) => list.push(toProduct(d.id, d.data() as Record<string, unknown>)));
@@ -122,10 +155,25 @@ export async function getProductsOnce(): Promise<Product[]> {
   }
 }
 
-/** Create a new product. */
+/**
+ * Create a new product in the given org's subcollection.
+ * Throws on validation errors. Returns the created Product.
+ *
+ * If organizationId is null/empty, throws a friendly error — the caller
+ * must resolve the org context before creating.
+ */
 export async function createProduct(
+  organizationId: string | null | undefined,
   input: CreateProductInput,
 ): Promise<Product> {
+  const path = orgCollectionPath(organizationId, PRODUCTS_SUB);
+  if (!path) {
+    throw new Error(
+      'Unable to save product.\n\nReason: No organization is currently selected. ' +
+      'Please sign in and select an organization, then try again.',
+    );
+  }
+
   const name = input.name?.trim();
   if (!name) throw new Error('Product name is required.');
   if (input.price == null || Number.isNaN(Number(input.price))) {
@@ -134,7 +182,7 @@ export async function createProduct(
 
   const payload = buildPayload(input);
   const now = serverTimestamp();
-  const ref = await addDoc(collection(db, PRODUCTS_COLLECTION), {
+  const ref = await addDoc(collection(db, path), {
     ...payload,
     createdAt: now,
     updatedAt: now,
@@ -145,9 +193,17 @@ export async function createProduct(
 
 /** Update an existing product. */
 export async function updateProduct(
+  organizationId: string | null | undefined,
   id: string,
   patch: UpdateProductInput,
 ): Promise<Product> {
+  const path = orgDocPath(organizationId, PRODUCTS_SUB, id);
+  if (!path) {
+    throw new Error(
+      'Unable to update product.\n\nReason: No organization is currently selected.',
+    );
+  }
+
   const update: Record<string, unknown> = {};
   const built = buildPayload({
     name: patch.name ?? '__NOOP__',
@@ -171,14 +227,23 @@ export async function updateProduct(
   }
   update.updatedAt = serverTimestamp();
 
-  await updateDoc(doc(db, PRODUCTS_COLLECTION, id), update);
-  const snap = await getDoc(doc(db, PRODUCTS_COLLECTION, id));
+  await updateDoc(doc(db, path), update);
+  const snap = await getDoc(doc(db, path));
   return toProduct(snap.id, snap.data() as Record<string, unknown>);
 }
 
 /** Delete a product permanently. */
-export async function deleteProduct(id: string): Promise<void> {
-  await deleteDoc(doc(db, PRODUCTS_COLLECTION, id));
+export async function deleteProduct(
+  organizationId: string | null | undefined,
+  id: string,
+): Promise<void> {
+  const path = orgDocPath(organizationId, PRODUCTS_SUB, id);
+  if (!path) {
+    throw new Error(
+      'Unable to delete product.\n\nReason: No organization is currently selected.',
+    );
+  }
+  await deleteDoc(doc(db, path));
 }
 
 // ─── Search + stats ──────────────────────────────────────────────────────────

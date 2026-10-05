@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import * as Icons from 'lucide-react';
 import { Sparkles, Shield, Play, Eye, History, X } from 'lucide-react';
-import { ORACLE_ACTIONS, type OracleAction } from '@/lib/autonomous-finance/oracle-actions';
+import { ORACLE_ACTIONS, type OracleAction } from '@/lib/autonomous-finance/oracle-actions-defs';
 import { useOrg } from '@/contexts/OrgContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { TrustBar } from '@/components/shared/TrustBar';
@@ -32,7 +32,7 @@ const CATEGORY_ACCENT: Record<string, string> = {
   gst: 'bg-amber-500/15 text-amber-300',
   banking: 'bg-cyan-500/15 text-cyan-300',
   collections: 'bg-rose-500/15 text-rose-300',
-  communication: 'bg-violet-500/15 text-violet-300',
+  communication: 'bg-cyan-500/15 text-cyan-300',
   reporting: 'bg-teal-500/15 text-teal-300',
   tasks: 'bg-cyan-500/15 text-cyan-300',
 };

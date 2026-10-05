@@ -20,9 +20,13 @@ import { graphEvents, invalidateGraph } from '@/lib/graph/live-update';
 import { safeAudit } from '@/lib/audit/safe-write';
 
 // ─── Stub data generators ────────────────────────────────────────────────────
-// Each generator simulates "fetching real data" from the upstream connector and
-// returns SyncedRecord-shaped rows. These are realistic enough for the Oracle +
-// Data Quality Engine to operate on.
+// REAL CONNECTOR SYNC PENDING — returns empty. Stubs removed to prevent fake
+// data in production DB. Each generator previously returned hardcoded mock
+// records (Acme Industries, Sample Customer, Tally Solutions, WeWork Mumbai,
+// etc.) which were persisted as SyncedRecord rows on every connector sync.
+// They now return `[]` so the route continues to compile + report `0 records`
+// honestly. Real connector sync (live GSTN/bank/WhatsApp/accounting APIs) is a
+// future enterprise phase.
 
 interface StubRecord {
   sourceType: string;
@@ -35,135 +39,35 @@ interface StubRecord {
   processed: boolean;
 }
 
-function gstnStubRecords(gstin: string): StubRecord[] {
-  const now = new Date();
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  // Generate 3 GSTR-filing records spanning the last 3 months
-  const months = [
-    { period: 'GSTR-1', monthOffset: 1, type: 'gstr_1', tax: 184500 },
-    { period: 'GSTR-3B', monthOffset: 1, type: 'gstr_3b', tax: 192300 },
-    { period: 'GSTR-2B', monthOffset: 0, type: 'gstr_2b', tax: 167800 },
-  ];
-  return months.map((m) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - m.monthOffset, 20);
-    return {
-      sourceType: 'gst_return',
-      externalId: `${gstin}_${m.type}_${d.toISOString().slice(0, 7)}`,
-      title: `${m.period} — ${d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`,
-      amount: m.tax,
-      date: fmt(d),
-      category: m.type,
-      rawData: {
-        gstin,
-        returnType: m.period,
-        period: d.toISOString().slice(0, 7),
-        status: 'filed',
-        taxPayable: m.tax,
-        itcClaimed: Math.round(m.tax * 0.78),
-        filingDate: fmt(d),
-      },
-      processed: true,
-    };
-  });
+// REAL CONNECTOR SYNC PENDING — returns [].
+function gstnStubRecords(_gstin: string): StubRecord[] {
+  // TODO: wire to real GSTN API (returns / e-invoices / e-way bills / notices).
+  void _gstin;
+  return [];
 }
 
-function bankStubRecords(bankName: string, accountLast4: string): StubRecord[] {
-  const now = new Date();
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  const merchants = [
-    { name: 'Salary Credit — Acme Industries', type: 'credit', amount: 84500 },
-    { name: 'GST Payment — CGST+SGST', type: 'debit', amount: -18450 },
-    { name: 'Vendor Payment — Supplier Inc', type: 'debit', amount: -32400 },
-    { name: 'Tally Software Subscription', type: 'debit', amount: -14999 },
-    { name: 'Client Receipt — Customer Receipt', type: 'credit', amount: 56000 },
-    { name: 'Office Rent — WeWork Mumbai', type: 'debit', amount: -45000 },
-    { name: 'Zoho Books Subscription', type: 'debit', amount: -7999 },
-    { name: 'Interest Credit', type: 'credit', amount: 234.5 },
-  ];
-  return merchants.map((m, i) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - (i + 1) * 3);
-    return {
-      sourceType: 'bank_tx',
-      externalId: `banktx_${accountLast4}_${d.getTime()}_${i}`,
-      title: m.name,
-      amount: m.amount,
-      date: fmt(d),
-      category: m.type,
-      rawData: {
-        bankName,
-        accountLast4,
-        description: m.name,
-        type: m.type,
-        amount: m.amount,
-        currency: 'INR',
-        balanceAfter: 250000 - i * 18000,
-      },
-      processed: true,
-    };
-  });
+// REAL CONNECTOR SYNC PENDING — returns [].
+function bankStubRecords(_bankName: string, _accountLast4: string): StubRecord[] {
+  // TODO: wire to real bank API (Razorpay / Decentro / MBS / Anumati).
+  void _bankName;
+  void _accountLast4;
+  return [];
 }
 
-function whatsappStubRecords(phone: string): StubRecord[] {
-  const now = new Date();
-  const messages = [
-    { from: 'Client', body: 'Hi, our GSTR-1 is ready for review. Please confirm.', cat: 'client_communication' },
-    { from: 'Vendor', body: 'Payment of \u20B932,400 received. Thank you!', cat: 'collections' },
-    { from: 'GST Department', body: 'Reminder: GSTR-3B due in 5 days for your firm.', cat: 'reminder' },
-  ];
-  return messages.map((m, i) => {
-    const d = new Date(now);
-    d.setHours(d.getHours() - (i + 1) * 6);
-    return {
-      sourceType: 'whatsapp_msg',
-      externalId: `wa_${phone}_${d.getTime()}_${i}`,
-      title: `${m.from}: ${m.body}`,
-      amount: null,
-      date: d.toISOString(),
-      category: m.cat,
-      rawData: {
-        from: m.from,
-        body: m.body,
-        phone,
-        timestamp: d.toISOString(),
-      },
-      processed: false,
-    };
-  });
+// REAL CONNECTOR SYNC PENDING — returns [].
+function whatsappStubRecords(_phone: string): StubRecord[] {
+  // TODO: wire to real WhatsApp Business API.
+  void _phone;
+  return [];
 }
 
-function accountingStubRecords(software: string, companyName: string): StubRecord[] {
-  const now = new Date();
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  const invoices = [
-    { no: 'INV-2025-001', party: 'Sample Customer', amount: 45000, type: 'sales' },
-    { no: 'INV-2025-002', party: 'Sample Supplier', amount: 32400, type: 'purchase' },
-    { no: 'INV-2025-003', party: 'Sample Customer B', amount: 78900, type: 'sales' },
-    { no: 'BILL-2025-009', party: 'Tally Solutions', amount: 14999, type: 'purchase' },
-  ];
-  return invoices.map((inv, i) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - (i + 1) * 4);
-    return {
-      sourceType: 'accounting_invoice',
-      externalId: `${software}_${inv.no}`,
-      title: `${inv.type === 'sales' ? 'Sales' : 'Purchase'} Invoice ${inv.no} — ${inv.party}`,
-      amount: inv.amount,
-      date: fmt(d),
-      category: inv.type === 'sales' ? 'sales_invoice' : 'purchase_invoice',
-      rawData: {
-        software,
-        companyName,
-        invoiceNumber: inv.no,
-        party: inv.party,
-        amount: inv.amount,
-        type: inv.type,
-        date: fmt(d),
-        gst: Math.round(inv.amount * 0.18),
-      },
-      processed: true,
-    };
-  });
+// REAL CONNECTOR SYNC PENDING — returns [].
+function accountingStubRecords(_software: string, _companyName: string): StubRecord[] {
+  // TODO: wire to real ERP (Zoho Books customer sync is available via
+  // /api/integrations/zoho/customers; Tally/Busy/QuickBooks pending).
+  void _software;
+  void _companyName;
+  return [];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -217,26 +121,32 @@ export async function POST(
       }
 
       // Store synced emails
-      const records = emailsToRecords(emails, id, userId);
-      if (records.length > 0) {
+      // (Was N+1: sequential create per record. Now batched via createMany
+      // with chunking to stay under SQLite parameter limits.)
+      const emailRecords = emailsToRecords(emails, id, userId);
+      if (emailRecords.length > 0) {
         await db.syncedRecord.deleteMany({
           where: { connectionId: id, sourceType: 'email' },
         }).catch(() => {});
-        for (const rec of records) {
-          await db.syncedRecord.create({
-            data: {
-              connectionId: rec.connectionId,
-              userId: rec.userId,
-              sourceType: rec.sourceType,
-              externalId: rec.externalId,
-              title: rec.title,
-              amount: rec.amount,
-              date: rec.date,
-              rawData: JSON.stringify(rec.rawData),
-              category: rec.category,
-              processed: rec.processed,
-            },
-          }).catch(() => {});
+        const rows = emailRecords.map((rec) => ({
+          connectionId: rec.connectionId,
+          userId: rec.userId,
+          sourceType: rec.sourceType,
+          externalId: rec.externalId,
+          title: rec.title,
+          amount: rec.amount,
+          date: rec.date,
+          rawData: JSON.stringify(rec.rawData),
+          category: rec.category,
+          processed: rec.processed,
+        }));
+        for (let i = 0; i < rows.length; i += 100) {
+          try {
+            await db.syncedRecord.createMany({
+              data: rows.slice(i, i + 100),
+              skipDuplicates: true,
+            });
+          } catch { /* non-fatal per-row errors swallowed */ }
         }
       }
 
@@ -264,28 +174,35 @@ export async function POST(
         if (validation.valid) {
           const profile = deriveGstProfile(gstin);
           // Generate stub GSTR records
-          const stubs = gstnStubRecords(gstin);
+          // (Batched via createMany — was N+1 sequential create.)
+          const gstnStubs = gstnStubRecords(gstin);
           await db.syncedRecord.deleteMany({
             where: { connectionId: id, sourceType: 'gst_return' },
           }).catch(() => {});
-          for (const rec of stubs) {
-            await db.syncedRecord.create({
-              data: {
-                connectionId: id,
-                userId,
-                sourceType: rec.sourceType,
-                externalId: rec.externalId,
-                title: rec.title,
-                amount: rec.amount,
-                date: rec.date,
-                rawData: JSON.stringify(rec.rawData),
-                category: rec.category,
-                processed: rec.processed,
-              },
-            }).catch(() => {});
+          if (gstnStubs.length > 0) {
+            const gstnRows = gstnStubs.map((rec) => ({
+              connectionId: id,
+              userId,
+              sourceType: rec.sourceType,
+              externalId: rec.externalId,
+              title: rec.title,
+              amount: rec.amount,
+              date: rec.date,
+              rawData: JSON.stringify(rec.rawData),
+              category: rec.category,
+              processed: rec.processed,
+            }));
+            for (let i = 0; i < gstnRows.length; i += 100) {
+              try {
+                await db.syncedRecord.createMany({
+                  data: gstnRows.slice(i, i + 100),
+                  skipDuplicates: true,
+                });
+              } catch { /* non-fatal */ }
+            }
           }
-          recordsSynced = stubs.length;
-          summary = `GSTIN ${gstin} synced — discovered ${stubs.length} GSTR filings`;
+          recordsSynced = gstnStubs.length;
+          summary = `GSTIN ${gstin} synced — discovered ${gstnStubs.length} GSTR filings`;
 
           await db.dataConnection.update({
             where: { id },
@@ -308,28 +225,34 @@ export async function POST(
       const meta = conn.metadata ? JSON.parse(conn.metadata) : {};
       const bankName = meta.bankName ?? 'Bank';
       const accountLast4 = meta.accountNumberMasked?.slice(-4) ?? '0000';
-      const stubs = bankStubRecords(bankName, accountLast4);
+      const bankStubs = bankStubRecords(bankName, accountLast4);
       await db.syncedRecord.deleteMany({
         where: { connectionId: id, sourceType: 'bank_tx' },
       }).catch(() => {});
-      for (const rec of stubs) {
-        await db.syncedRecord.create({
-          data: {
-            connectionId: id,
-            userId,
-            sourceType: rec.sourceType,
-            externalId: rec.externalId,
-            title: rec.title,
-            amount: rec.amount,
-            date: rec.date,
-            rawData: JSON.stringify(rec.rawData),
-            category: rec.category,
-            processed: rec.processed,
-          },
-        }).catch(() => {});
+      if (bankStubs.length > 0) {
+        const bankRows = bankStubs.map((rec) => ({
+          connectionId: id,
+          userId,
+          sourceType: rec.sourceType,
+          externalId: rec.externalId,
+          title: rec.title,
+          amount: rec.amount,
+          date: rec.date,
+          rawData: JSON.stringify(rec.rawData),
+          category: rec.category,
+          processed: rec.processed,
+        }));
+        for (let i = 0; i < bankRows.length; i += 100) {
+          try {
+            await db.syncedRecord.createMany({
+              data: bankRows.slice(i, i + 100),
+              skipDuplicates: true,
+            });
+          } catch { /* non-fatal */ }
+        }
       }
-      recordsSynced = stubs.length;
-      summary = `${bankName} •••${accountLast4} synced — imported ${stubs.length} transactions`;
+      recordsSynced = bankStubs.length;
+      summary = `${bankName} •••${accountLast4} synced — imported ${bankStubs.length} transactions`;
 
       await db.dataConnection.update({
         where: { id },
@@ -345,28 +268,34 @@ export async function POST(
     } else if (conn.type === 'whatsapp') {
       const meta = conn.metadata ? JSON.parse(conn.metadata) : {};
       const phone = meta.phoneNumber ?? conn.identifier ?? '';
-      const stubs = whatsappStubRecords(phone);
+      const waStubs = whatsappStubRecords(phone);
       await db.syncedRecord.deleteMany({
         where: { connectionId: id, sourceType: 'whatsapp_msg' },
       }).catch(() => {});
-      for (const rec of stubs) {
-        await db.syncedRecord.create({
-          data: {
-            connectionId: id,
-            userId,
-            sourceType: rec.sourceType,
-            externalId: rec.externalId,
-            title: rec.title,
-            amount: rec.amount,
-            date: rec.date,
-            rawData: JSON.stringify(rec.rawData),
-            category: rec.category,
-            processed: rec.processed,
-          },
-        }).catch(() => {});
+      if (waStubs.length > 0) {
+        const waRows = waStubs.map((rec) => ({
+          connectionId: id,
+          userId,
+          sourceType: rec.sourceType,
+          externalId: rec.externalId,
+          title: rec.title,
+          amount: rec.amount,
+          date: rec.date,
+          rawData: JSON.stringify(rec.rawData),
+          category: rec.category,
+          processed: rec.processed,
+        }));
+        for (let i = 0; i < waRows.length; i += 100) {
+          try {
+            await db.syncedRecord.createMany({
+              data: waRows.slice(i, i + 100),
+              skipDuplicates: true,
+            });
+          } catch { /* non-fatal */ }
+        }
       }
-      recordsSynced = stubs.length;
-      summary = `WhatsApp ${phone} synced — imported ${stubs.length} messages`;
+      recordsSynced = waStubs.length;
+      summary = `WhatsApp ${phone} synced — imported ${waStubs.length} messages`;
 
       await db.dataConnection.update({
         where: { id },
@@ -383,21 +312,28 @@ export async function POST(
       await db.syncedRecord.deleteMany({
         where: { connectionId: id, sourceType: 'accounting_invoice' },
       }).catch(() => {});
-      for (const rec of stubs) {
-        await db.syncedRecord.create({
-          data: {
-            connectionId: id,
-            userId,
-            sourceType: rec.sourceType,
-            externalId: rec.externalId,
-            title: rec.title,
-            amount: rec.amount,
-            date: rec.date,
-            rawData: JSON.stringify(rec.rawData),
-            category: rec.category,
-            processed: rec.processed,
-          },
-        }).catch(() => {});
+      // (Batched via createMany — was N+1 sequential create.)
+      if (stubs.length > 0) {
+        const acctRows = stubs.map((rec) => ({
+          connectionId: id,
+          userId,
+          sourceType: rec.sourceType,
+          externalId: rec.externalId,
+          title: rec.title,
+          amount: rec.amount,
+          date: rec.date,
+          rawData: JSON.stringify(rec.rawData),
+          category: rec.category,
+          processed: rec.processed,
+        }));
+        for (let i = 0; i < acctRows.length; i += 100) {
+          try {
+            await db.syncedRecord.createMany({
+              data: acctRows.slice(i, i + 100),
+              skipDuplicates: true,
+            });
+          } catch { /* non-fatal */ }
+        }
       }
       recordsSynced = stubs.length;
       summary = `${conn.type.toUpperCase()} (${companyName}) synced — imported ${stubs.length} invoices`;

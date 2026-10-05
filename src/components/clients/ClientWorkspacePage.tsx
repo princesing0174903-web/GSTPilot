@@ -4,6 +4,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { PremiumEmptyState } from '@/components/ui/premium-empty-state';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -40,6 +41,11 @@ import { Separator } from '@/components/ui/separator';
 import { useApp } from '@/contexts/AppContext';
 import type { AppView } from '@/contexts/AppContext';
 import { formatCurrency, periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
+import {
+  displayGSTIN,
+  displayText,
+  displayNumber,
+} from '@/lib/clients/display-utils';
 import { toast } from 'sonner';
 import {
   useFireClient,
@@ -63,30 +69,30 @@ import { validateFile } from '@/lib/firebase/storage-service';
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function getHealthColor(score: number) {
-  if (score > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', stroke: '#10b981' };
+  if (score > 80) return { bg: 'bg-emerald-50', text: 'text-emerald-700', stroke: '#2563EB' };
   if (score >= 50) return { bg: 'bg-amber-50', text: 'text-amber-700', stroke: '#f59e0b' };
   return { bg: 'bg-red-50', text: 'text-red-700', stroke: '#ef4444' };
 }
 
 function getReturnStatusBadge(status: string) {
   switch (status) {
-    case 'filed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Filed</Badge>;
-    case 'pending': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0"><Clock className="size-2.5 mr-0.5" />Pending</Badge>;
-    case 'overdue': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0"><AlertCircle className="size-2.5 mr-0.5" />Overdue</Badge>;
-    case 'draft': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0"><FileText className="size-2.5 mr-0.5" />Draft</Badge>;
+    case 'filed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Filed</Badge>;
+    case 'pending': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[11px] px-1.5 py-0"><Clock className="size-2.5 mr-0.5" />Pending</Badge>;
+    case 'overdue': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[11px] px-1.5 py-0"><AlertCircle className="size-2.5 mr-0.5" />Overdue</Badge>;
+    case 'draft': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[11px] px-1.5 py-0"><FileText className="size-2.5 mr-0.5" />Draft</Badge>;
     case 'validated': case 'reviewed': case 'generated':
-      return <Badge className="bg-teal-50 text-teal-700 border-teal-200 text-[10px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Ready</Badge>;
-    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+      return <Badge className="bg-teal-50 text-teal-700 border-teal-200 text-[11px] px-1.5 py-0"><CheckCircle2 className="size-2.5 mr-0.5" />Ready</Badge>;
+    default: return <Badge variant="secondary" className="text-[11px]">{status}</Badge>;
   }
 }
 
 function getDocStatusBadge(status: string) {
   switch (status) {
-    case 'extracted': case 'reviewed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Processed</Badge>;
-    case 'processing': return <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0">Processing</Badge>;
-    case 'uploading': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0">Uploading</Badge>;
-    case 'failed': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">Error</Badge>;
-    default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+    case 'extracted': case 'reviewed': return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] px-1.5 py-0">Processed</Badge>;
+    case 'processing': return <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[11px] px-1.5 py-0">Processing</Badge>;
+    case 'uploading': return <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[11px] px-1.5 py-0">Uploading</Badge>;
+    case 'failed': return <Badge className="bg-red-50 text-red-700 border-red-200 text-[11px] px-1.5 py-0">Error</Badge>;
+    default: return <Badge variant="secondary" className="text-[11px]">{status}</Badge>;
   }
 }
 
@@ -103,8 +109,8 @@ function getActivityIcon(type: string) {
 
 function getActivityColor(type: string) {
   switch (type) {
-    case 'document_uploaded': case 'document_processed': return 'bg-blue-50 text-blue-600';
-    case 'return_prepared': case 'return_reviewed': return 'bg-purple-50 text-purple-600';
+    case 'document_uploaded': case 'document_processed': return 'bg-cyan-50 text-cyan-600';
+    case 'return_prepared': case 'return_reviewed': return 'bg-emerald-50 text-emerald-600';
     case 'return_filed': return 'bg-emerald-50 text-emerald-600';
     case 'reconciliation_run': case 'mismatch_resolved': return 'bg-teal-50 text-teal-600';
     default: return 'bg-slate-100 text-slate-500';
@@ -382,24 +388,16 @@ export default function ClientWorkspacePage() {
   // ─── Client not found — professional empty state ────────────────────
   if (!client) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="max-w-6xl mx-auto px-4 md:px-6 py-20 text-center space-y-5"
-      >
-        <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-2xl bg-slate-100">
-          <Building2 className="size-10 text-slate-400" />
-        </div>
-        <h2 className="text-xl font-semibold text-foreground">Client Not Found</h2>
-        <p className="text-sm text-muted-foreground max-w-md mx-auto">
-          The client you are looking for does not exist or has been removed.
-          Select another client from your portfolio to continue.
-        </p>
-        <Button variant="outline" onClick={handleBack} className="gap-2">
-          <ArrowLeft className="size-4" />
-          Back to Client Portfolio
-        </Button>
-      </motion.div>
+      <PremiumEmptyState
+        icon={<Building2 className="h-8 w-8" />}
+        title="Client Not Found"
+        description="The client you are looking for does not exist or has been removed. Select another client from your portfolio to continue."
+        primaryAction={{
+          label: 'Back to Client Portfolio',
+          onClick: handleBack,
+          icon: <ArrowLeft className="h-4 w-4" />,
+        }}
+      />
     );
   }
 
@@ -421,7 +419,7 @@ export default function ClientWorkspacePage() {
             Client Portfolio
           </Button>
           <ChevronRight className="h-3 w-3 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">{client.tradeName}</span>
+          <span className="text-xs text-muted-foreground">{displayText(client.tradeName, 'Client')}</span>
         </div>
 
         {/* Main header card */}
@@ -432,8 +430,10 @@ export default function ClientWorkspacePage() {
               <HealthRing score={healthScore} size={72} strokeWidth={5} />
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-xl font-semibold text-foreground tracking-tight">{client.tradeName}</h1>
-                  <Badge className={`gap-1 text-[10px] px-2 py-0.5 ${
+                  <h1 className="text-xl font-semibold text-foreground tracking-tight">
+                    {displayText(client.tradeName, 'Unnamed Client')}
+                  </h1>
+                  <Badge className={`gap-1 text-[11px] px-2 py-0.5 ${
                     riskLevel === 'Low' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                     : riskLevel === 'Medium' ? 'bg-amber-50 text-amber-700 border-amber-200'
                     : riskLevel === 'High' ? 'bg-orange-50 text-orange-700 border-orange-200'
@@ -442,17 +442,25 @@ export default function ClientWorkspacePage() {
                     <Shield className="size-2.5" />{riskLevel}
                   </Badge>
                 </div>
-                {client.legalName && <p className="text-sm text-muted-foreground mt-0.5">{client.legalName}</p>}
+                {displayText(client.legalName, '') !== '' && (
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {displayText(client.legalName, '')}
+                  </p>
+                )}
 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2.5">
+                  {/* GSTIN — sanitized (synthetic IDs render as em dash) */}
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Building2 className="size-3 text-slate-400" />
-                    <span className="font-mono font-medium text-foreground">{client.gstin}</span>
+                    <span className={`font-mono font-medium ${displayGSTIN(client.gstin) === '—' ? 'italic text-muted-foreground/60' : 'text-foreground'}`}>
+                      {displayGSTIN(client.gstin)}
+                    </span>
                   </div>
                   <Separator orientation="vertical" className="h-3.5" />
+                  {/* State — sanitized */}
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <MapPin className="size-3 text-slate-400" />
-                    <span>{client.state}</span>
+                    <span>{displayText(client.state)}</span>
                   </div>
                   <Separator orientation="vertical" className="h-3.5" />
                   <span className="text-xs text-muted-foreground">
@@ -470,16 +478,16 @@ export default function ClientWorkspacePage() {
                   <div className="flex flex-wrap gap-3 mt-3">
                     <div className="text-xs text-muted-foreground">
                       Filing Compliance: <span className={`font-medium ${client.complianceProfile.filingCompliance >= 80 ? 'text-emerald-600' : client.complianceProfile.filingCompliance >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
-                        {client.complianceProfile.filingCompliance}%
+                        {displayNumber(client.complianceProfile.filingCompliance, '—')}%
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Overdue Returns: <span className={`font-medium ${client.complianceProfile.overdueReturns > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                        {client.complianceProfile.overdueReturns}
+                        {displayNumber(client.complianceProfile.overdueReturns, '—')}
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Avg Filing Delay: <span className="font-medium text-foreground">{client.complianceProfile.averageFilingDelay}d</span>
+                      Avg Filing Delay: <span className="font-medium text-foreground">{displayNumber(client.complianceProfile.averageFilingDelay, '—')}d</span>
                     </div>
                   </div>
                 )}
@@ -586,7 +594,7 @@ export default function ClientWorkspacePage() {
                     transition={{ delay: 0.25 + index * 0.04, duration: 0.3 }}
                     className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/20 transition-colors items-center"
                   >
-                    <div className="col-span-2 text-sm font-medium text-foreground">{ret.returnType}</div>
+                    <div className="col-span-2 text-sm font-medium text-foreground">{ret.returnType || '—'}</div>
                     <div className="col-span-2 text-sm text-muted-foreground">{periodToLabel(ret.period)}</div>
                     <div className="col-span-2">{getReturnStatusBadge(ret.status)}</div>
                     <div className="col-span-2 text-xs text-muted-foreground">
@@ -639,29 +647,29 @@ export default function ClientWorkspacePage() {
                     transition={{ delay: 0.35 + index * 0.03, duration: 0.3 }}
                     className="grid grid-cols-12 gap-2 px-4 py-2.5 hover:bg-muted/20 transition-colors items-center"
                   >
-                    <div className="col-span-2 text-xs font-medium text-foreground truncate">{inv.invoiceNumber}</div>
+                    <div className="col-span-2 text-xs font-medium text-foreground truncate">{inv.invoiceNumber || '—'}</div>
                     <div className="col-span-2 text-xs text-muted-foreground">{inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</div>
-                    <div className="col-span-2 text-xs text-muted-foreground">{inv.invoiceType}</div>
+                    <div className="col-span-2 text-xs text-muted-foreground">{inv.invoiceType || '—'}</div>
                     <div className="col-span-2">
-                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
+                      <Badge variant="outline" className={`text-[11px] px-1.5 py-0 ${
                         inv.matchStatus === 'matched' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : inv.matchStatus === 'mismatch' ? 'bg-red-50 text-red-700 border-red-200'
                         : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}>
-                        {inv.matchStatus}
+                        {inv.matchStatus || '—'}
                       </Badge>
                     </div>
                     <div className="col-span-2">
-                      <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
+                      <Badge variant="outline" className={`text-[11px] px-1.5 py-0 ${
                         inv.riskLevel === 'low' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : inv.riskLevel === 'medium' ? 'bg-amber-50 text-amber-700 border-amber-200'
                         : inv.riskLevel === 'high' ? 'bg-orange-50 text-orange-700 border-orange-200'
                         : 'bg-red-50 text-red-700 border-red-200'
                       }`}>
-                        {inv.riskLevel}
+                        {inv.riskLevel || '—'}
                       </Badge>
                     </div>
-                    <div className="col-span-2 text-xs font-medium text-foreground text-right">{formatCurrency(inv.totalAmount)}</div>
+                    <div className="col-span-2 text-xs font-medium text-foreground text-right">{formatCurrency(inv.totalAmount ?? 0)}</div>
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -708,8 +716,8 @@ export default function ClientWorkspacePage() {
                     <FileText className="size-4 text-slate-500" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate" title={doc.fileName}>{doc.fileName}</p>
-                    <p className="text-xs text-muted-foreground">{doc.documentType} &middot; {doc.createdAt ? formatRelativeTime(doc.createdAt as string) : ''}</p>
+                    <p className="text-sm font-medium text-foreground truncate" title={doc.fileName}>{displayText(doc.fileName, 'Untitled document')}</p>
+                    <p className="text-xs text-muted-foreground">{doc.documentType || 'document'} &middot; {doc.createdAt ? formatRelativeTime(doc.createdAt as string) : '—'}</p>
                   </div>
                   <div className="shrink-0">{getDocStatusBadge(doc.status)}</div>
                 </motion.div>
@@ -750,9 +758,9 @@ export default function ClientWorkspacePage() {
                       <IconComp className="size-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground truncate">{event.title}</p>
+                      <p className="text-sm text-foreground truncate">{displayText(event.title, 'Activity')}</p>
                       {event.description && (
-                        <p className="text-xs text-muted-foreground truncate">{event.description}</p>
+                        <p className="text-xs text-muted-foreground truncate">{displayText(event.description, '')}</p>
                       )}
                     </div>
                     <span className="text-xs text-muted-foreground shrink-0">{formatRelativeTime(event.createdAt as string)}</span>

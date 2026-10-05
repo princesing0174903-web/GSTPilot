@@ -77,10 +77,10 @@ const payslipStatus = [
 
 function PayrollBreakdownChart() {
   const data = [
-    { label: 'Basic', value: 1240000, color: '#10b981' },
-    { label: 'HRA', value: 496000, color: '#34d399' },
-    { label: 'DA', value: 248000, color: '#6ee7b7' },
-    { label: 'Allowances', value: 312780, color: '#a7f3d0' },
+    { label: 'Basic', value: 1240000, color: '#2563EB' },
+    { label: 'HRA', value: 496000, color: '#3B82F6' },
+    { label: 'DA', value: 248000, color: '#60A5FA' },
+    { label: 'Allowances', value: 312780, color: '#93C5FD' },
     { label: 'PF', value: 163980, color: '#f59e0b' },
     { label: 'ESI', value: 44220, color: '#fbbf24' },
     { label: 'TDS', value: 412340, color: '#ef4444' },
@@ -144,10 +144,10 @@ function MonthlyPayrollTrend() {
         return <line key={i} x1={padL} y1={y} x2={w - 10} y2={y} stroke="#e2e8f0" strokeWidth="0.5" />
       })}
       <path d={areaD} fill="url(#payrollGrad)" opacity="0.3" />
-      <path d={pathD} fill="none" stroke="#10b981" strokeWidth="2" />
+      <path d={pathD} fill="none" stroke="#2563EB" strokeWidth="2" />
       {points.map((p, i) => (
         <g key={i}>
-          <circle cx={p.x} cy={p.y} r="3.5" fill="#10b981" stroke="white" strokeWidth="1.5" />
+          <circle cx={p.x} cy={p.y} r="3.5" fill="#2563EB" stroke="white" strokeWidth="1.5" />
           <text x={p.x} y={p.y - 8} className="text-[8px] fill-slate-500" textAnchor="middle">₹{p.v}L</text>
         </g>
       ))}
@@ -156,8 +156,8 @@ function MonthlyPayrollTrend() {
       ))}
       <defs>
         <linearGradient id="payrollGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+          <stop offset="0%" stopColor="#2563EB" />
+          <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
         </linearGradient>
       </defs>
     </svg>

@@ -1,4 +1,5 @@
 'use client';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPilot Gmail & WhatsApp Business Automation™ — useCommunications() Hook
@@ -155,7 +156,7 @@ export interface UseCommunicationsResult {
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useCommunications(): UseCommunicationsResult {
-  const { organization } = useOrg();
+  const { organization, isPreviewMode } = useOrg();
   const { user } = useAuth();
   const orgId = organization?.id ?? null;
 
@@ -176,7 +177,7 @@ export function useCommunications(): UseCommunicationsResult {
     unsubRefs.current.forEach((unsub) => unsub?.());
     unsubRefs.current = [null, null, null, null, null];
 
-    if (!orgId) {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setGmailConnections([]);
       setWhatsappConnections([]);
       setGmailMessages([]);
@@ -243,9 +244,7 @@ export function useCommunications(): UseCommunicationsResult {
     return () => {
       unsubRefs.current.forEach((unsub) => unsub?.());
     };
-  }, [orgId, retryTick]);
-
-  // ─── Helpers ──────────────────────────────────────────────────────────────
+  }, [orgId, isPreviewMode, retryTick]);
 
   const createdBy = {
     uid: user?.id ?? '',

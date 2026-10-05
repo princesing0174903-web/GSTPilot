@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -27,7 +27,6 @@ import {
   Search,
   Zap,
   TrendingUp,
-  AlertCircle,
   FolderOpen,
   FileSpreadsheet,
   Receipt,
@@ -39,14 +38,14 @@ import {
   BarChart3,
   Timer,
   Target,
-  ListChecks,
+  Users,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Color Palette ──────────────────────────────────────────────────────────
 const COLORS = {
-  emerald: '#10b981',
-  emeraldDark: '#059669',
+  emerald: '#2563EB',
+  emeraldDark: '#1D4ED8',
   emeraldLight: '#d1fae5',
   teal: '#14b8a6',
   amber: '#f59e0b',
@@ -56,7 +55,7 @@ const COLORS = {
   purple: '#8b5cf6',
   orange: '#f97316',
   pink: '#ec4899',
-  cyan: '#06b6d4',
+  cyan: '#3B82F6',
 };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -125,12 +124,12 @@ function formatINR(n: number): string {
 
 // ─── Document Type Helpers ──────────────────────────────────────────────────
 const docTypeColors: Record<DocType, string> = {
-  Invoice: '#10b981',
+  Invoice: '#2563EB',
   'Purchase Register': '#3b82f6',
   'Sales Register': '#8b5cf6',
   Notice: '#ef4444',
   'Bank Statement': '#f97316',
-  'GST Return': '#06b6d4',
+  'GST Return': '#3B82F6',
   'Credit Note': '#ec4899',
   'Debit Note': '#f59e0b',
   'Delivery Challan': '#14b8a6',
@@ -196,7 +195,7 @@ function DonutChart({ data }: { data: { label: string; value: number; color: str
 
   // Pre-compute offsets to avoid mutation during render
   const slices = data.reduce<Array<{ dash: number; gap: number; offset: number; color: string }>>((acc, d) => {
-    const pct = d.value / total;
+    const pct = total > 0 ? d.value / total : 0;
     const dash = pct * circumference;
     const gap = circumference - dash;
     const prevOffset = acc.length > 0 ? acc[acc.length - 1].offset - acc[acc.length - 1].dash : 0;
@@ -230,7 +229,9 @@ function DonutChart({ data }: { data: { label: string; value: number; color: str
         </text>
       </svg>
       <div className="flex flex-col gap-2 text-xs">
-        {data.map((d, i) => (
+        {data.length === 0 ? (
+          <span className="text-slate-400 italic">No documents processed yet</span>
+        ) : data.map((d, i) => (
           <div key={i} className="flex items-center gap-2">
             <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
             <span className="text-slate-600">{d.label}</span>
@@ -242,95 +243,27 @@ function DonutChart({ data }: { data: { label: string; value: number; color: str
   );
 }
 
-// ─── Sample Data ────────────────────────────────────────────────────────────
-const pipelineDocuments: DocumentPipeline[] = [
-  { id: 'd1', fileName: 'inv_mar_001.pdf', originalName: 'scan_20250304_001.pdf', docType: 'Invoice', clientName: 'ABC Traders', stage: 'complete', progress: 100, uploadedAt: '04/03/2026 10:15', processingTime: '3.2s', renamedTo: 'ABC_Traders_Invoice_Mar2026.pdf' },
-  { id: 'd2', fileName: 'purchase_q3.xlsx', originalName: 'data_export.xlsx', docType: 'Purchase Register', clientName: 'Patel & Sons', stage: 'processing', progress: 82, uploadedAt: '04/03/2026 10:12', processingTime: '4.1s' },
-  { id: 'd3', fileName: 'sales_reg_feb.pdf', originalName: 'feb_sales_copy.pdf', docType: 'Sales Register', clientName: 'Sharma Industries', stage: 'extracting', progress: 55, uploadedAt: '04/03/2026 10:08', processingTime: '-' },
-  { id: 'd4', fileName: 'gst_notice_01.pdf', originalName: 'notice_gst.pdf', docType: 'Notice', clientName: 'Rajesh Kumar & Co', stage: 'identified', progress: 30, uploadedAt: '04/03/2026 10:05', processingTime: '-' },
-  { id: 'd5', fileName: 'bank_stmt_feb.pdf', originalName: 'stmt_download.pdf', docType: 'Bank Statement', clientName: 'Mehta Enterprises', stage: 'uploaded', progress: 10, uploadedAt: '04/03/2026 10:03', processingTime: '-' },
-  { id: 'd6', fileName: 'gstr1_q3_2025.pdf', originalName: 'gstr1_file.pdf', docType: 'GST Return', clientName: 'Sunrise Exports', stage: 'complete', progress: 100, uploadedAt: '04/03/2026 09:55', processingTime: '2.8s', renamedTo: 'Sunrise_Exports_GST-Return_Q3_2025.pdf' },
-  { id: 'd7', fileName: 'credit_note_02.pdf', originalName: 'cn_adjustment.pdf', docType: 'Credit Note', clientName: 'ABC Traders', stage: 'complete', progress: 100, uploadedAt: '04/03/2026 09:50', processingTime: '2.1s', renamedTo: 'ABC_Traders_Credit-Note_Mar2026.pdf' },
-  { id: 'd8', fileName: 'debit_note_01.pdf', originalName: 'dn_mar.pdf', docType: 'Debit Note', clientName: 'Patel & Sons', stage: 'extracting', progress: 45, uploadedAt: '04/03/2026 09:48', processingTime: '-' },
-  { id: 'd9', fileName: 'challan_march.pdf', originalName: 'dc_transport.pdf', docType: 'Delivery Challan', clientName: 'Sharma Industries', stage: 'identified', progress: 25, uploadedAt: '04/03/2026 09:45', processingTime: '-' },
-  { id: 'd10', fileName: 'eway_bill_03.pdf', originalName: 'eb_generated.pdf', docType: 'E-Way Bill', clientName: 'Mehta Enterprises', stage: 'complete', progress: 100, uploadedAt: '04/03/2026 09:40', processingTime: '1.9s', renamedTo: 'Mehta_Enterprises_E-Way-Bill_Mar2026.pdf' },
-];
-
-const extractionResults: ExtractionResult[] = [
-  { id: 'e1', fileName: 'ABC_Traders_Invoice_Mar2026.pdf', docType: 'Invoice', clientName: 'ABC Traders', gstin: '27AABCT1234F1ZP', amount: 2450000, tax: 441000, partyName: 'XYZ Distributors', date: '04/03/2026', extractedAt: '10:15 AM' },
-  { id: 'e2', fileName: 'Sunrise_Exports_GST-Return_Q3_2025.pdf', docType: 'GST Return', clientName: 'Sunrise Exports', gstin: '27AABCS5678G2ZQ', amount: 8750000, tax: 1575000, partyName: '-', date: '15/01/2026', extractedAt: '09:55 AM' },
-  { id: 'e3', fileName: 'ABC_Traders_Credit-Note_Mar2026.pdf', docType: 'Credit Note', clientName: 'ABC Traders', gstin: '27AABCT1234F1ZP', amount: 325000, tax: 58500, partyName: 'LMN Suppliers', date: '03/03/2026', extractedAt: '09:50 AM' },
-  { id: 'e4', fileName: 'Mehta_Enterprises_E-Way-Bill_Mar2026.pdf', docType: 'E-Way Bill', clientName: 'Mehta Enterprises', gstin: '27AABCM9012H3ZR', amount: 450000, tax: 81000, partyName: 'PQR Logistics', date: '04/03/2026', extractedAt: '09:40 AM' },
-  { id: 'e5', fileName: 'Patel_Invoice_Feb2026.pdf', docType: 'Invoice', clientName: 'Patel & Sons', gstin: '27AABCP3456D4ZS', amount: 1890000, tax: 340200, partyName: 'DEF Corporation', date: '28/02/2026', extractedAt: '09:32 AM' },
-  { id: 'e6', fileName: 'Sharma_Sales-Register_Feb2026.pdf', docType: 'Sales Register', clientName: 'Sharma Industries', gstin: '27AABCS7890J5ZT', amount: 12340000, tax: 2221200, partyName: '-', date: '01/03/2026', extractedAt: '09:20 AM' },
-  { id: 'e7', fileName: 'Rajesh_Purchase-Register_Q3.pdf', docType: 'Purchase Register', clientName: 'Rajesh Kumar & Co', gstin: '27AABCR2345K6ZU', amount: 5670000, tax: 1020600, partyName: '-', date: '15/02/2026', extractedAt: '09:10 AM' },
-  { id: 'e8', fileName: 'Sunrise_Bank-Statement_Feb2026.pdf', docType: 'Bank Statement', clientName: 'Sunrise Exports', gstin: '27AABCS5678G2ZQ', amount: 9500000, tax: 0, partyName: 'HDFC Bank', date: '28/02/2026', extractedAt: '08:55 AM' },
-];
-
-const autoActions: AutoAction[] = [
-  { id: 'a1', action: 'Invoice Created', description: 'Auto-generated invoice #INV-2026-0847 from extracted data', clientName: 'ABC Traders', documentName: 'ABC_Traders_Invoice_Mar2026.pdf', timestamp: '10:15 AM', type: 'invoice_created' },
-  { id: 'a2', action: 'Return Updated', description: 'GSTR-1 for Mar 2026 updated with new invoice data', clientName: 'ABC Traders', documentName: 'ABC_Traders_Invoice_Mar2026.pdf', timestamp: '10:15 AM', type: 'return_updated' },
-  { id: 'a3', action: 'Client Record Updated', description: 'ABC Traders document count and last activity updated', clientName: 'ABC Traders', documentName: 'ABC_Traders_Invoice_Mar2026.pdf', timestamp: '10:15 AM', type: 'client_updated' },
-  { id: 'a4', action: 'Activity Created', description: 'New activity logged: Invoice processed for ABC Traders', clientName: 'ABC Traders', documentName: 'ABC_Traders_Invoice_Mar2026.pdf', timestamp: '10:16 AM', type: 'activity_created' },
-  { id: 'a5', action: 'Folder Created', description: 'Created folder: GST Returns/Q3-2025 for Sunrise Exports', clientName: 'Sunrise Exports', documentName: 'Sunrise_Exports_GST-Return_Q3_2025.pdf', timestamp: '09:55 AM', type: 'folder_created' },
-  { id: 'a6', action: 'Return Updated', description: 'GSTR-3B for Q3 2025 updated with GST Return data', clientName: 'Sunrise Exports', documentName: 'Sunrise_Exports_GST-Return_Q3_2025.pdf', timestamp: '09:56 AM', type: 'return_updated' },
-  { id: 'a7', action: 'Invoice Created', description: 'Auto-generated credit note #CN-2026-0092', clientName: 'ABC Traders', documentName: 'ABC_Traders_Credit-Note_Mar2026.pdf', timestamp: '09:50 AM', type: 'invoice_created' },
-  { id: 'a8', action: 'Client Record Updated', description: 'Mehta Enterprises E-Way Bill count updated', clientName: 'Mehta Enterprises', documentName: 'Mehta_Enterprises_E-Way-Bill_Mar2026.pdf', timestamp: '09:40 AM', type: 'client_updated' },
-  { id: 'a9', action: 'Activity Created', description: 'E-Way Bill processed and linked to delivery challan', clientName: 'Mehta Enterprises', documentName: 'Mehta_Enterprises_E-Way-Bill_Mar2026.pdf', timestamp: '09:41 AM', type: 'activity_created' },
-  { id: 'a10', action: 'Invoice Created', description: 'Auto-generated invoice #INV-2026-0846 from purchase data', clientName: 'Patel & Sons', documentName: 'Patel_Invoice_Feb2026.pdf', timestamp: '09:32 AM', type: 'invoice_created' },
-  { id: 'a11', action: 'Return Updated', description: 'GSTR-1 for Feb 2026 updated with sales register data', clientName: 'Sharma Industries', documentName: 'Sharma_Sales-Register_Feb2026.pdf', timestamp: '09:20 AM', type: 'return_updated' },
-  { id: 'a12', action: 'Activity Created', description: 'Purchase register reconciled with ITC claims', clientName: 'Rajesh Kumar & Co', documentName: 'Rajesh_Purchase-Register_Q3.pdf', timestamp: '09:10 AM', type: 'activity_created' },
-];
-
-const docTypeDistribution = [
-  { label: 'Invoice', value: 45, color: '#10b981' },
-  { label: 'Purchase Register', value: 18, color: '#3b82f6' },
-  { label: 'Sales Register', value: 22, color: '#8b5cf6' },
-  { label: 'Notice', value: 8, color: '#ef4444' },
-  { label: 'Bank Statement', value: 12, color: '#f97316' },
-  { label: 'GST Return', value: 15, color: '#06b6d4' },
-  { label: 'Credit Note', value: 9, color: '#ec4899' },
-  { label: 'Debit Note', value: 6, color: '#f59e0b' },
-  { label: 'Delivery Challan', value: 10, color: '#14b8a6' },
-  { label: 'E-Way Bill', value: 14, color: '#64748b' },
-];
+// ─── Sample Data (empty — populated by real pipeline data) ──────────────────
+const pipelineDocuments: DocumentPipeline[] = [];
+const extractionResults: ExtractionResult[] = [];
+const autoActions: AutoAction[] = [];
+const docTypeDistribution: { label: string; value: number; color: string }[] = [];
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 export default function AIDocumentEmployeePage() {
   const [activeTab, setActiveTab] = useState('pipeline');
-  const [pipelineData, setPipelineData] = useState(pipelineDocuments);
-  const [liveTick, setLiveTick] = useState(0);
-
-  // Simulate pipeline progression
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLiveTick((t) => t + 1);
-      setPipelineData((prev) =>
-        prev.map((doc) => {
-          if (doc.stage === 'complete') return doc;
-          const stages: ProcessingStage[] = ['uploaded', 'identified', 'extracting', 'processing', 'complete'];
-          const idx = stages.indexOf(doc.stage);
-          const progressInc = Math.random() * 8 + 2;
-          const newProgress = Math.min(doc.progress + progressInc, 100);
-          const newStage = newProgress >= (idx + 1) * 20 ? stages[Math.min(idx + 1, 4)] : doc.stage;
-          return { ...doc, progress: newProgress, stage: newStage as ProcessingStage };
-        })
-      );
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
+  const [pipelineData] = useState<DocumentPipeline[]>(pipelineDocuments);
 
   const completedDocs = pipelineData.filter((d) => d.stage === 'complete').length;
-  const inProgressDocs = pipelineData.filter((d) => d.stage !== 'complete' && d.stage !== 'uploaded').length;
   const pendingDocs = pipelineData.filter((d) => d.stage === 'uploaded').length;
 
   const metrics = [
-    { label: 'Docs Processed Today', value: '47', icon: FileCheck, color: 'emerald' },
-    { label: 'Avg Processing Time', value: '3.4s', icon: Timer, color: 'teal' },
-    { label: 'Accuracy Rate', value: '99.2%', icon: Target, color: 'emerald' },
-    { label: 'Auto-Actions Created', value: '156', icon: Zap, color: 'amber' },
+    { label: 'Docs Processed Today', value: '0', icon: FileCheck, color: 'emerald' },
+    { label: 'Avg Processing Time', value: '—', icon: Timer, color: 'teal' },
+    { label: 'Accuracy Rate', value: '—', icon: Target, color: 'emerald' },
+    { label: 'Auto-Actions Created', value: '0', icon: Zap, color: 'amber' },
     { label: 'Pending Queue', value: String(pendingDocs), icon: Clock, color: 'orange' },
-    { label: 'Total This Month', value: '892', icon: BarChart3, color: 'emerald' },
+    { label: 'Total This Month', value: '0', icon: BarChart3, color: 'emerald' },
   ];
 
   const getStageColor = (stage: ProcessingStage) => {
@@ -448,7 +381,13 @@ export default function AIDocumentEmployeePage() {
                 {/* Pipeline Documents */}
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-2">
-                    {pipelineData.map((doc, i) => {
+                    {pipelineData.length === 0 ? (
+                      <div className="h-[340px] flex flex-col items-center justify-center text-slate-400">
+                        <FileText className="h-10 w-10 mb-3 text-slate-200" />
+                        <p className="text-sm font-medium">No documents in pipeline</p>
+                        <p className="text-xs text-slate-300 mt-1">Documents will appear here once they are uploaded for processing</p>
+                      </div>
+                    ) : pipelineData.map((doc, i) => {
                       const DocIcon = doc.docType ? docTypeIcons[doc.docType] : FileText;
                       return (
                         <motion.div
@@ -508,7 +447,13 @@ export default function AIDocumentEmployeePage() {
               <CardContent>
                 <ScrollArea className="h-[500px]">
                   <div className="space-y-1">
-                    {pipelineData.map((doc, i) => {
+                    {pipelineData.length === 0 ? (
+                      <div className="h-[440px] flex flex-col items-center justify-center text-slate-400">
+                        <Radio className="h-10 w-10 mb-3 text-slate-200" />
+                        <p className="text-sm font-medium">No document stream yet</p>
+                        <p className="text-xs text-slate-300 mt-1">Live document processing activity will stream here</p>
+                      </div>
+                    ) : pipelineData.map((doc, i) => {
                       const DocIcon = doc.docType ? docTypeIcons[doc.docType] : FileText;
                       const isComplete = doc.stage === 'complete';
                       return (
@@ -565,7 +510,13 @@ export default function AIDocumentEmployeePage() {
               <CardContent>
                 <ScrollArea className="h-[500px]">
                   <div className="space-y-3">
-                    {extractionResults.map((ext, i) => {
+                    {extractionResults.length === 0 ? (
+                      <div className="h-[440px] flex flex-col items-center justify-center text-slate-400">
+                        <FileScan className="h-10 w-10 mb-3 text-slate-200" />
+                        <p className="text-sm font-medium">No extracted data yet</p>
+                        <p className="text-xs text-slate-300 mt-1">Extracted GSTINs, amounts, and parties from processed documents will appear here</p>
+                      </div>
+                    ) : extractionResults.map((ext, i) => {
                       const DocIcon = docTypeIcons[ext.docType];
                       return (
                         <motion.div
@@ -636,14 +587,20 @@ export default function AIDocumentEmployeePage() {
               <CardContent>
                 <ScrollArea className="h-[500px]">
                   <div className="space-y-2">
-                    {autoActions.map((action, i) => {
+                    {autoActions.length === 0 ? (
+                      <div className="h-[440px] flex flex-col items-center justify-center text-slate-400">
+                        <Zap className="h-10 w-10 mb-3 text-slate-200" />
+                        <p className="text-sm font-medium">No audit trail yet</p>
+                        <p className="text-xs text-slate-300 mt-1">Auto-actions taken by the AI Document Employee will be logged here</p>
+                      </div>
+                    ) : autoActions.map((action, i) => {
                       const ActionIcon = getActionIcon(action.type);
                       const colorMap: Record<AutoAction['type'], string> = {
-                        invoice_created: '#10b981',
+                        invoice_created: '#2563EB',
                         return_updated: '#3b82f6',
                         client_updated: '#8b5cf6',
                         activity_created: '#f59e0b',
-                        folder_created: '#06b6d4',
+                        folder_created: '#3B82F6',
                       };
                       return (
                         <motion.div
@@ -706,19 +663,19 @@ export default function AIDocumentEmployeePage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
                       <span className="text-[10px] text-emerald-600 block">Today</span>
-                      <span className="text-lg font-bold text-emerald-700">47 docs</span>
+                      <span className="text-lg font-bold text-emerald-700">0 docs</span>
                     </div>
                     <div className="p-3 rounded-lg bg-teal-50 border border-teal-100">
                       <span className="text-[10px] text-teal-600 block">Avg Time</span>
-                      <span className="text-lg font-bold text-teal-700">3.4s</span>
+                      <span className="text-lg font-bold text-teal-700">—</span>
                     </div>
                     <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
                       <span className="text-[10px] text-emerald-600 block">Accuracy</span>
-                      <span className="text-lg font-bold text-emerald-700">99.2%</span>
+                      <span className="text-lg font-bold text-emerald-700">—</span>
                     </div>
                     <div className="p-3 rounded-lg bg-amber-50 border border-amber-100">
                       <span className="text-[10px] text-amber-600 block">Errors</span>
-                      <span className="text-lg font-bold text-amber-700">2</span>
+                      <span className="text-lg font-bold text-amber-700">0</span>
                     </div>
                   </div>
 
@@ -728,7 +685,7 @@ export default function AIDocumentEmployeePage() {
                     <h4 className="text-xs font-semibold text-slate-600">Processing by Stage</h4>
                     {(['uploaded', 'identified', 'extracting', 'processing', 'complete'] as ProcessingStage[]).map((stage) => {
                       const count = pipelineData.filter((d) => d.stage === stage).length;
-                      const pct = (count / pipelineData.length) * 100;
+                      const pct = pipelineData.length > 0 ? (count / pipelineData.length) * 100 : 0;
                       const colors: Record<ProcessingStage, string> = {
                         uploaded: 'bg-slate-400',
                         identified: 'bg-blue-400',
@@ -757,40 +714,52 @@ export default function AIDocumentEmployeePage() {
 
                   <div className="space-y-2">
                     <h4 className="text-xs font-semibold text-slate-600">Weekly Trend</h4>
-                    <svg width="100%" height="80" viewBox="0 0 300 80" className="overflow-visible">
-                      <defs>
-                        <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-                          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-                        </linearGradient>
-                      </defs>
-                      {[32, 41, 38, 52, 47, 55, 47].map((v, i, arr) => {
-                        const x = (i / (arr.length - 1)) * 280 + 10;
-                        const y = 70 - (v / 60) * 60;
-                        const prevX = i > 0 ? ((i - 1) / (arr.length - 1)) * 280 + 10 : x;
-                        const prevY = i > 0 ? 70 - (arr[i - 1] / 60) * 60 : y;
+                    {(() => {
+                      const trendData: number[] = [];
+                      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                      if (trendData.length === 0) {
                         return (
-                          <React.Fragment key={i}>
-                            {i > 0 && (
-                              <line x1={prevX} y1={prevY} x2={x} y2={y} stroke="#10b981" strokeWidth="2" />
-                            )}
-                            <circle cx={x} cy={y} r="3" fill="#10b981" />
-                            <text x={x} y={78} textAnchor="middle" className="fill-slate-400 text-[8px]">
-                              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i]}
-                            </text>
-                          </React.Fragment>
+                          <div className="h-20 flex items-center justify-center text-slate-300 text-xs italic">
+                            No processing history yet — weekly trend will appear once documents are processed
+                          </div>
                         );
-                      })}
-                      {/* Fill area */}
-                      <path
-                        d={`M10,${70 - (32 / 60) * 60} ${[41, 38, 52, 47, 55, 47].map((v, i) => {
-                          const x = ((i + 1) / 6) * 280 + 10;
-                          const y = 70 - (v / 60) * 60;
-                          return `L${x},${y}`;
-                        }).join(' ')} L290,70 L10,70 Z`}
-                        fill="url(#trendGrad)"
-                      />
-                    </svg>
+                      }
+                      return (
+                        <svg width="100%" height="80" viewBox="0 0 300 80" className="overflow-visible">
+                          <defs>
+                            <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.3" />
+                              <stop offset="100%" stopColor="#2563EB" stopOpacity="0" />
+                            </linearGradient>
+                          </defs>
+                          {trendData.map((v, i, arr) => {
+                            const x = (i / (arr.length - 1)) * 280 + 10;
+                            const y = 70 - (v / 60) * 60;
+                            const prevX = i > 0 ? ((i - 1) / (arr.length - 1)) * 280 + 10 : x;
+                            const prevY = i > 0 ? 70 - (arr[i - 1] / 60) * 60 : y;
+                            return (
+                              <React.Fragment key={i}>
+                                {i > 0 && (
+                                  <line x1={prevX} y1={prevY} x2={x} y2={y} stroke="#2563EB" strokeWidth="2" />
+                                )}
+                                <circle cx={x} cy={y} r="3" fill="#2563EB" />
+                                <text x={x} y={78} textAnchor="middle" className="fill-slate-400 text-[8px]">
+                                  {days[i]}
+                                </text>
+                              </React.Fragment>
+                            );
+                          })}
+                          <path
+                            d={`M10,${70 - (trendData[0] / 60) * 60} ${trendData.slice(1).map((v, i) => {
+                              const x = ((i + 1) / (trendData.length - 1)) * 280 + 10;
+                              const y = 70 - (v / 60) * 60;
+                              return `L${x},${y}`;
+                            }).join(' ')} L290,70 L10,70 Z`}
+                            fill="url(#trendGrad)"
+                          />
+                        </svg>
+                      );
+                    })()}
                   </div>
                 </CardContent>
               </Card>

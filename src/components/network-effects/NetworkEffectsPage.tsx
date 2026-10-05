@@ -81,7 +81,7 @@ const growthMetrics = [
 ];
 
 const networkDepth = [
-  { degree: '1st Degree', desc: 'Your Clients', count: 42, color: '#10b981' },
+  { degree: '1st Degree', desc: 'Your Clients', count: 42, color: '#2563EB' },
   { degree: '2nd Degree', desc: 'Their Vendors', count: 186, color: '#14b8a6' },
   { degree: '3rd Degree', desc: 'Vendor Network', count: 1240, color: '#f59e0b' },
 ];
@@ -222,7 +222,7 @@ function NetworkVisualization() {
             <g key={i}>
               <motion.line
                 x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-                stroke="#10b981" strokeWidth="0.4" strokeOpacity="0.3"
+                stroke="#2563EB" strokeWidth="0.4" strokeOpacity="0.3"
                 initial={{ pathLength: 0 }}
                 animate={{ pathLength: 1 }}
                 transition={{ duration: 1.5, delay: i * 0.3, repeat: Infinity, repeatType: 'reverse' }}
@@ -230,7 +230,7 @@ function NetworkVisualization() {
               {/* Animated dot traveling along the line */}
               <motion.circle
                 r="0.8"
-                fill="#10b981"
+                fill="#2563EB"
                 initial={{ cx: from.x, cy: from.y, opacity: 0 }}
                 animate={{
                   cx: [from.x, to.x],
@@ -254,7 +254,7 @@ function NetworkVisualization() {
             {/* Pulse ring */}
             <motion.circle
               cx={node.x} cy={node.y} r="8"
-              fill="none" stroke="#10b981" strokeWidth="0.3"
+              fill="none" stroke="#2563EB" strokeWidth="0.3"
               initial={{ r: 5, opacity: 0.6 }}
               animate={{ r: 12, opacity: 0 }}
               transition={{ duration: 2, delay: i * 0.2, repeat: Infinity }}
@@ -262,8 +262,8 @@ function NetworkVisualization() {
             {/* Node background */}
             <motion.circle
               cx={node.x} cy={node.y} r="6"
-              fill="#059669" fillOpacity="0.15"
-              stroke="#10b981" strokeWidth="0.5"
+              fill="#1D4ED8" fillOpacity="0.15"
+              stroke="#2563EB" strokeWidth="0.5"
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: 'spring', delay: i * 0.15 }}
@@ -280,11 +280,11 @@ function NetworkVisualization() {
         ))}
 
         {/* Arrow labels on connections */}
-        <text x={70} y={25} textAnchor="middle" fontSize="2" fill="#10b981" fontWeight="500">invites</text>
-        <text x={83} y={55} textAnchor="middle" fontSize="2" fill="#10b981" fontWeight="500">invite</text>
-        <text x={50} y={76} textAnchor="middle" fontSize="2" fill="#10b981" fontWeight="500">invite</text>
-        <text x={18} y={55} textAnchor="middle" fontSize="2" fill="#10b981" fontWeight="500">invite</text>
-        <text x={28} y={25} textAnchor="middle" fontSize="2" fill="#10b981" fontWeight="500">invites</text>
+        <text x={70} y={25} textAnchor="middle" fontSize="2" fill="#2563EB" fontWeight="500">invites</text>
+        <text x={83} y={55} textAnchor="middle" fontSize="2" fill="#2563EB" fontWeight="500">invite</text>
+        <text x={50} y={76} textAnchor="middle" fontSize="2" fill="#2563EB" fontWeight="500">invite</text>
+        <text x={18} y={55} textAnchor="middle" fontSize="2" fill="#2563EB" fontWeight="500">invite</text>
+        <text x={28} y={25} textAnchor="middle" fontSize="2" fill="#2563EB" fontWeight="500">invites</text>
       </svg>
     </div>
   );
@@ -316,7 +316,7 @@ function SimulatedQRCode() {
       {cells.map((row, r) =>
         row.map((cell, c) =>
           cell ? (
-            <rect key={`${r}-${c}`} x={c} y={r} width="1" height="1" fill="#059669" />
+            <rect key={`${r}-${c}`} x={c} y={r} width="1" height="1" fill="#1D4ED8" />
           ) : null
         )
       )}

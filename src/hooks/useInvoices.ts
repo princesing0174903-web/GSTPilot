@@ -24,6 +24,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrg } from '@/contexts/OrgContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 import {
   subscribeToInvoices,
   createInvoice as svcCreate,
@@ -76,7 +77,7 @@ export interface UseInvoicesResult {
 export function useInvoices(
   statusFilter?: InvoiceStatus,
 ): UseInvoicesResult {
-  const { organization, profile } = useOrg();
+  const { organization, profile, isPreviewMode } = useOrg();
   const { user } = useAuth();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -94,7 +95,7 @@ export function useInvoices(
 
   // ── Real-time subscription ──
   useEffect(() => {
-    if (!orgId) {
+    if (!orgId || isPreviewMode || isLocalOrgId(orgId)) {
       setInvoices([]);
       setLoading(false);
       setError(null);
@@ -128,7 +129,7 @@ export function useInvoices(
     );
 
     return () => unsubscribe();
-  }, [orgId, statusFilter, retryTick]);
+  }, [orgId, isPreviewMode, statusFilter, retryTick]);
 
   // ── Retry handler ──
   const retry = useCallback(() => {

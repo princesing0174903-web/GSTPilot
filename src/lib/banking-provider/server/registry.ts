@@ -17,18 +17,25 @@ import type { IBankProvider } from '../provider';
 import type { BankProviderName } from '../types';
 import { MockBankProvider } from './mock-provider';
 import { createFutureProvider } from './future-providers';
+import { SetuAAProvider } from './setu-aa-provider';
 
 let cachedProvider: IBankProvider | null = null;
 let cachedName: BankProviderName | null = null;
 
 /**
  * Resolve which provider to use based on the `BANK_PROVIDER` env var.
- *   • 'mock' / undefined → MockBankProvider (default)
- *   • 'aa'               → FutureAAProvider
- *   • 'razorpayx'        → FutureRazorpayXProvider
- *   • 'setu'             → FutureSetuProvider
- *   • 'perfios'          → FuturePerfiosProvider
- *   • 'finvu'            → FutureFinvuProvider
+ *   • 'mock' / undefined → MockBankProvider (default — Sandbox/Demo)
+ *   • 'aa'               → FutureAAProvider (placeholder)
+ *   • 'razorpayx'        → FutureRazorpayXProvider (placeholder)
+ *   • 'setu'             → SetuAAProvider (REAL — uses the Setu SDK)
+ *   • 'perfios'          → FuturePerfiosProvider (placeholder)
+ *   • 'finvu'            → FutureFinvuProvider (placeholder)
+ *
+ * IMPORTANT: When BANK_PROVIDER=setu, the SetuAAProvider is used. If Setu env
+ * vars are NOT configured, every method throws BankingError(SETU_NOT_CONFIGURED).
+ * There is NO silent fallback to Mock — this is a deliberate security decision
+ * so that a misconfigured production deployment fails loudly rather than
+ * silently serving mock data.
  */
 export function getProviderName(): BankProviderName {
   const raw = (process.env.BANK_PROVIDER ?? 'mock').toLowerCase().trim();
@@ -47,7 +54,15 @@ export function getBankProvider(): IBankProvider {
   const name = getProviderName();
   // Return cached if the name hasn't changed.
   if (cachedProvider && cachedName === name) return cachedProvider;
-  cachedProvider = name === 'mock' ? new MockBankProvider() : createFutureProvider(name);
+  if (name === 'mock') {
+    cachedProvider = new MockBankProvider();
+  } else if (name === 'setu') {
+    // REAL Setu AA provider — uses the Setu SDK. Throws SETU_NOT_CONFIGURED
+    // if env vars are missing (no silent Mock fallback).
+    cachedProvider = new SetuAAProvider();
+  } else {
+    cachedProvider = createFutureProvider(name);
+  }
   cachedName = name;
   return cachedProvider;
 }

@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "bash auto-restore.sh && NODE_OPTIONS='--max-old-space-size=3072' npx next dev -p 3000 --webpack",
+    "dev": "prisma generate && NODE_OPTIONS='--max-old-space-size=3072' npx next dev -p 3000 --webpack",
     "build": "next build --webpack && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production node .next/standalone/server.js",
     "lint": "eslint .",

@@ -58,8 +58,11 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
     // AuthContext can refresh the token or force re-login.
     if (err instanceof FetchHttpError) {
       if (err.status === 401) {
-        broadcastSessionExpired();
-      }
+          const code = (err.body as any)?.code;
+          if (!code || code === 'SESSION_EXPIRED' || code === 'AUTH_REQUIRED') {
+            broadcastSessionExpired();
+          }
+        }
       // Re-throw with the friendly server-provided message (already extracted
       // by fetchWithTimeout from the JSON error body).
       throw err;

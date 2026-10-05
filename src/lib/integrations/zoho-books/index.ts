@@ -23,7 +23,7 @@ export {
   getRedirectUri,
   encodeState,
   decodeState,
-  resolveOrgUserFromHeaders,
+  
   buildAuthUrl,
   exchangeCodeForTokens,
   storeTokens,
@@ -59,3 +59,4 @@ export type {
   SyncStatus as EngineSyncStatus,
   UnifiedSyncStatus,
 } from './sync-engine';
+

@@ -6,7 +6,7 @@
 
 import { NextResponse } from 'next/server';
 import { requireAuth, requireOrgMembership } from '@/lib/auth/session';
-import { getValidAccessToken, resolveOrgUserFromHeaders } from '@/lib/google-workspace';
+import { getValidAccessToken } from '@/lib/google-workspace';
 
 export interface ResolvedGoogleAuth {
   accessToken: string | null;
@@ -21,7 +21,7 @@ export interface ResolvedGoogleAuth {
  * `{ accessToken, orgId, userId }`.
  */
 export async function resolveGoogleAuth(req: Request): Promise<ResolvedGoogleAuth> {
-  const { orgId, userId } = resolveOrgUserFromHeaders(req);
+  const orgId = req.headers.get('x-gstpilot-orgid');
   const { accessToken, error } = await getValidAccessToken(orgId, userId);
   if (!accessToken) {
     return {
@@ -36,3 +36,4 @@ export async function resolveGoogleAuth(req: Request): Promise<ResolvedGoogleAut
   }
   return { accessToken, orgId, userId, response: null };
 }
+

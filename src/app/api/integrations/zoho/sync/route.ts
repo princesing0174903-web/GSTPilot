@@ -23,7 +23,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { runZohoFullSync, getSyncStatus, type SyncMode } from '@/lib/integrations/zoho-books/sync-engine';
-import { resolveOrgFromHeaders } from '@/lib/integrations/zoho-books/oauth';
+
 import { emitTimelineEvent } from '@/lib/timeline/emit';
 import { rateLimit, rateLimitedResponse, RATE_LIMIT_PRESETS } from '@/lib/rate-limit';
 import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot';
@@ -34,7 +34,7 @@ export const maxDuration = 300; // 5 minutes — sync can take a while for large
 // ─── POST: trigger a sync ─────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const orgId = resolveOrgFromHeaders(request);
+    const orgId = request.headers.get('x-gstpilot-orgid');
   const userId = authResult.uid;
   const memberResult = await requireOrgMembership(userId, orgId);
   if (memberResult instanceof NextResponse) return memberResult;
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
 // ─── GET: current sync status (for UI polling) ────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
-    const orgId = resolveOrgFromHeaders(request);
+    const orgId = request.headers.get('x-gstpilot-orgid');
   const userId = authResult.uid;
   const memberResult = await requireOrgMembership(userId, orgId);
   if (memberResult instanceof NextResponse) return memberResult;

@@ -26,7 +26,7 @@ import { requireAuth, requireOrgMembership } from "@/lib/auth/session";
 import {
   isGoogleConfigured,
   resolveRedirectUri,
-  resolveOrgFromHeaders,
+  
   encodeState,
   buildAuthUrl,
 } from '@/lib/integrations/google/auth';
@@ -55,7 +55,7 @@ export async function GET(req: Request) {
 
   // ── Org + user resolution (from headers — same source of truth as every
   //    other route in this codebase) ──
-  const orgId = resolveOrgFromHeaders(req);
+  const orgId = req.headers.get('x-gstpilot-orgid');
   const userId = authResult.uid;
   const memberResult = await requireOrgMembership(userId, orgId);
   if (memberResult instanceof NextResponse) return memberResult;

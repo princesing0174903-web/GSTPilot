@@ -16,7 +16,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth, requireOrgMembership } from "@/lib/auth/session";
 import {
   getValidAccessToken,
-  resolveOrgFromHeaders,
+  
 } from '@/lib/integrations/google/auth';
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
   const authResult = await requireAuth(req);
   if (authResult instanceof NextResponse) return authResult;
 
-  const orgId = resolveOrgFromHeaders(req);
+  const orgId = req.headers.get('x-gstpilot-orgid');
   const userId = authResult.uid;
   const memberResult = await requireOrgMembership(userId, orgId);
   if (memberResult instanceof NextResponse) return memberResult;

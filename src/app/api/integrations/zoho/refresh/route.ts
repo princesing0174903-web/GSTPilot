@@ -19,7 +19,7 @@ import { requireAuth, requireOrgMembership } from "@/lib/auth/session";
 import {
   getValidAccessToken,
   getConnectionStatus,
-  resolveOrgFromHeaders,
+  
 } from '@/lib/integrations/zoho/oauth';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   const authResult = await requireAuth(req);
   if (authResult instanceof NextResponse) return authResult;
 
-  const orgId = resolveOrgFromHeaders(req);
+  const orgId = req.headers.get('x-gstpilot-orgid');
   const userId = authResult.uid;
   const memberResult = await requireOrgMembership(userId, orgId);
   if (memberResult instanceof NextResponse) return memberResult;

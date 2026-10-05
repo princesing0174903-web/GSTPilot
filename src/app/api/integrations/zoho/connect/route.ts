@@ -27,7 +27,7 @@ import { requireAuth, requireOrgMembership } from "@/lib/auth/session";
 import {
   isZohoConfigured,
   getZohoOAuthConfig,
-  resolveOrgFromHeaders,
+  
   encodeState,
   buildAuthUrl,
 } from '@/lib/integrations/zoho/oauth';
@@ -59,7 +59,7 @@ export async function GET(req: Request) {
   }
 
   // ── Org + user resolution ──
-  const orgId = resolveOrgFromHeaders(req);
+  const orgId = req.headers.get('x-gstpilot-orgid');
   const userId = authResult.uid;
   const memberResult = await requireOrgMembership(userId, orgId);
   if (memberResult instanceof NextResponse) return memberResult;

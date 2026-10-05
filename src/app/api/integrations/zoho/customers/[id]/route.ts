@@ -41,7 +41,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await ctx.params;
-    const orgId = resolveOrgFromHeaders(req);
+    const orgId = req.headers.get('x-gstpilot-orgid');
   const userId = authResult.uid;
   const memberResult = await requireOrgMembership(userId, orgId);
   if (memberResult instanceof NextResponse) return memberResult;

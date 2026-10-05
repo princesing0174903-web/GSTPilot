@@ -55,7 +55,7 @@ export async function GET(req: Request) {
   if (authResult instanceof NextResponse) return authResult;
 
   try {
-    const orgId = resolveOrgFromHeaders(req);
+    const orgId = req.headers.get('x-gstpilot-orgid');
   const userId = authResult.uid;
   const memberResult = await requireOrgMembership(userId, orgId);
   if (memberResult instanceof NextResponse) return memberResult;

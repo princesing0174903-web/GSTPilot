@@ -1,7 +1,7 @@
 {
     "$schema":  "https://openapi.vercel.sh/vercel.json",
     "framework":  "nextjs",
-    "buildCommand":  "next build --webpack",
+    "buildCommand":  "prisma generate \u0026\u0026 next build --webpack",
     "devCommand":  "next dev",
     "installCommand":  "bun install",
     "outputDirectory":  ".next",

@@ -24,19 +24,26 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership } from "@/lib/auth/session";
 import {
   getZohoEndpoints,
   resolveRedirectUri,
   classifyRequestEnvironment,
   ZOHO_BOOKS_SCOPE,
-  resolveOrgUserFromHeaders,
+  resolveOrgFromHeaders,
 } from '@/lib/integrations/zoho-books';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
-  const { orgId, userId } = resolveOrgUserFromHeaders(req);
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+
+  const orgId = resolveOrgFromHeaders(req);
+  const userId = authResult.uid;
+  const memberResult = await requireOrgMembership(userId, orgId);
+  if (memberResult instanceof NextResponse) return memberResult;
 
   const clientId = process.env.ZOHO_CLIENT_ID;
   const clientSecret = process.env.ZOHO_CLIENT_SECRET;

@@ -18,6 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session';
 import { getValidAccessToken, resolveOrgUserFromHeaders, loadTokens } from './oauth';
 
 export interface ResolvedZohoAuth {
@@ -39,19 +40,6 @@ export interface ResolvedZohoAuth {
  */
 export async function resolveZohoAuth(req: Request): Promise<ResolvedZohoAuth> {
   const { orgId, userId } = resolveOrgUserFromHeaders(req);
-  if (!orgId || !userId) {
-    return {
-      accessToken: null,
-      orgId: '',
-      userId: '',
-      zohoOrgId: null,
-      response: NextResponse.json(
-        { ok: false, error: 'Organization + user context required.' },
-        { status: 400 },
-      ),
-    };
-  }
-
   const { accessToken, error } = await getValidAccessToken(orgId, userId);
   if (!accessToken) {
     return {

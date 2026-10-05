@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership } from '@/lib/auth/session';
 import { getValidAccessToken, resolveOrgUserFromHeaders } from '@/lib/google-workspace';
 
 export interface ResolvedGoogleAuth {
@@ -21,17 +22,6 @@ export interface ResolvedGoogleAuth {
  */
 export async function resolveGoogleAuth(req: Request): Promise<ResolvedGoogleAuth> {
   const { orgId, userId } = resolveOrgUserFromHeaders(req);
-  if (!orgId || !userId) {
-    return {
-      accessToken: null,
-      orgId: '',
-      userId: '',
-      response: NextResponse.json(
-        { ok: false, error: 'Organization + user context required.' },
-        { status: 400 },
-      ),
-    };
-  }
   const { accessToken, error } = await getValidAccessToken(orgId, userId);
   if (!accessToken) {
     return {

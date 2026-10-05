@@ -20,12 +20,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth/session';
+import { requireAuth, requireOrgMembership } from "@/lib/auth/session";
 import { db } from '@/lib/db';
 import {
   getValidAccessToken,
   getApiBaseUrl,
-  resolveOrgUserFromHeaders,
+  resolveOrgFromHeaders,
 } from '@/lib/integrations/zoho/oauth';
 import type { ZohoBill } from '@/lib/integrations/zoho/types';
 
@@ -40,8 +40,11 @@ export async function GET(req: Request) {
   const authResult = await requireAuth(req);
   if (authResult instanceof NextResponse) return authResult;
 
-  const { orgId, userId } = resolveOrgUserFromHeaders(req);
-  if (!orgId || !userId) {
+  const orgId = resolveOrgFromHeaders(req);
+  const userId = authResult.uid;
+  const memberResult = await requireOrgMembership(userId, orgId);
+  if (memberResult instanceof NextResponse) return memberResult;
+  if (!orgId) {
     return zohoError(400, 'NO_ORG_CONTEXT', 'Missing workspace context.');
   }
 

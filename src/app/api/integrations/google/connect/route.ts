@@ -5,7 +5,7 @@
 //
 //   1. requireAuth → resolves the caller's identity (Bearer token or
 //      x-gstpilot-actor header fallback).
-//   2. resolveOrgUserFromHeaders → reads (orgId, userId) from the
+//   2. resolveOrgFromHeaders → reads (orgId, userId) from the
 //      `x-gstpilot-orgid` + `x-gstpilot-actor` headers stamped by the client.
 //   3. resolveRedirectUri → 7-step fallback for the OAuth redirect URI.
 //   4. encodeState → HMAC-signed state carrying (orgId, userId, email,
@@ -22,11 +22,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth/session';
+import { requireAuth, requireOrgMembership } from "@/lib/auth/session";
 import {
   isGoogleConfigured,
   resolveRedirectUri,
-  resolveOrgUserFromHeaders,
+  resolveOrgFromHeaders,
   encodeState,
   buildAuthUrl,
 } from '@/lib/integrations/google/auth';
@@ -55,8 +55,11 @@ export async function GET(req: Request) {
 
   // ── Org + user resolution (from headers — same source of truth as every
   //    other route in this codebase) ──
-  const { orgId, userId } = resolveOrgUserFromHeaders(req);
-  if (!orgId || !userId) {
+  const orgId = resolveOrgFromHeaders(req);
+  const userId = authResult.uid;
+  const memberResult = await requireOrgMembership(userId, orgId);
+  if (memberResult instanceof NextResponse) return memberResult;
+  if (!orgId) {
     return NextResponse.json(
       {
         ok: false,

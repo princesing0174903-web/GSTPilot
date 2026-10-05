@@ -23,7 +23,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { runZohoFullSync, getSyncStatus, type SyncMode } from '@/lib/integrations/zoho-books/sync-engine';
-import { resolveOrgUserFromHeaders } from '@/lib/integrations/zoho-books/oauth';
+import { resolveOrgFromHeaders } from '@/lib/integrations/zoho-books/oauth';
 import { emitTimelineEvent } from '@/lib/timeline/emit';
 import { rateLimit, rateLimitedResponse, RATE_LIMIT_PRESETS } from '@/lib/rate-limit';
 import { invalidateBusinessSnapshotCache } from '@/lib/business/snapshot';
@@ -34,11 +34,14 @@ export const maxDuration = 300; // 5 minutes — sync can take a while for large
 // ─── POST: trigger a sync ─────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
-    const { orgId, userId } = resolveOrgUserFromHeaders(request);
+    const orgId = resolveOrgFromHeaders(request);
+  const userId = authResult.uid;
+  const memberResult = await requireOrgMembership(userId, orgId);
+  if (memberResult instanceof NextResponse) return memberResult;
 
     // SECURITY: require BOTH orgId AND userId — prevents anonymous callers
     // from triggering expensive syncs using only an orgId.
-    if (!orgId || !userId) {
+    if (!orgId) {
       return NextResponse.json(
         { ok: false, error: 'Organization + user context required (x-gstpilot-orgid + x-gstpilot-actor headers).' },
         { status: 400 },
@@ -131,12 +134,15 @@ export async function POST(request: NextRequest) {
 // ─── GET: current sync status (for UI polling) ────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
-    const { orgId, userId } = resolveOrgUserFromHeaders(request);
+    const orgId = resolveOrgFromHeaders(request);
+  const userId = authResult.uid;
+  const memberResult = await requireOrgMembership(userId, orgId);
+  if (memberResult instanceof NextResponse) return memberResult;
 
     // SECURITY: require BOTH orgId AND userId — no ?organizationId= fallback.
     // Previously this route accepted ?organizationId= which allowed tenant
     // isolation bypass for sync-status metadata. Removed.
-    if (!orgId || !userId) {
+    if (!orgId) {
       return NextResponse.json(
         { status: 'idle', error: 'Organization + user context required.' },
         { status: 400 },

@@ -4,7 +4,7 @@
 // Initiates the Zoho Books OAuth flow.
 //
 //   1. requireAuth → resolves the caller's identity.
-//   2. resolveOrgUserFromHeaders → reads (orgId, userId) from the
+//   2. resolveOrgFromHeaders → reads (orgId, userId) from the
 //      `x-gstpilot-orgid` + `x-gstpilot-actor` headers.
 //   3. getZohoOAuthConfig → returns {clientId, clientSecret, redirectUri,
 //      endpoints}. The redirect URI comes from ZOHO_REDIRECT_URI env var
@@ -23,11 +23,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth/session';
+import { requireAuth, requireOrgMembership } from "@/lib/auth/session";
 import {
   isZohoConfigured,
   getZohoOAuthConfig,
-  resolveOrgUserFromHeaders,
+  resolveOrgFromHeaders,
   encodeState,
   buildAuthUrl,
 } from '@/lib/integrations/zoho/oauth';
@@ -59,8 +59,11 @@ export async function GET(req: Request) {
   }
 
   // ── Org + user resolution ──
-  const { orgId, userId } = resolveOrgUserFromHeaders(req);
-  if (!orgId || !userId) {
+  const orgId = resolveOrgFromHeaders(req);
+  const userId = authResult.uid;
+  const memberResult = await requireOrgMembership(userId, orgId);
+  if (memberResult instanceof NextResponse) return memberResult;
+  if (!orgId) {
     return NextResponse.json(
       {
         ok: false,

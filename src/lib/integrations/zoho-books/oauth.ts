@@ -361,21 +361,8 @@ export function decodeState(state: string): ZohoOAuthState | null {
 
 // ─── Org/user header resolution (mirrors Google Workspace) ───────────────────
 
-export function resolveOrgUserFromHeaders(req: Request): ResolvedOrgUser {
-  const orgId = req.headers.get('x-gstpilot-orgid');
-  const actorHeader = req.headers.get('x-gstpilot-actor');
-  let userId: string | null = null;
-  let userEmail: string | null = null;
-  if (actorHeader) {
-    try {
-      const actor = JSON.parse(actorHeader) as { uid?: string; email?: string };
-      userId = actor.uid ?? null;
-      userEmail = actor.email ?? null;
-    } catch {
-      /* ignore malformed actor header */
-    }
-  }
-  return { orgId, userId, userEmail };
+export function resolveOrgFromHeaders(req: Request): string | null {
+  return req.headers.get('x-gstpilot-orgid')?.trim() || null;
 }
 
 // ─── OAuth flow ──────────────────────────────────────────────────────────────

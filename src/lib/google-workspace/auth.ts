@@ -1060,25 +1060,8 @@ function toStored(row: {
  * The Prisma token store is the real backstop — a forged actor header can't
  * read another org's tokens because the orgId is part of the unique key.
  */
-export function resolveOrgUserFromHeaders(req: Request): {
-  orgId: string | null;
-  userId: string | null;
-  userEmail: string | null;
-} {
-  const orgId = req.headers.get('x-gstpilot-orgid');
-  const actorHeader = req.headers.get('x-gstpilot-actor');
-  let userId: string | null = null;
-  let userEmail: string | null = null;
-  if (actorHeader) {
-    try {
-      const actor = JSON.parse(actorHeader) as { uid?: string; email?: string };
-      userId = actor.uid ?? null;
-      userEmail = actor.email ?? null;
-    } catch {
-      /* ignore */
-    }
-  }
-  return { orgId, userId, userEmail };
+export function resolveOrgFromHeaders(req: Request): string | null {
+  return req.headers.get('x-gstpilot-orgid')?.trim() || null;
 }
 
 /** Decrypt helper re-export for service libs that need raw token access. */

@@ -65,10 +65,10 @@ export async function POST(req: Request) {
     const customerEmail = existing.client?.contactEmail ?? null;
 
     if (channel === 'email') {
-      const { orgId, userId } = resolveOrgUserFromHeaders(req);
-      if (orgId && userId) {
+      const { orgId } = resolveOrgUserFromHeaders(req);
+      if (orgId && uid) {
         try {
-          const status = await getConnectionStatus(orgId, userId);
+          const status = await getConnectionStatus(orgId, uid);
           if (status.connected) {
             // Gmail is connected — in production this would call the
             // communication service to dispatch the email. The dispatch is

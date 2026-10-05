@@ -19,9 +19,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership } from "@/lib/auth/session";
 import {
   getConnectionStatus,
-  resolveOrgUserFromHeaders,
+  resolveOrgFromHeaders,
 } from '@/lib/integrations/zoho-books';
 import { setAutoSyncFlag } from '@/lib/integrations/zoho-books/customers';
 import { safeAudit } from '@/lib/audit/safe-write';
@@ -30,9 +31,15 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
-    const { orgId, userId } = resolveOrgUserFromHeaders(req);
-    if (!orgId || !userId) {
+    const orgId = resolveOrgFromHeaders(req);
+  const userId = authResult.uid;
+  const memberResult = await requireOrgMembership(userId, orgId);
+  if (memberResult instanceof NextResponse) return memberResult;
+    if (!orgId) {
       return NextResponse.json(
         { ok: false, error: 'Organization + user context required.' },
         { status: 400 },

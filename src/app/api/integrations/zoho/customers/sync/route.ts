@@ -41,9 +41,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
+import { requireAuth, requireOrgMembership } from "@/lib/auth/session";
 import {
   getConnectionStatus,
-  resolveOrgUserFromHeaders,
+  resolveOrgFromHeaders,
   loadTokens,
   getValidAccessToken,
 } from '@/lib/integrations/zoho-books';
@@ -55,9 +56,15 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
+  const authResult = await requireAuth(req);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
-    const { orgId, userId, userEmail } = resolveOrgUserFromHeaders(req);
-    if (!orgId || !userId) {
+    const orgId = resolveOrgFromHeaders(req);
+  const userId = authResult.uid;
+  const memberResult = await requireOrgMembership(userId, orgId);
+  if (memberResult instanceof NextResponse) return memberResult;
+    if (!orgId) {
       return NextResponse.json(
         {
           ok: false,

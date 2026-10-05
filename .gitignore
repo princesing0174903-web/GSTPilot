@@ -61,3 +61,6 @@ server.log
 .env.*.local
 !.env.example
 !.env.setu.template
+
+# local restore scripts
+auto-restore.sh

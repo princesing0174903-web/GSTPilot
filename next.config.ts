@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
   // (pdfkit loads .afm font data files relative to its module path, which
   // Turbopack breaks if bundled). Keeping them external fixes the
   // "ENOENT: no such file or directory, open Helvetica.afm" error.
-  serverExternalPackages: ['pdfkit', 'qrcode', 'xlsx'],
+  serverExternalPackages: ['pdfkit', 'qrcode', 'xlsx', 'firebase-admin'],
   allowedDevOrigins: [
     // Sandbox preview domains — wildcard matches all subdomains
     "*.space-z.ai",
@@ -54,6 +54,7 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
 
 
 

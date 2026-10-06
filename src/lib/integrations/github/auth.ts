@@ -132,7 +132,14 @@ export function decodeState(state: string): GitHubOAuthStatePayload | null {
 export function resolveRedirectUri(req: Request): string {
   // 1. Env override
   const envUri = process.env.GITHUB_REDIRECT_URI;
-  if (envUri) return envUri;
+  if (envUri) {
+    try {
+      const parsed = new URL(envUri);
+      return `${parsed.protocol}//${parsed.host}/api/auth/github/callback`;
+    } catch (e) {
+      // If unparseable, fall through to request-based resolution
+    }
+  }
 
   const url = new URL(req.url);
 

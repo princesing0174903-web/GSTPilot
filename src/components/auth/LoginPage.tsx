@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Github,
   CheckCircle2,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface LoginPageProps {

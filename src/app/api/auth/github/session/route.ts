@@ -23,7 +23,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { verifyJwt } from '@/lib/integrations/github/session';
 
 export const dynamic = 'force-dynamic';
@@ -43,8 +42,8 @@ function parseCookie(cookieHeader: string): Map<string, string> {
 }
 
 export async function GET(req: Request) {
-  const cookieStore = cookies();
-  const jwtCookie = cookieStore.get('gstpilot_session_jwt')?.value;
+  const cookieHeader = req.headers.get('cookie') ?? '';
+  const jwtCookie = parseCookie(cookieHeader).get('gstpilot_session_jwt');
 
   if (!jwtCookie) {
     return NextResponse.json(

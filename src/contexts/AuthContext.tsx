@@ -520,7 +520,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Clean the URL + surface a friendly error.
       url.searchParams.delete('github_error');
       window.history.replaceState({}, '', url.toString());
-      setError('GitHub sign-in failed. Please try again.');
+      setError('GitHub sign-in failed [' + githubError + ']. Please try again.');
       return;
     }
     if (!githubConnected) return;

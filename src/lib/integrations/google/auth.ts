@@ -111,9 +111,19 @@ export function getGoogleOAuthConfig(): GoogleOAuthConfig {
 //   7. http://localhost:3000 (last resort)
 
 export function resolveRedirectUri(req: Request): string {
-  // 1. Env var
+  // First, extract the actual requested host to detect if we are in production
+  const fwdHost = req.headers.get('x-forwarded-host');
+  const rawHost = req.headers.get('host');
+  const isProductionHost = fwdHost ? !fwdHost.includes('localhost') : (rawHost && !rawHost.includes('localhost'));
+
+  // 1. Env var (skip if it contains localhost but we are clearly on a production host)
   const envUri = process.env.GOOGLE_REDIRECT_URI;
-  if (envUri && envUri.trim().length > 0) return envUri.trim();
+  if (envUri && envUri.trim().length > 0) {
+    const isEnvLocal = envUri.includes('localhost') || envUri.includes('127.0.0.1');
+    if (!isProductionHost || !isEnvLocal) {
+      return envUri.trim();
+    }
+  }
 
   // 2. `abc` header (preview gateway marker)
   const abc = req.headers.get('abc');
@@ -128,17 +138,15 @@ export function resolveRedirectUri(req: Request): string {
   }
 
   // 4. X-Forwarded-Host (+ X-Forwarded-Proto)
-  const fwdHost = req.headers.get('x-forwarded-host');
   if (fwdHost && fwdHost.trim().length > 0) {
     const proto = (req.headers.get('x-forwarded-proto') ?? 'https').split(',')[0]?.trim() || 'https';
     return `${proto}://${fwdHost.trim()}${CALLBACK_PATH}`;
   }
 
   // 5. Host header
-  const host = req.headers.get('host');
-  if (host && host.trim().length > 0) {
-    const proto = host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https';
-    return `${proto}://${host.trim()}${CALLBACK_PATH}`;
+  if (rawHost && rawHost.trim().length > 0) {
+    const proto = rawHost.startsWith('localhost') || rawHost.startsWith('127.0.0.1') ? 'http' : 'https';
+    return `${proto}://${rawHost.trim()}${CALLBACK_PATH}`;
   }
 
   // 6. req.url origin

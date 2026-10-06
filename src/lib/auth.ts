@@ -31,6 +31,7 @@ import {
   browserLocalPersistence,
   browserSessionPersistence,
   inMemoryPersistence,
+  linkWithPopup,
   User,
 } from 'firebase/auth';
 import { auth, googleProvider, onAuthStateChanged } from './firebase';
@@ -106,6 +107,10 @@ export async function signInWithGoogle(
     const result = await signInWithPopup(auth, googleProvider);
     return { user: result.user, error: null };
   } catch (error: unknown) {
+    const code = (error as { code?: string })?.code || '';
+    if (code === 'auth/invalid-credential' || code === 'auth/account-exists-with-different-credential') {
+      return { user: null, error: 'This email already has a GSTPilot account. Sign in with your existing method to link Google.' };
+    }
     const code = (error as { code?: string })?.code || '';
 
     // Popup blocked → fall back to redirect (only works at top-level).
@@ -267,5 +272,20 @@ export async function logOut(): Promise<void> {
     } catch {
       /* swallow — UI state is cleared by onAuthStateChanged anyway */
     }
+  }
+}
+
+/**
+ * Link Google account to the currently signed-in user.
+ */
+export async function linkGoogleAccount(): Promise<{ user: User | null; error: string | null }> {
+  if (!auth.currentUser) {
+    return { user: null, error: 'You must be signed in to link an account.' };
+  }
+  try {
+    const result = await linkWithPopup(auth.currentUser, googleProvider);
+    return { user: result.user, error: null };
+  } catch (error: unknown) {
+    return { user: null, error: friendlyAuthError(error) };
   }
 }

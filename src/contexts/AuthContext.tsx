@@ -120,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [pendingGoogleLink, setPendingGoogleLink] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cachedUserIdRef = useRef<string | null>(null);
   // ── Track whether the CURRENT session is a demo session. Using a ref (not
@@ -384,15 +385,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const { signInWithEmail: firebaseSignInWithEmail } = await loadAuth();
-      const result = await firebaseSignInWithEmail(email, password);
-      if (result.error) {
-        console.warn('[Auth] Login failed:', result.error);
-        setError(result.error);
-        setIsLoading(false);
-      } else {
-        console.log('[Auth] Login successful — waiting for onAuthStateChanged + OrgContext');
-      }
-      return result;
+              const result = await firebaseSignInWithEmail(email, password);
+        if (result.error) {
+          console.warn('[Auth] Login failed:', result.error);
+          setError(result.error);
+          setIsLoading(false);
+        } else {
+          console.log('[Auth] Login successful — waiting for onAuthStateChanged + OrgContext');
+          if (pendingGoogleLink) {
+             const { linkGoogleAccount } = await loadAuth();
+             const linkResult = await linkGoogleAccount();
+             if (linkResult.error) {
+               console.warn('[Auth] Failed to link Google account after sign in:', linkResult.error);
+             } else {
+               console.log('[Auth] Successfully linked Google account!');
+             }
+             setPendingGoogleLink(false);
+          }
+        }
+        return result;
     } catch (err) {
       console.error('[Auth] Login exception:', err);
       setError(friendlyAuthError(err));

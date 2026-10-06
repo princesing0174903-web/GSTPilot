@@ -111,7 +111,6 @@ export async function signInWithGoogle(
     if (code === 'auth/invalid-credential' || code === 'auth/account-exists-with-different-credential') {
       return { user: null, error: 'This email already has a GSTPilot account. Sign in with your existing method to link Google.' };
     }
-    const code = (error as { code?: string })?.code || '';
 
     // Popup blocked → fall back to redirect (only works at top-level).
     if (

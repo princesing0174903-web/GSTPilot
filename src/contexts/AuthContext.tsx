@@ -82,7 +82,7 @@ interface AuthContextType {
   signUpWithEmail: (name: string, email: string, password: string) => Promise<{ user: AuthUser | null; error: string | null }>;
   /** Google OAuth sign-in. Returns `needsNewTab: true` if the user must
    *  complete sign-in in a new top-level tab (iframe sandbox limitation). */
-  signInWithGoogle: () => Promise<{ user: AuthUser | null; error: string | null; needsNewTab?: boolean }>;
+  signInWithGoogle: () => Promise<{ user: AuthUser | null; error: string | null; needsNewTab?: boolean; needsAccountLink?: boolean; linkingEmail?: string }>;
   /** GitHub OAuth sign-in. Redirects the browser to GitHub's consent page.
    *  On success, the callback sets a session cookie + redirects back to
    *  `?github_connected=1`, which AuthContext detects on mount and uses to
@@ -445,11 +445,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { signInWithGoogle: firebaseSignInWithGoogle } = await loadAuth();
       const result = await firebaseSignInWithGoogle();
-      if (result.error) {
-        console.warn('[Auth] Google sign-in failed:', result.error);
-        setError(result.error);
-        setIsLoading(false);
-      } else {
+      if (result.needsAccountLink) {
+          console.log('[Auth] Google sign-in requires account linking for:', result.linkingEmail);
+          setPendingGoogleLink(true);
+          setIsLoading(false);
+        } else if (result.error) {
+          console.warn('[Auth] Google sign-in failed:', result.error);
+          setError(result.error);
+          setIsLoading(false);
+        } else {
         console.log('[Auth] Google sign-in successful — waiting for onAuthStateChanged');
       }
       return result;

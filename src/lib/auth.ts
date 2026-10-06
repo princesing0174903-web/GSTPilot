@@ -90,7 +90,7 @@ async function safeSetPersistence(rememberMe: boolean): Promise<void> {
  */
 export async function signInWithGoogle(
   rememberMe = true
-): Promise<{ user: User | null; error: string | null; needsNewTab?: boolean }> {
+): Promise<{ user: User | null; error: string | null; needsNewTab?: boolean; needsAccountLink?: boolean; linkingEmail?: string }> {
   // Iframe / sandbox preview → cannot do OAuth. Tell the UI to open a new tab.
   if (isInsideIframe()) {
     console.log('[Auth] Inside iframe — Google OAuth requires a new tab');
@@ -109,7 +109,7 @@ export async function signInWithGoogle(
   } catch (error: unknown) {
     const code = (error as { code?: string })?.code || '';
     if (code === 'auth/invalid-credential' || code === 'auth/account-exists-with-different-credential') {
-      return { user: null, error: 'This email already has a GSTPilot account. Sign in with your existing method to link Google.' };
+      return { user: null, error: null, needsAccountLink: true, linkingEmail: (error as any)?.customData?.email || '' };
     }
 
     // Popup blocked → fall back to redirect (only works at top-level).

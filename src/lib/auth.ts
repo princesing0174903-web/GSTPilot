@@ -32,6 +32,9 @@ import {
   browserSessionPersistence,
   inMemoryPersistence,
   linkWithPopup,
+  linkWithCredential,
+  GoogleAuthProvider,
+  OAuthCredential,
   User,
 } from 'firebase/auth';
 import { auth, googleProvider, onAuthStateChanged } from './firebase';
@@ -90,31 +93,30 @@ async function safeSetPersistence(rememberMe: boolean): Promise<void> {
  */
 export async function signInWithGoogle(
   rememberMe = true
-): Promise<{ user: User | null; error: string | null; needsNewTab?: boolean; needsAccountLink?: boolean; linkingEmail?: string }> {
-  // Iframe / sandbox preview → cannot do OAuth. Tell the UI to open a new tab.
+): Promise<{ user: User | null; error: string | null; needsNewTab?: boolean; needsAccountLink?: boolean; linkingEmail?: string; credential?: OAuthCredential | null }> {
   if (isInsideIframe()) {
-    console.log('[Auth] Inside iframe — Google OAuth requires a new tab');
-    return {
-      user: null,
-      error: null,
-      needsNewTab: true,
-    };
+    console.log('[Auth] Inside iframe - Google OAuth requires a new tab');
+    return { user: null, error: null, needsNewTab: true };
   }
 
   try {
     await safeSetPersistence(rememberMe);
-
     const result = await signInWithPopup(auth, googleProvider);
     return { user: result.user, error: null };
   } catch (error: unknown) {
     const code = (error as { code?: string })?.code || '';
-    if (code === 'auth/invalid-credential' || code === 'auth/account-exists-with-different-credential') {
-      return { user: null, error: null, needsAccountLink: true, linkingEmail: (error as any)?.customData?.email || '' };
+    if (code === 'auth/account-exists-with-different-credential') {
+      const credential = GoogleAuthProvider.credentialFromError(error as any);
+      return { 
+        user: null, 
+        error: null, 
+        needsAccountLink: true, 
+        linkingEmail: (error as any)?.customData?.email || '',
+        credential
+      };
     }
 
-    // Popup blocked → fall back to redirect (only works at top-level).
-    if (
-      code === 'auth/popup-blocked' ||
+    if (code === 'auth/popup-blocked' ||
       code === 'auth/cancelled-popup-request' ||
       code === 'auth/popup-closed-by-user'
     ) {
@@ -288,3 +290,5 @@ export async function linkGoogleAccount(): Promise<{ user: User | null; error: s
     return { user: null, error: friendlyAuthError(error) };
   }
 }
+
+

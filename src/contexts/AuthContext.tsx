@@ -120,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
-  const [pendingGoogleLink, setPendingGoogleLink] = useState(false);
+  const [pendingGoogleCredential, setPendingGoogleCredential] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const cachedUserIdRef = useRef<string | null>(null);
   // ── Track whether the CURRENT session is a demo session. Using a ref (not
@@ -392,15 +392,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         } else {
           console.log('[Auth] Login successful — waiting for onAuthStateChanged + OrgContext');
-          if (pendingGoogleLink) {
-             const { linkGoogleAccount } = await loadAuth();
-             const linkResult = await linkGoogleAccount();
-             if (linkResult.error) {
-               console.warn('[Auth] Failed to link Google account after sign in:', linkResult.error);
-             } else {
-               console.log('[Auth] Successfully linked Google account!');
+          if (pendingGoogleCredential) {
+             const { auth } = await loadAuth();
+             const { linkWithCredential } = await import('firebase/auth');
+             try {
+               await linkWithCredential(auth.currentUser!, pendingGoogleCredential);
+               console.log('[Auth] Successfully linked Google account quietly!');
+             } catch (linkError) {
+               console.warn('[Auth] Failed to link Google credential:', linkError);
              }
-             setPendingGoogleLink(false);
+             setPendingGoogleCredential(null);
           }
         }
         return result;
@@ -409,8 +410,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(friendlyAuthError(err));
       setIsLoading(false);
       throw err;
-    }
-  }, []);
+      }
+    }, [pendingGoogleCredential]);
 
   // ── Sign up with email/password ──
   const signUpWithEmail = useCallback(async (name: string, email: string, password: string) => {
@@ -432,8 +433,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(friendlyAuthError(err));
       setIsLoading(false);
       throw err;
-    }
-  }, []);
+      }
+    }, [pendingGoogleCredential]);
 
   // ── Sign in with Google ──
   // Detects if we're inside an iframe (e.g. sandbox preview panel) and
@@ -447,7 +448,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await firebaseSignInWithGoogle();
       if (result.needsAccountLink) {
           console.log('[Auth] Google sign-in requires account linking for:', result.linkingEmail);
-          setPendingGoogleLink(true);
+          setPendingGoogleCredential(result.credential);
           setIsLoading(false);
         } else if (result.error) {
           console.warn('[Auth] Google sign-in failed:', result.error);
@@ -462,8 +463,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(friendlyAuthError(err));
       setIsLoading(false);
       throw err;
-    }
-  }, []);
+      }
+    }, [pendingGoogleCredential]);
 
   // ── Sign in with GitHub ──
   // Calls /api/auth/github/authorize to get the OAuth consent URL, then
@@ -752,3 +753,6 @@ export function useSetNeedsOnboarding() {
     [ctx]
   );
 }
+
+
+

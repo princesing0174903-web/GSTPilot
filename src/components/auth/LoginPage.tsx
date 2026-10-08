@@ -146,7 +146,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="•••••••••••••••"
+                  placeholder="ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"
                   className="bg-[#0A0A0A] border-zinc-800 h-11 focus-visible:ring-1 focus-visible:ring-zinc-700 text-white placeholder:text-zinc-600 pr-10"
                 />
                 <button
@@ -180,9 +180,9 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
       <div className="py-6 flex justify-center items-center gap-4 text-xs font-medium text-zinc-500">
         <a href="#" className="hover:text-white transition-colors">Privacy</a>
-        <span>·</span>
+        <span>ï¿½</span>
         <a href="#" className="hover:text-white transition-colors">Terms</a>
-        <span>·</span>
+        <span>ï¿½</span>
         <a href="#" className="hover:text-white transition-colors">Security</a>
       </div>
     </div>

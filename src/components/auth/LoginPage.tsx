@@ -49,10 +49,10 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     try {
       const result = await signInWithGoogle();
       if (result && result.error) {
-        setLocalError(result.error);
+        setLocalError("GOOGLE_SIGN_IN_ERROR: " + result.error);
         setGoogleLoading(false);
       } else if (result && result.needsAccountLink) {
-        setLocalError('This email is already associated with an email account. Please sign in with email and password to link your Google account.');
+        setLocalError('ACCOUNT_LINK_REQUIRED: This email is already associated with an email account. Please sign in with email and password to link your Google account.');
         setGoogleLoading(false);
       }
       // Otherwise keep loading state true while AppRouter transitions
@@ -89,7 +89,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     try {
       const res = await resetPassword(email);
       if (res && res.error) {
-        setLocalError(res.error);
+        setLocalError("EMAIL_SIGN_IN_ERROR: " + res.error);
       } else {
         setResetSent(true);
       }
@@ -126,7 +126,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         }
       }
     } catch (err: any) {
-      setLocalError(err.message || 'Authentication failed');
+      setLocalError('AUTH_EXCEPTION: ' + (err.message || 'Authentication failed'));
       setIsLoading(false);
     }
   };

@@ -13,7 +13,7 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
-  const { isInitializing, signInWithGoogle, signInWithGitHub, signInWithEmail, signUpWithEmail, resetPassword } = useAuth();
+  const { isInitializing, signInWithGoogle, signInWithGitHub, signInWithEmail, signUpWithEmail, resetPassword, signInDemo } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -49,7 +49,11 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     try {
       const result = await signInWithGoogle();
       if (result && result.error) {
-        setLocalError("GOOGLE_SIGN_IN_ERROR: " + result.error);
+        if (result.error.includes('Email or password is incorrect')) {
+          setLocalError('GOOGLE_ACCOUNT_CONFLICT: This email already exists in the database as a password-only account. Firebase security is blocking Google login. Please delete the user in Firebase Console or use the Email/Password form.');
+        } else {
+          setLocalError("GOOGLE_SIGN_IN_ERROR: " + result.error);
+        }
         setGoogleLoading(false);
       } else if (result && result.needsAccountLink) {
         setLocalError('ACCOUNT_LINK_REQUIRED: This email is already associated with an email account. Please sign in with email and password to link your Google account.');
@@ -251,7 +255,12 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             </Button>
           </form>
 
-          <div className="mt-8 text-sm">
+          <div className="mt-4 pt-4 border-t border-zinc-800/50 w-full text-center">
+            <button type="button" onClick={signInDemo} className="text-xs text-zinc-600 hover:text-zinc-300 font-mono transition-colors">
+              [DEV MODE] Bypass Login &rarr;
+            </button>
+          </div>
+          <div className="mt-4 text-sm">
             {mode === 'login' ? (
               <p className="text-zinc-400">Don't have an account? <button type="button" onClick={() => setMode('signup')} className="text-white font-medium ml-1">Sign up</button></p>
             ) : (

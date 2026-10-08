@@ -13,14 +13,16 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
-  const { isInitializing, signInWithGoogle } = useAuth();
+  const { isInitializing, signInWithGoogle, signInWithGitHub } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [isLoading, setIsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [githubLoading, setGithubLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   if (isInitializing) {
     return (
@@ -41,24 +43,94 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   }
 
   const handleGoogle = async () => {
+    setLocalError(null);
     setGoogleLoading(true);
     try {
-      await signInWithGoogle();
-    } catch {
+      const result = await signInWithGoogle();
+      if (result && result.needsAccountLink) {
+        setLocalError('This email is already associated with an email/password account. Please sign in with email and password to link your Google account.');
+        setGoogleLoading(false);
+      }
+      // Otherwise AppRouter automatically transitions on auth state change
+    } catch (err: any) {
+      setLocalError(err.message || 'Failed to sign in with Google');
       setGoogleLoading(false);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleGitHub = async () => {
+    setLocalError(null);
+    setGithubLoading(true);
+    try {
+      const res = await signInWithGitHub();
+      if (res.authUrl) {
+        window.location.href = res.authUrl;
+      } else {
+        setLocalError(res.error || 'Failed to start GitHub sign-in.');
+        setGithubLoading(false);
+      }
+    } catch (err: any) {
+      setLocalError(err.message || 'Failed to sign in with GitHub');
+      setGithubLoading(false);
+    }
+  };
+
+  const { signInWithEmail, signUpWithEmail, resetPassword } = useAuth();
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!email) {
+      setLocalError('Please enter your email address first.');
+      return;
+    }
+    setLocalError(null);
+    setIsLoading(true);
+    try {
+      const res = await resetPassword(email);
+      if (res.error) {
+        setLocalError(res.error);
+      } else {
+        setResetSent(true);
+      }
+    } catch (err: any) {
+      setLocalError(err.message || 'Failed to send reset link');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // In a real app we would call Firebase auth here.
-    // For now we just mock a loading state since the user's primary login is Google.
-    setTimeout(() => {
+    setLocalError(null);
+    
+    try {
+      if (mode === 'login') {
+        const res = await signInWithEmail(email, password);
+        if (res.error) {
+          setLocalError(res.error);
+          setIsLoading(false);
+        } else {
+          // Success! Leave isLoading true so AppRouter transitions smoothly
+          setShowSuccess(true);
+        }
+      } else {
+        // Sign up mode
+        const res = await signUpWithEmail(email.split('@')[0], email, password); // Basic name from email
+        if (res.error) {
+          setLocalError(res.error);
+          setIsLoading(false);
+        } else {
+          setShowSuccess(true);
+        }
+      }
+    } catch (err: any) {
+      setLocalError(err.message || 'Authentication failed');
       setIsLoading(false);
-      setShowSuccess(true);
-    }, 1500);
+    }
   };
+
+  const isAnyLoading = isLoading || googleLoading || githubLoading;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#030303] text-zinc-200 font-sans selection:bg-zinc-800 selection:text-white">
@@ -72,12 +144,18 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             <p className="text-sm text-zinc-400 font-medium">Sign in to continue to VEYRO</p>
           </div>
 
+          {localError && (
+            <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-lg text-center">
+              {localError}
+            </div>
+          )}
+
           <div className="w-full space-y-3">
             <Button
               type="button"
               variant="outline"
               onClick={handleGoogle}
-              disabled={googleLoading || isLoading}
+              disabled={isAnyLoading}
               className="w-full bg-transparent border-zinc-800 text-white hover:bg-zinc-900 h-11 font-medium"
             >
               {googleLoading ? (
@@ -98,16 +176,20 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             <Button
               type="button"
               variant="outline"
-              disabled={googleLoading || isLoading}
+              onClick={handleGitHub}
+              disabled={isAnyLoading}
               className="w-full bg-transparent border-zinc-800 text-white hover:bg-zinc-900 h-11 font-medium"
             >
-              <svg viewBox="0 0 21 21" className="mr-3 h-4 w-4" aria-hidden="true">
-                <path fill="#f25022" d="M1 1h9v9H1z"/>
-                <path fill="#7fba00" d="M11 1h9v9h-9z"/>
-                <path fill="#00a4ef" d="M1 11h9v9H1z"/>
-                <path fill="#ffb900" d="M11 11h9v9h-9z"/>
-              </svg>
-              Continue with Microsoft
+              {githubLoading ? (
+                <>? Signing in...</>
+              ) : (
+                <>
+                  <svg viewBox="0 0 24 24" className="mr-3 h-4 w-4 fill-white" aria-hidden="true">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                  </svg>
+                  Continue with GitHub
+                </>
+              )}
             </Button>
           </div>
 
@@ -136,8 +218,8 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-zinc-300">Password</label>
-                <button type="button" className="text-sm font-medium text-zinc-500 hover:text-white transition-colors">
-                  Forgot password?
+                <button type="button" onClick={handleResetPassword} disabled={isLoading} className="text-sm font-medium text-zinc-500 hover:text-white transition-colors">
+                  {resetSent ? 'Check your email' : 'Forgot password?'}
                 </button>
               </div>
               <div className="relative">
@@ -161,7 +243,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
             <Button
               type="submit"
-              disabled={isLoading || googleLoading}
+              disabled={isAnyLoading}
               className="w-full bg-white text-black hover:bg-zinc-200 h-11 mt-2 font-medium"
             >
               {showSuccess ? '? Done' : isLoading ? '? Signing in...' : mode === 'login' ? 'Sign in' : 'Sign up'}
@@ -170,9 +252,9 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
           <div className="mt-8 text-sm">
             {mode === 'login' ? (
-              <p className="text-zinc-400">Don't have an account? <button onClick={() => setMode('signup')} className="text-white font-medium ml-1">Sign up</button></p>
+              <p className="text-zinc-400">Don't have an account? <button type="button" onClick={() => setMode('signup')} className="text-white font-medium ml-1">Sign up</button></p>
             ) : (
-              <p className="text-zinc-400">Already have an account? <button onClick={() => setMode('login')} className="text-white font-medium ml-1">Sign in</button></p>
+              <p className="text-zinc-400">Already have an account? <button type="button" onClick={() => setMode('login')} className="text-white font-medium ml-1">Sign in</button></p>
             )}
           </div>
         </div>

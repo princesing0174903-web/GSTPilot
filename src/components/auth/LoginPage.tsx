@@ -13,7 +13,7 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
-  const { isInitializing, signInWithGoogle, signInWithGitHub } = useAuth();
+  const { isInitializing, signInWithGoogle, signInWithGitHub, signInWithEmail, signUpWithEmail, resetPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -23,6 +23,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   const [githubLoading, setGithubLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
 
   if (isInitializing) {
     return (
@@ -47,11 +48,14 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     setGoogleLoading(true);
     try {
       const result = await signInWithGoogle();
-      if (result && result.needsAccountLink) {
-        setLocalError('This email is already associated with an email/password account. Please sign in with email and password to link your Google account.');
+      if (result && result.error) {
+        setLocalError(result.error);
+        setGoogleLoading(false);
+      } else if (result && result.needsAccountLink) {
+        setLocalError('This email is already associated with an email account. Please sign in with email and password to link your Google account.');
         setGoogleLoading(false);
       }
-      // Otherwise AppRouter automatically transitions on auth state change
+      // Otherwise keep loading state true while AppRouter transitions
     } catch (err: any) {
       setLocalError(err.message || 'Failed to sign in with Google');
       setGoogleLoading(false);
@@ -63,10 +67,10 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     setGithubLoading(true);
     try {
       const res = await signInWithGitHub();
-      if (res.authUrl) {
+      if (res && res.authUrl) {
         window.location.href = res.authUrl;
       } else {
-        setLocalError(res.error || 'Failed to start GitHub sign-in.');
+        setLocalError(res?.error || 'Failed to start GitHub sign-in.');
         setGithubLoading(false);
       }
     } catch (err: any) {
@@ -74,9 +78,6 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       setGithubLoading(false);
     }
   };
-
-  const { signInWithEmail, signUpWithEmail, resetPassword } = useAuth();
-  const [resetSent, setResetSent] = useState(false);
 
   const handleResetPassword = async () => {
     if (!email) {
@@ -87,7 +88,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     setIsLoading(true);
     try {
       const res = await resetPassword(email);
-      if (res.error) {
+      if (res && res.error) {
         setLocalError(res.error);
       } else {
         setResetSent(true);
@@ -107,7 +108,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     try {
       if (mode === 'login') {
         const res = await signInWithEmail(email, password);
-        if (res.error) {
+        if (res && res.error) {
           setLocalError(res.error);
           setIsLoading(false);
         } else {
@@ -116,8 +117,8 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         }
       } else {
         // Sign up mode
-        const res = await signUpWithEmail(email.split('@')[0], email, password); // Basic name from email
-        if (res.error) {
+        const res = await signUpWithEmail(email.split('@')[0] || 'User', email, password);
+        if (res && res.error) {
           setLocalError(res.error);
           setIsLoading(false);
         } else {
@@ -159,7 +160,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               className="w-full bg-transparent border-zinc-800 text-white hover:bg-zinc-900 h-11 font-medium"
             >
               {googleLoading ? (
-                <>? Signing in...</>
+                <>Signing in...</>
               ) : (
                 <>
                   <svg viewBox="0 0 24 24" className="mr-3 h-4 w-4" aria-hidden="true">
@@ -181,7 +182,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               className="w-full bg-transparent border-zinc-800 text-white hover:bg-zinc-900 h-11 font-medium"
             >
               {githubLoading ? (
-                <>? Signing in...</>
+                <>Signing in...</>
               ) : (
                 <>
                   <svg viewBox="0 0 24 24" className="mr-3 h-4 w-4 fill-white" aria-hidden="true">
@@ -228,7 +229,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="���������������"
+                  placeholder="Password"
                   className="bg-[#0A0A0A] border-zinc-800 h-11 focus-visible:ring-1 focus-visible:ring-zinc-700 text-white placeholder:text-zinc-600 pr-10"
                 />
                 <button
@@ -246,7 +247,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               disabled={isAnyLoading}
               className="w-full bg-white text-black hover:bg-zinc-200 h-11 mt-2 font-medium"
             >
-              {showSuccess ? '? Done' : isLoading ? '? Signing in...' : mode === 'login' ? 'Sign in' : 'Sign up'}
+              {showSuccess ? 'Done' : isLoading ? 'Signing in...' : mode === 'login' ? 'Sign in' : 'Sign up'}
             </Button>
           </form>
 
@@ -262,9 +263,9 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
       <div className="py-6 flex justify-center items-center gap-4 text-xs font-medium text-zinc-500">
         <a href="#" className="hover:text-white transition-colors">Privacy</a>
-        <span>�</span>
+        <span>-</span>
         <a href="#" className="hover:text-white transition-colors">Terms</a>
-        <span>�</span>
+        <span>-</span>
         <a href="#" className="hover:text-white transition-colors">Security</a>
       </div>
     </div>

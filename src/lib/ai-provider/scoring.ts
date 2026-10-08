@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Scoring Engine
+// VEYRO AI Oracle™ & AI CFO™ — Scoring Engine
 //
 // PURE, CLIENT-SAFE functions that compute the composite Business Score and
 // the Risk Score from a real BusinessContext + detected insights.

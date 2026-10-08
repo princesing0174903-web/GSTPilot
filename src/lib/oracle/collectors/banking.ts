@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Banking Collector
+// VEYRO AI Intelligence Engine — Banking Collector
 //
 // Reads real bank accounts + transactions from Prisma. Computes aggregate
 // cash position (total balance, recent 30-day inflow/outflow/net, unmatched

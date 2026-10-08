@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Barrel Export (CLIENT-SAFE)
+// VEYRO Real Banking Foundation™ — Barrel Export (CLIENT-SAFE)
 //
 // The single import surface for banking functionality. This file is CLIENT-SAFE —
 // it only re-exports types, errors, the provider interface, and the client-side

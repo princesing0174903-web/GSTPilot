@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Type Definitions
+// VEYRO AI Production Pipeline™ — Type Definitions
 //
 // The single source of truth for the AI generation data model. Every field
 // maps 1:1 to a Firestore collection. All types are PURE (no Firebase imports)

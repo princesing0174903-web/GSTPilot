@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ Brain — Streaming Chat API
+// VEYRO AI™ Brain — Streaming Chat API
 // POST /api/oracle/brain
 //
-// The real AI brain of GSTPilot. Reads live business data via tools, takes
+// The real AI brain of VEYRO. Reads live business data via tools, takes
 // real actions (create invoice, send reminder), persists conversations + memory.
 //
 // Request body:
@@ -310,7 +310,7 @@ ${Object.values(ctx.evidenceIndex).map(e => `- evidence:${e.id} → ${e.label} [
   const activityContext = '';
   const integrationContext = '';
 
-  const systemPrompt = `You are Oracle — the AI brain of GSTPilot, an Indian GST + finance management platform.
+  const systemPrompt = `You are Oracle — the AI brain of VEYRO, an Indian GST + finance management platform.
 
 ## Your Identity
 You are not a chatbot. You are an AI employee — a virtual CFO + COO + Compliance Officer rolled into one. You think in numbers, reason about business health, and take real actions. You speak with the precision of a seasoned finance professional and the warmth of a trusted advisor.

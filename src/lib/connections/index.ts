@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Real Data Activation Orchestrator
+// VEYRO Infinity™ — Real Data Activation Orchestrator
 //
 // Loads all active connections from the DB, reconstructs the GSTN + Bank datasets
 // from stored data, computes the Business Health Score, and assembles the live

@@ -1,13 +1,13 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Proactive Notifications (Phase 3 — Agent Engine™)
+// VEYRO AI™ — Proactive Notifications (Phase 3 — Agent Engine™)
 //
 // Oracle pushes intelligent notifications based on business memory — due dates,
 // cash warnings, client behaviour signals, compliance drift. Like a real CFO
 // who taps you on the shoulder before something breaks.
 //
-// Toast style: top-right of the Oracle workspace. Auto-dismisses after 12s
+// Toast style: top-right of VEYRO AI workspace. Auto-dismisses after 12s
 // unless hovered. Each toast carries an optional "Act now" button that spawns
 // the linked Oracle Task.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -207,7 +207,7 @@ export function OracleNotifications({
 }
 
 // ─── Compact Proactive Bell (header) ─────────────────────────────────────────
-// Shown in the Oracle header when there are undismissed proactive signals.
+// Shown in VEYRO AI header when there are undismissed proactive signals.
 // Clicking it surfaces the next notification.
 
 export interface ProactiveBellProps {

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Shared Utilities
+// VEYRO — Zoho Books Sync · Shared Utilities
 //
 // Common helpers used by every per-entity sync service:
 //   • `paginate` — drives Zoho's page_token pagination, with retry-on-failed-page

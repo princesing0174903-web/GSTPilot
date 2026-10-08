@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Drafts API
+// VEYRO AI Production Pipeline™ — Drafts API
 //
 // POST /api/ai/drafts          — create a new draft (autosave entry point)
 // GET  /api/ai/drafts?orgId=   — list non-archived drafts for an org

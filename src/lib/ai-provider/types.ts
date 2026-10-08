@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Type Definitions
+// VEYRO AI Oracle™ & AI CFO™ — Type Definitions
 //
 // The single source of truth for the AI data model. Every type maps 1:1 to a
 // Firestore document (ai_memory collection) or is a transient analysis result.

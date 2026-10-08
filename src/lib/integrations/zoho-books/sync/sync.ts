@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync Orchestrator
+// VEYRO — Zoho Books Sync Orchestrator
 //
 // Drives a full or incremental sync of all 11 Zoho Books entity types into
-// GSTPilot's existing Prisma models. The orchestrator:
+// VEYRO's existing Prisma models. The orchestrator:
 //
 //   1. Resumes an interrupted sync if `opts.resume=true` and a recent
 //      ZohoSyncLog with status='running' exists (continues from

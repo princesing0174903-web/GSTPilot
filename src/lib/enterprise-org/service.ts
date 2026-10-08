@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Enterprise Organization Service
+// VEYRO — Enterprise Organization Service
 //
 // Extends the base organization service (`@/lib/auth/organizations`) with:
 //   • Extended org profile fields (industry, size, timezone, currency, country,

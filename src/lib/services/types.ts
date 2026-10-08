@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Shared Service Layer: Types
+// VEYRO — Shared Service Layer: Types
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The canonical business-logic layer that BOTH the REST API routes (in
-// /api/...) AND the Oracle Action Engine call. This guarantees Oracle
+// /api/...) AND VEYRO AI Action Engine call. This guarantees Oracle
 // performs the EXACT same writes, audit-log entries, graph events, timeline
 // events, and activity logs as the normal UI — zero duplication.
 //
@@ -15,7 +15,7 @@
 //   • logs an Activity row (for the dashboard activity feed)
 //   • is fire-and-forget safe for side effects (never throws on side-effect failure)
 //
-// The API routes become thin HTTP wrappers around these functions; the Oracle
+// The API routes become thin HTTP wrappers around these functions; VEYRO AI
 // action definitions call them directly. Either path produces identical side
 // effects — the dashboard and Oracle always stay in sync.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Business Memory™ Panel
+// VEYRO AI™ — Business Memory™ Panel
 //
 // Slide-in panel from the right with 8 tabs:
 //   Profile · Firm · Goals · Preferences · Clients · Financial · Conversations · Insights
@@ -355,7 +355,7 @@ function ProfileTab({ memory, saving, onSave }: { memory: FullMemory; saving: bo
         <Input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} placeholder="e.g. Managing Partner" />
       </Field>
       <Field label="Firm / Company Name">
-        <Input value={form.firmName} onChange={(e) => setForm({ ...form, firmName: e.target.value })} placeholder="e.g. GSTPilot Infinity" />
+        <Input value={form.firmName} onChange={(e) => setForm({ ...form, firmName: e.target.value })} placeholder="e.g. VEYRO" />
       </Field>
       <Field label="Industry">
         <Input value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} placeholder="e.g. Manufacturing, Retail, CA Firm" />

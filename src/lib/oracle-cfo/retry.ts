@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Retry Wrapper with Meaningful Errors
+// VEYRO AI CFO™ — Retry Wrapper with Meaningful Errors
 //
 // Enterprise-grade retry: exponential backoff, jitter, max attempts, and
 // human-readable error messages with suggested next actions. Never surfaces

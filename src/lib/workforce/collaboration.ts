@@ -11,7 +11,7 @@
 // No mock values. Every ₹ figure, invoice number, client name, vendor name
 // comes from the WorkforceDataView.
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { WorkforceDataView } from './data';

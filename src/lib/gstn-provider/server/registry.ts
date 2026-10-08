@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Provider Registry (SERVER-ONLY)
+// VEYRO Real GSTN Integration™ — Provider Registry (SERVER-ONLY)
 //
 // The SINGLE switch-point between providers. Today returns MockGSTProvider;
 // when GSTN_PROVIDER=official env var is set, returns FutureOfficialGSTProvider.

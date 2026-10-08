@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — AI Timeline Generator (PROMPT 5)
+// VEYRO AI™ — AI Timeline Generator (PROMPT 5)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Oracle automatically builds an AI timeline from real business data:

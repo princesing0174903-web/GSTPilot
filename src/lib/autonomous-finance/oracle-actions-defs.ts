@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Oracle Autonomous Actions — Static registry (Prisma-free)
+// VEYRO — Oracle Autonomous Actions — Static registry (Prisma-free)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Static metadata + dryRun + executor function bodies for the Oracle action
 // registry. This module is intentionally Prisma-free so it can be safely

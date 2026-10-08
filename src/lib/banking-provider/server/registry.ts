@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Provider Registry (SERVER-ONLY)
+// VEYRO Real Banking Foundation™ — Provider Registry (SERVER-ONLY)
 //
 // The SINGLE switch-point between providers. Today returns MockBankProvider;
 // when BANK_PROVIDER env var is set to one of the future provider names, the

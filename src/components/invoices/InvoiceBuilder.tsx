@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — InvoiceBuilder  (REBUILT — enterprise-grade)
+// VEYRO™ — InvoiceBuilder  (REBUILT — enterprise-grade)
 //
 // A premium "Create Invoice" / "Edit Invoice" dialog rebuilt from scratch
 // (Task INVOICE-REBUILD). The original 2,117-line single-file component has

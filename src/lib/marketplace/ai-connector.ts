@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Integration Marketplace™ — AI Connector Engine™
+// VEYRO Global Integration Marketplace™ — AI Connector Engine™
 // Oracle automatically understands connected apps and executes natural-language
 // commands using connected APIs.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — MockBankProvider (SERVER-ONLY)
+// VEYRO Real Banking Foundation™ — MockBankProvider (SERVER-ONLY)
 //
 // The default provider. Produces DETERMINISTIC, realistic-looking banking data
 // seeded by account number — the same account always returns the same balances,

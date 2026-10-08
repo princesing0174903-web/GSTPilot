@@ -2,7 +2,7 @@
 import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — useGenerationJobs() Hook
+// VEYRO AI Production Pipeline™ — useGenerationJobs() Hook
 //
 // The SINGLE hook every component uses to interact with the AI generation
 // pipeline. Mirrors the useInvoices() pattern:

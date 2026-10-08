@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — React Query (TanStack Query) API Hooks
+// VEYRO — React Query (TanStack Query) API Hooks
 // Comprehensive data-fetching layer that replaces Zustand store reads.
 // All hooks fetch from Next.js API routes and manage cache via React Query.
 // ═══════════════════════════════════════════════════════════════════════════════

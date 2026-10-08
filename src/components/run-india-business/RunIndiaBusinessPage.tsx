@@ -1489,7 +1489,7 @@ export default function RunIndiaBusinessPage() {
             Autonomous Enterprise Mode™ — Run India&apos;s Business™
           </p>
           <p className="text-[10px] text-slate-700 mt-1">
-            GSTPilot Enterprise Platform v3.0
+            VEYRO Enterprise Platform v3.0
           </p>
         </div>
       </div>

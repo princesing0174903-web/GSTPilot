@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Real Data Layer™
+// VEYRO AI Real Data Layer™
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Aggregates REAL data from all connected sources so Oracle can answer:
@@ -613,7 +613,7 @@ export async function generateDynamicRecommendations(
 }
 
 /**
- * Format dynamic recommendations as a context block for the Oracle system
+ * Format dynamic recommendations as a context block for VEYRO AI system
  * prompt. Used by /api/oracle/chat to ground the LLM answer in real DB state.
  */
 export async function formatDynamicRecommendationsBlock(
@@ -646,7 +646,7 @@ No actionable recommendations could be computed — Oracle engine returned no it
 }
 
 /**
- * Format the real data snapshot as a context block for the Oracle system prompt.
+ * Format the real data snapshot as a context block for VEYRO AI system prompt.
  * This is what Oracle reads to answer "How is my business doing?" with REAL data.
  */
 export function formatRealDataContextBlock(snapshot: RealDataSnapshot): string {
@@ -858,7 +858,7 @@ Once the user connects a source, this context block will populate with real data
     `- If a source is NOT connected, say so honestly and recommend connecting it. Never fabricate.`,
     `- When the user asks "Any GST notice?" and Gmail IS connected, cite the real notice emails above.`,
     `- When the user asks "Which clients are ignoring reminders?" and WhatsApp IS connected, cite the real client names above.`,
-    `- Tagline: GSTPilot Oracle™ — Connected. Intelligent. Real.`,
+    `- Tagline: VEYRO AI™ — Connected. Intelligent. Real.`,
   );
 
   return lines.join('\n');

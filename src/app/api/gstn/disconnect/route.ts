@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Disconnect API
+// VEYRO Real GSTN Integration™ — Disconnect API
 //
 // POST /api/gstn/disconnect
 //   Body: { organizationId, encryptedSession }

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — AI Financial Intelligence Engine (Phase Delta · 3)
+// VEYRO — AI Financial Intelligence Engine (Phase Delta · 3)
 // Pure TypeScript: computes insights, risks, recommendations, confidence, and
 // an overall health score from raw Firestore invoice/transaction/return data.
 // No fake data — works on whatever real data exists; degrades gracefully.

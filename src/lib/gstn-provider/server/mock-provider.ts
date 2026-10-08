@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — MockGSTProvider (SERVER-ONLY)
+// VEYRO Real GSTN Integration™ — MockGSTProvider (SERVER-ONLY)
 //
 // The default provider. Produces DETERMINISTIC, realistic-looking GST data
 // seeded by GSTIN — the same GSTIN always returns the same legal name, the same
@@ -677,7 +677,7 @@ export class MockGSTProvider implements IGSTProvider {
     throw new Error(
       'Cannot file GST returns in mock mode. Filing requires an official GSTN connection. ' +
       'Set GSTN_PROVIDER=official and configure GSTN API credentials to file returns. ' +
-      'GSTPilot never simulates successful government filings.'
+      'VEYRO never simulates successful government filings.'
     );
   }
 }

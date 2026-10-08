@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Service — Cash Flow Forecast Helpers (Pure Functions)
+// VEYRO Banking Service — Cash Flow Forecast Helpers (Pure Functions)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Pure math + narrative generation for projecting the bank balance forward.

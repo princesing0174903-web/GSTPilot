@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Bulk Transaction Update API (TASK 12)
+// VEYRO Banking Module™ — Bulk Transaction Update API (TASK 12)
 //
 // POST /api/banking/transactions/bulk?organizationId=...
 //   body: { ids: string[], patch: { category?, notes?, status?, matched?, ... } }

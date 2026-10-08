@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — Encryption (SERVER-ONLY)
+// VEYRO Billing, Subscriptions & Payments™ — Encryption (SERVER-ONLY)
 //
 // AES-256-GCM authenticated encryption for payment provider customer IDs,
 // provider tokens, and payment session metadata.

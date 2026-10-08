@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Service — Domain Types (Provider-Agnostic Contract)
+// VEYRO Banking Service — Domain Types (Provider-Agnostic Contract)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // This is the SINGLE source of truth for the Banking module's data shapes.

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Automation Engine (SERVER-ONLY)
+// VEYRO Gmail & WhatsApp Business Automation™ — Automation Engine (SERVER-ONLY)
 //
 // The Automation Engine generates + dispatches scheduled reminders:
 //   • Invoice reminders   — sent X days before an invoice's due date

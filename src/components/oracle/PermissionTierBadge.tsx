@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Permission Tier Badge
+// VEYRO AI™ — Permission Tier Badge
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Small pill that labels a tool call with its permission tier:

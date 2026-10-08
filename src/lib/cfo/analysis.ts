@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ — Module 10: Automatic Financial Analysis (Phase 3)
+// VEYRO AI CFO™ — Module 10: Automatic Financial Analysis (Phase 3)
 //
 // Detects 11 financial conditions from live business data:
 //   1.  revenue_decline       — MoM revenue drop > 10%

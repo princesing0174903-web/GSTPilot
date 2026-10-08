@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Workflow Automation Engine (Phase Delta · 1)
+// VEYRO — Workflow Automation Engine (Phase Delta · 1)
 // Pure TypeScript state machine: trigger → steps (action/condition/delay/
 // parallel/approval) → audited run. Persisted to Firestore `workflow_definitions`
 // and `workflow_runs`. Versioned + editable. Framework-agnostic.

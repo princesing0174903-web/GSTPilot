@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle — Premium AI Business Operating System (PROMPT 3)
+// VEYRO AI — Premium AI Business Operating System (PROMPT 3)
 //
 // Three-column layout (ChatGPT Enterprise + Claude + Perplexity level):
 //   • LEFT  — OracleLeftSidebar (New Chat, Search, Categories, Pinned, Folders)
@@ -158,7 +158,7 @@ function LightOracleMessageImpl({
       </div>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center gap-1.5">
-          <span className="text-[12px] font-semibold text-white">Oracle</span>
+          <span className="text-[12px] font-semibold text-white">VEYRO AI</span>
           <BadgeCheck className="h-3 w-3 text-amber-500" />
           {time && <span className="text-[10px] text-white/30">{time}</span>}
         </div>
@@ -613,7 +613,7 @@ export function OracleChat() {
   const sendingRef = useRef(false);
   /** Watchdog timer — guarantees a loading state can NEVER hang forever. */
   const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** The oracle turn currently being streamed (used by Stop to finalize it). */
+  /** VEYRO AI turn currently being streamed (used by Stop to finalize it). */
   const streamingTurnIdRef = useRef<string | null>(null);
   /** Tracks whether any output (token/structured) has arrived, to hide the
    *  thinking animation at the right moment instead of a fixed delay. */
@@ -643,9 +643,9 @@ export function OracleChat() {
   }, []);
 
   // ── Cross-page prefill ──
-  // When the user clicks "Ask Oracle" on another workspace page (invoices,
+  // When the user clicks "Ask VEYRO AI" on another workspace page (invoices,
   // customers, returns, finance), that page calls setPendingPrompt(prompt) on
-  // the oracle-conversations store and navigates to /oracle. We consume that
+  // VEYRO AI-conversations store and navigates to /oracle. We consume that
   // pending prompt here: pull it out of the store (clearing it) and push it
   // into the composer via the input handle. Re-runs whenever `pendingPrompt`
   // changes so it also works if the user is already on /oracle.
@@ -653,7 +653,7 @@ export function OracleChat() {
     if (!pendingPrompt) return;
     const consumed = consumePendingPrompt();
     if (!consumed) return;
-    // Defer to the next frame so the OracleInput is mounted (it lives later in
+    // Defer to the next frame so VEYRO AIInput is mounted (it lives later in
     // the JSX tree) and setValue can target the textarea ref.
     const raf = requestAnimationFrame(() => {
       try { inputRef.current?.setValue(consumed); } catch { /* non-fatal */ }
@@ -946,7 +946,7 @@ export function OracleChat() {
     const store = useOracleConversations.getState();
     const current = store.getActive();
     if (!current) return;
-    // Find the oracle turn we're continuing from
+    // Find VEYRO AI turn we're continuing from
     const idx = current.messages.findIndex((m) => m.id === oracleTurnId);
     if (idx === -1) return;
     const oracleTurn = current.messages[idx];
@@ -1066,7 +1066,7 @@ export function OracleChat() {
           </div>
           <div className="flex flex-col items-start leading-none">
             <div className="flex items-center gap-1.5">
-              <span className="text-[15px] font-semibold tracking-tight text-white">Oracle</span>
+              <span className="text-[15px] font-semibold tracking-tight text-white">VEYRO AI</span>
               <BadgeCheck className="h-3.5 w-3.5 text-amber-500" />
               <span className="hidden rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-500 sm:inline">
                 CA-Verified

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Server Orchestrator (SERVER-ONLY)
+// VEYRO Gmail & WhatsApp Business Automation™ — Server Orchestrator (SERVER-ONLY)
 //
 // The thin server-side layer that:
 //   1. Resolves the active providers via the registry

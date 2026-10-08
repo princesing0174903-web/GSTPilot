@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Invoice PDF Download API
+// VEYRO AI CFO™ — Invoice PDF Download API
 //
 // GET /api/oracle/cfo/invoice/pdf?invoiceId=...
 //

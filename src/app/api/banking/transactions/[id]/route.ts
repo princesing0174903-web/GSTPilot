@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Transaction Detail API (TASK 12)
+// VEYRO Banking Module™ — Transaction Detail API (TASK 12)
 //
 // PATCH  /api/banking/transactions/:id?organizationId=...   → updateTransaction(id, orgId, body, uid)
 // DELETE /api/banking/transactions/:id                       → deleteTransaction(id, orgId, uid)

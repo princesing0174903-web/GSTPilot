@@ -9,7 +9,7 @@
 // Cached 60s in-memory (matching the Twin / CFO Phase 1 pattern). The
 // X-CEO-Cache header reports HIT|MISS so the frontend can show staleness.
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Bank Reconciliation Engine
+// VEYRO Real Banking Foundation™ — Bank Reconciliation Engine
 //
 // Automatically matches bank transactions against invoices / payments / refunds
 // / GST payments / expenses. Pure, deterministic, no LLM.

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity Mark™ — V16 Brand Symbol
+// VEYRO Mark™ — V16 Brand Symbol
 // Three connected nodes (Business · AI · Finance) forming an infinite triangle.
 // Emerald → Cyan → Blue. Flat design. Recognizable in 1 second.
 // Works as: favicon · app icon · mobile icon · website logo.
@@ -30,11 +30,11 @@ export function InfinityMark({
       {!compact && withWordmark && (
         <span className="flex flex-col items-start leading-none">
           <span className="text-sm font-semibold tracking-tight text-foreground">
-            GSTPilot Infinity
+            VEYRO
             <span className="accent-text">™</span>
           </span>
           <span className="text-[10px] font-medium text-muted-foreground">
-            The Financial Brain of India
+            The AI Operating System for Business
           </span>
         </span>
       )}
@@ -56,7 +56,7 @@ export function InfinitySymbol({ size = 32, className }: { size?: number; classN
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={cn('shrink-0', className)}
-      aria-label="GSTPilot Infinity Mark"
+      aria-label="VEYRO Mark"
       role="img"
     >
       <defs>

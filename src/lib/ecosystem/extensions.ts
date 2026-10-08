@@ -99,7 +99,7 @@ const CATALOG: CatalogEntry[] = [
     displayName: 'AI CFO Agent',
     description:
       'Autonomous financial officer — cash-flow forecasting, GST optimisation, working-capital recommendations and expense anomaly detection.',
-    publisher: 'GSTPilot Labs',
+    publisher: 'VEYRO Labs',
     kind: 'agent',
     category: 'ai',
     version: '5.2.0',
@@ -113,7 +113,7 @@ const CATALOG: CatalogEntry[] = [
     displayName: 'GST AutoFiler',
     description:
       'One-click GSTR-1 / GSTR-3B preparation, reconciliation and filing with deadline tracking and notice response automation.',
-    publisher: 'GSTPilot Labs',
+    publisher: 'VEYRO Labs',
     kind: 'compliance_pack',
     category: 'tax',
     version: '3.8.1',
@@ -182,7 +182,7 @@ const CATALOG: CatalogEntry[] = [
     name: 'retail_pos',
     displayName: 'Retail POS',
     description:
-      'Point-of-sale billing, B2C invoicing, daily Z-report and GST summary synced to GSTPilot in real-time.',
+      'Point-of-sale billing, B2C invoicing, daily Z-report and GST summary synced to VEYRO in real-time.',
     publisher: 'RetailEdge',
     kind: 'app',
     category: 'retail',
@@ -239,7 +239,7 @@ const CATALOG: CatalogEntry[] = [
     displayName: 'Oracle™ Plugin Pack',
     description:
       'Extend Oracle™ with custom data connectors, custom reasoning skills and industry-specific knowledge packs.',
-    publisher: 'GSTPilot Labs',
+    publisher: 'VEYRO Labs',
     kind: 'plugin',
     category: 'ai',
     version: '7.1.0',
@@ -253,7 +253,7 @@ const CATALOG: CatalogEntry[] = [
     displayName: 'Executive Dashboard Pack',
     description:
       'Pre-built CEO/CFO/COO dashboards with KPI widgets, drill-downs and scheduled PDF exports.',
-    publisher: 'GSTPilot Labs',
+    publisher: 'VEYRO Labs',
     kind: 'dashboard',
     category: 'ai',
     version: '2.0.0',
@@ -281,7 +281,7 @@ const CATALOG: CatalogEntry[] = [
     displayName: 'GST Reconciliation Report',
     description:
       'GSTR-2B vs purchase register reconciliation with mismatch classification, vendor follow-up lists and ITC optimisation.',
-    publisher: 'GSTPilot Labs',
+    publisher: 'VEYRO Labs',
     kind: 'report',
     category: 'tax',
     version: '3.0.1',

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — Monetization™
+// VEYRO Global AI App Marketplace™ — Monetization™
 // Free Apps · Paid Apps · Subscriptions · Usage Billing · Revenue Sharing
 // Coupons · Trials · Enterprise Licensing · Invoices · Tax Calculation · Payouts
 // ═══════════════════════════════════════════════════════════════════════════════

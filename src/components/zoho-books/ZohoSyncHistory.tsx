@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — ZohoSyncHistory
+// VEYRO — ZohoSyncHistory
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Premium vertical-timeline card showing recent Zoho Books sync runs.

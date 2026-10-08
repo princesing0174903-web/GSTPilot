@@ -265,7 +265,7 @@ export async function POST(request: Request) {
 
     // Persist matches in batches (Prisma createMany)
     const matchRows = results.map((r) => {
-      // Generate Oracle AI suggestion + fixes for each match (rule-based, instant)
+      // Generate VEYRO AI suggestion + fixes for each match (rule-based, instant)
       const suggestion = suggestAction({
         status: r.status,
         confidence: r.confidence,

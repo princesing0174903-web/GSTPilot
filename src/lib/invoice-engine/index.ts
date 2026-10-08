@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Barrel Export
+// VEYRO Real Invoice Engine™ — Barrel Export
 //
 // Single import surface for the entire invoice engine. Import everything from
 // `@/lib/invoice-engine` — never reach into individual files.

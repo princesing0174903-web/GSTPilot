@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Global AI Orchestrator™
+// VEYRO AI Intelligence Core™ — Global AI Orchestrator™
 // ONE central orchestrator. Every AI module communicates through it. No isolated
-// engines. The Oracle dashboard is the single source of truth for brain health,
+// engines. VEYRO AI dashboard is the single source of truth for brain health,
 // memory, model routing, reasoning, conversations, insights, learning, and
 // security across all 17 AI modules.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -33,7 +33,7 @@ interface ModuleRegistryEntry {
 }
 
 const MODULE_REGISTRY: ModuleRegistryEntry[] = [
-  { id: 'oracle', label: 'Oracle Intelligence Core™', entryPoint: './orchestrator:getOracleDashboard', group: 'oracle' },
+  { id: 'oracle', label: 'VEYRO AI Intelligence Core™', entryPoint: './orchestrator:getOracleDashboard', group: 'oracle' },
   { id: 'ceo', label: 'AI CEO™', entryPoint: '@/lib/ceo/orchestrator:getCachedCEODashboard', group: 'ceo' },
   { id: 'cfo', label: 'AI CFO™', entryPoint: '@/lib/cfo/engine:generateCFOInsights', group: 'cfo' },
   { id: 'coo', label: 'AI COO™', entryPoint: '@/lib/autonomous/orchestrator:getAutonomousDashboard', group: 'autonomous' },

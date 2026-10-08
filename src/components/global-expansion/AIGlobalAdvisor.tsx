@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPILOT INFINITY™ — PHASE 14: AI GLOBAL ADVISOR™ (BILLION-DOLLAR GRADE)
 //
-// The Oracle for international finance — multi-jurisdiction tax, currency, compliance,
+// VEYRO AI for international finance — multi-jurisdiction tax, currency, compliance,
 // cross-border & regulatory insights with a real multi-turn chat interface, regulatory
 // impact analyzer, DTAA optimizer, PE risk checker & cross-border tax planner.
 // All values derived from static data layer (@/lib/global/data). No API calls.
@@ -151,7 +151,7 @@ const ORACLE_QAS: OracleQA[] = [
     category: 'Tax',
     tags: ['DTAA', 'Transfer Pricing', 'Singapore', 'India'],
     answer:
-      'Three levers are available via the India-Singapore Comprehensive Economic Cooperation Agreement (CECA). First, royalty and Fees for Technical Services (FTS) payments from India to Singapore are taxed at a reduced 10% withholding rate under Article 12 of the DTAA — versus the 20% statutory rate under domestic Indian law. Restructuring inter-company royalty to align with the arm\'s length principle can yield significant savings. Second, capital gains on share transfers are exempt under Article 6, which is highly favorable for holding-company structures. Third, routing US→IN shipments via the Singapore Free Trade Zone and applying the CECA preferential tariff saves approximately 4.2% in import duty.\n\nCombined annual savings: approximately $240K in transfer pricing optimization plus $62K/qtr in duty reduction. Recommended actions: file DTAA relief forms (Form 10F) with the Indian revenue authority, obtain a Tax Residency Certificate (TRC) from IRAS Singapore, and update your transfer pricing documentation to reflect the restructured royalty flows. GSTPilot™ auto-generates the TRC request and pre-fills Form 10F.',
+      'Three levers are available via the India-Singapore Comprehensive Economic Cooperation Agreement (CECA). First, royalty and Fees for Technical Services (FTS) payments from India to Singapore are taxed at a reduced 10% withholding rate under Article 12 of the DTAA — versus the 20% statutory rate under domestic Indian law. Restructuring inter-company royalty to align with the arm\'s length principle can yield significant savings. Second, capital gains on share transfers are exempt under Article 6, which is highly favorable for holding-company structures. Third, routing US→IN shipments via the Singapore Free Trade Zone and applying the CECA preferential tariff saves approximately 4.2% in import duty.\n\nCombined annual savings: approximately $240K in transfer pricing optimization plus $62K/qtr in duty reduction. Recommended actions: file DTAA relief forms (Form 10F) with the Indian revenue authority, obtain a Tax Residency Certificate (TRC) from IRAS Singapore, and update your transfer pricing documentation to reflect the restructured royalty flows. VEYRO™ auto-generates the TRC request and pre-fills Form 10F.',
   },
   {
     id: 'qa-vat-eu-thresholds',
@@ -160,7 +160,7 @@ const ORACLE_QAS: OracleQA[] = [
     category: 'Compliance',
     tags: ['VAT', 'EU', 'OSS', 'Germany', 'France'],
     answer:
-      'EU VAT registration follows two distinct pathways depending on whether you sell B2B or B2C. For B2C cross-border sales within the EU, the One Stop Shop (OSS) scheme applies once your total annual cross-border EU sales exceed €10,000. Below this threshold, you may charge VAT at your home country\'s rate; above it, you must register for OSS in your identification member state and charge VAT at the customer\'s country rate.\n\nFor Germany, the standard VAT rate is 19% and France is 20%. Once registered for OSS in Germany (your identification member state), you file a single quarterly OSS return covering all EU B2C sales — eliminating the need for VAT registration in each individual member state. For B2B sales to EU VAT-registered customers, the reverse-charge mechanism applies — you do not charge VAT, but you must capture the customer\'s VAT ID and report the sale via the EC Sales List.\n\nVoluntary VAT registration is also possible below the threshold if you want to recover input VAT on EU expenses. GSTPilot™ auto-tracks the €10,000 threshold across all EU member states and pre-fills the quarterly OSS return.',
+      'EU VAT registration follows two distinct pathways depending on whether you sell B2B or B2C. For B2C cross-border sales within the EU, the One Stop Shop (OSS) scheme applies once your total annual cross-border EU sales exceed €10,000. Below this threshold, you may charge VAT at your home country\'s rate; above it, you must register for OSS in your identification member state and charge VAT at the customer\'s country rate.\n\nFor Germany, the standard VAT rate is 19% and France is 20%. Once registered for OSS in Germany (your identification member state), you file a single quarterly OSS return covering all EU B2C sales — eliminating the need for VAT registration in each individual member state. For B2B sales to EU VAT-registered customers, the reverse-charge mechanism applies — you do not charge VAT, but you must capture the customer\'s VAT ID and report the sale via the EC Sales List.\n\nVoluntary VAT registration is also possible below the threshold if you want to recover input VAT on EU expenses. VEYRO™ auto-tracks the €10,000 threshold across all EU member states and pre-fills the quarterly OSS return.',
   },
   {
     id: 'qa-tp-docs',
@@ -169,7 +169,7 @@ const ORACLE_QAS: OracleQA[] = [
     category: 'Compliance',
     tags: ['Transfer Pricing', 'OECD', 'BEPS', 'Documentation'],
     answer:
-      'Transfer pricing documentation under OECD BEPS Action 13 follows a three-tiered structure: (1) Master File — providing a high-level overview of the MNE group\'s global operations and TP policies, required for groups with consolidated revenue above €750M (Country-by-Country Reporting threshold); (2) Local File — detailed transaction-level TP analysis for each jurisdiction, required for entities with related-party transactions above local thresholds (e.g., India requires ₹50Cr+ transactions); (3) Country-by-Country Report (CbCR) — filed by the ultimate parent entity of groups with revenue above €750M, automatically exchanged between tax authorities under the Multilateral Competent Authority Agreement.\n\nIn India specifically, Form 3CEB must be filed by October 31 (one month before the income tax return) disclosing all international related-party transactions. Failure to maintain TP documentation triggers a 2% penalty on the value of the transaction under Section 271BA, plus potential adjustment-related penalties of 100-300% of the tax shortfall.\n\nGSTPilot™ auto-generates Master File and Local File templates using the OECD standard, syncs with your inter-company transaction ledger, and pre-fills Form 3CEB for Indian entities.',
+      'Transfer pricing documentation under OECD BEPS Action 13 follows a three-tiered structure: (1) Master File — providing a high-level overview of the MNE group\'s global operations and TP policies, required for groups with consolidated revenue above €750M (Country-by-Country Reporting threshold); (2) Local File — detailed transaction-level TP analysis for each jurisdiction, required for entities with related-party transactions above local thresholds (e.g., India requires ₹50Cr+ transactions); (3) Country-by-Country Report (CbCR) — filed by the ultimate parent entity of groups with revenue above €750M, automatically exchanged between tax authorities under the Multilateral Competent Authority Agreement.\n\nIn India specifically, Form 3CEB must be filed by October 31 (one month before the income tax return) disclosing all international related-party transactions. Failure to maintain TP documentation triggers a 2% penalty on the value of the transaction under Section 271BA, plus potential adjustment-related penalties of 100-300% of the tax shortfall.\n\nVEYRO™ auto-generates Master File and Local File templates using the OECD standard, syncs with your inter-company transaction ledger, and pre-fills Form 3CEB for Indian entities.',
   },
   {
     id: 'qa-eur-hedging',
@@ -178,7 +178,7 @@ const ORACLE_QAS: OracleQA[] = [
     category: 'Currency',
     tags: ['FX', 'Hedging', 'EUR', 'Forward'],
     answer:
-      'Your current EUR exposure stands at €1.26M ($1.36M USD equivalent), with 66.7% hedged ($840K) and 33.3% unhedged ($420K). EUR/USD 30-day volatility is 6.8%, and your forward rate (6m) is 1.0850 vs the spot of 1.0800 — forward points of 50 imply a slight USD strengthening bias.\n\nRecommended hedging strategy: Layered forwards. Enter a 6-month forward contract for €400K at 1.0850 to lock in $434K — protecting against EUR depreciation below 1.0850. This brings your hedge ratio to ~95% and eliminates most downside risk. If EUR appreciates above 1.0850, you forfeit upside, but predictable cash flows support operational planning. For longer-dated receivables (12m+), consider a participating forward (zero-premium option) that allows 50% participation in EUR appreciation while capping downside.\n\nAvoid over-hedging beyond 100% of exposure — this creates speculative positions. Net exposure after hedging should target ≤10% of revenue for predictable P&L. GSTPilot™ monitors FX exposure in real-time across all currencies and auto-triggers hedge recommendations at configurable thresholds.',
+      'Your current EUR exposure stands at €1.26M ($1.36M USD equivalent), with 66.7% hedged ($840K) and 33.3% unhedged ($420K). EUR/USD 30-day volatility is 6.8%, and your forward rate (6m) is 1.0850 vs the spot of 1.0800 — forward points of 50 imply a slight USD strengthening bias.\n\nRecommended hedging strategy: Layered forwards. Enter a 6-month forward contract for €400K at 1.0850 to lock in $434K — protecting against EUR depreciation below 1.0850. This brings your hedge ratio to ~95% and eliminates most downside risk. If EUR appreciates above 1.0850, you forfeit upside, but predictable cash flows support operational planning. For longer-dated receivables (12m+), consider a participating forward (zero-premium option) that allows 50% participation in EUR appreciation while capping downside.\n\nAvoid over-hedging beyond 100% of exposure — this creates speculative positions. Net exposure after hedging should target ≤10% of revenue for predictable P&L. VEYRO™ monitors FX exposure in real-time across all currencies and auto-triggers hedge recommendations at configurable thresholds.',
   },
   {
     id: 'qa-pe-uae',
@@ -187,7 +187,7 @@ const ORACLE_QAS: OracleQA[] = [
     category: 'Cross-Border',
     tags: ['PE', 'UAE', 'Corporate Tax', 'Nexus'],
     answer:
-      'The UAE Corporate Tax Law (Federal Decree-Law No. 47 of 2022) introduced PE concepts aligned with OECD Model Tax Convention. A non-resident person has a PE in the UAE if it has a fixed place of business (branch, office, factory, workshop, etc.) through which its business is conducted, OR a dependent agent that habitually concludes contracts on its behalf.\n\nSpecific PE triggers under UAE law include: (1) a physical office or branch in the UAE; (2) employees or agents habitually concluding contracts in the UAE; (3) a warehouse used for delivery or storage of inventory on a regular basis; (4) construction or installation projects lasting more than 6 months; (5) a server or computer equipment located in the UAE providing digital services. Importantly, the FTA clarified that purely preparatory or auxiliary activities (e.g., data storage alone) do not generally create a PE.\n\nIf a PE exists, the non-resident is subject to 9% UAE corporate tax on the profits attributable to the PE. To mitigate PE risk: (a) ensure any UAE agent is independent and acts in the ordinary course of its own business; (b) limit warehouse activities to storage-only with no sales concluded locally; (c) limit employee visits to ≤30 days/year for non-sales activities; (d) structure digital services through cloud infrastructure outside UAE jurisdiction. GSTPilot\'s PE Risk Checker (below) quantifies your specific exposure based on current activities.',
+      'The UAE Corporate Tax Law (Federal Decree-Law No. 47 of 2022) introduced PE concepts aligned with OECD Model Tax Convention. A non-resident person has a PE in the UAE if it has a fixed place of business (branch, office, factory, workshop, etc.) through which its business is conducted, OR a dependent agent that habitually concludes contracts on its behalf.\n\nSpecific PE triggers under UAE law include: (1) a physical office or branch in the UAE; (2) employees or agents habitually concluding contracts in the UAE; (3) a warehouse used for delivery or storage of inventory on a regular basis; (4) construction or installation projects lasting more than 6 months; (5) a server or computer equipment located in the UAE providing digital services. Importantly, the FTA clarified that purely preparatory or auxiliary activities (e.g., data storage alone) do not generally create a PE.\n\nIf a PE exists, the non-resident is subject to 9% UAE corporate tax on the profits attributable to the PE. To mitigate PE risk: (a) ensure any UAE agent is independent and acts in the ordinary course of its own business; (b) limit warehouse activities to storage-only with no sales concluded locally; (c) limit employee visits to ≤30 days/year for non-sales activities; (d) structure digital services through cloud infrastructure outside UAE jurisdiction. VEYRO\'s PE Risk Checker (below) quantifies your specific exposure based on current activities.',
   },
   {
     id: 'qa-customs-electronics',
@@ -196,7 +196,7 @@ const ORACLE_QAS: OracleQA[] = [
     category: 'Cross-Border',
     tags: ['Customs', 'HS Code', 'Electronics', 'Duty'],
     answer:
-      'Electronics classification under the Harmonized System (HS) is critical for duty determination. Common classifications include: HS 8471 (automatic data processing machines — computers/laptops, typically 0% MFN duty in most WTO members); HS 8517 (telecommunications equipment — phones/routers, 0-5%); HS 8528 (monitors and displays, 0-14%); HS 8504 (power adapters/converters, 0-5%); HS 8542 (electronic integrated circuits — semiconductors, 0% in major markets).\n\nKey planning considerations: (1) Determine the correct 8-10 digit HS code using the destination country\'s tariff schedule — wrong classification triggers duty underpayment penalties of 100-300% plus interest. (2) For multi-component shipments (e.g., a laptop + adapter + case), apply the General Rules of Interpretation (GRI) — typically GRI 3(b) essential character rule classifies under the laptop (8471). (3) Free Trade Agreements can reduce or eliminate duties — Singapore-India CECA eliminates duty on most electronics traded between the two; US-Japan EPA reduces semiconductor duties to 0%.\n\nFor Singapore→India electronics shipments, route through Singapore FTZ to claim CECA preferential origin and reduce duty from 15% to 0-5%. Maintain a Bill of Materials (BOM) with regional value content ≥40% to qualify for preferential origin. GSTPilot™ auto-suggests HS codes from product descriptions and validates FTA eligibility in real-time.',
+      'Electronics classification under the Harmonized System (HS) is critical for duty determination. Common classifications include: HS 8471 (automatic data processing machines — computers/laptops, typically 0% MFN duty in most WTO members); HS 8517 (telecommunications equipment — phones/routers, 0-5%); HS 8528 (monitors and displays, 0-14%); HS 8504 (power adapters/converters, 0-5%); HS 8542 (electronic integrated circuits — semiconductors, 0% in major markets).\n\nKey planning considerations: (1) Determine the correct 8-10 digit HS code using the destination country\'s tariff schedule — wrong classification triggers duty underpayment penalties of 100-300% plus interest. (2) For multi-component shipments (e.g., a laptop + adapter + case), apply the General Rules of Interpretation (GRI) — typically GRI 3(b) essential character rule classifies under the laptop (8471). (3) Free Trade Agreements can reduce or eliminate duties — Singapore-India CECA eliminates duty on most electronics traded between the two; US-Japan EPA reduces semiconductor duties to 0%.\n\nFor Singapore→India electronics shipments, route through Singapore FTZ to claim CECA preferential origin and reduce duty from 15% to 0-5%. Maintain a Bill of Materials (BOM) with regional value content ≥40% to qualify for preferential origin. VEYRO™ auto-suggests HS codes from product descriptions and validates FTA eligibility in real-time.',
   },
 ];
 
@@ -318,7 +318,7 @@ function MultiTurnChat() {
     {
       id: 'msg-welcome',
       role: 'oracle',
-      text: "Hello, I'm the Oracle™ — your AI Global Advisor for international finance. I can help with cross-border tax planning, VAT/GST optimization, currency hedging, transfer pricing, permanent establishment risk, customs classification, and regulatory compliance across 10 jurisdictions. Try one of the suggested questions below, or type your own query.",
+      text: "Hello, I'm VEYRO AI™ — your AI Global Advisor for international finance. I can help with cross-border tax planning, VAT/GST optimization, currency hedging, transfer pricing, permanent establishment risk, customs classification, and regulatory compliance across 10 jurisdictions. Try one of the suggested questions below, or type your own query.",
       tags: ['Oracle™', 'Welcome'],
       timestamp: 'now',
     },
@@ -518,7 +518,7 @@ function buildRegAnalysis(rc: RegulatoryChange): RegAnalysis {
   const c = getCountry(rc.country as CountryCode);
   const analyses: Record<string, Omit<RegAnalysis, 'change'>> = {
     'rc-1': {
-      analysis: `UAE Corporate Tax Law introduces a 9% federal tax on profits exceeding AED 375,000 (~$102K USD), effective from financial years starting on or after June 1, 2023. Your UAE entity (GSTPilot FZ-LLC) had revenue of AED 1.91M ($520K) and taxable income of AED 522K ($142K) in the prior period, putting you well above the threshold. Estimated annual UAE corporate tax liability: ~$12,780. Transfer pricing documentation is mandatory for related-party transactions exceeding AED 63M; you currently fall below this threshold but should prepare documentation proactively.`,
+      analysis: `UAE Corporate Tax Law introduces a 9% federal tax on profits exceeding AED 375,000 (~$102K USD), effective from financial years starting on or after June 1, 2023. Your UAE entity (VEYRO FZ-LLC) had revenue of AED 1.91M ($520K) and taxable income of AED 522K ($142K) in the prior period, putting you well above the threshold. Estimated annual UAE corporate tax liability: ~$12,780. Transfer pricing documentation is mandatory for related-party transactions exceeding AED 63M; you currently fall below this threshold but should prepare documentation proactively.`,
       recommendedActions: [
         'Register with the Federal Tax Authority (FTA) for Corporate Tax — obtain Tax Registration Number (TRN)',
         'Align fiscal year with calendar year (or apply for FTA approval for alternative period)',
@@ -530,7 +530,7 @@ function buildRegAnalysis(rc: RegulatoryChange): RegAnalysis {
       timeToComply: `${rc.daysToComply} days remaining`,
     },
     'rc-2': {
-      analysis: `India's GST e-invoicing mandate now applies to businesses with turnover ≥ ₹5 Cr (previously ₹100 Cr). This significantly expands the scope — your India entity (GSTPilot India Pvt Ltd) has turnover of ₹84.7 Cr, already within scope, but you should validate that all B2B invoices are registered on the Invoice Registration Portal (IRP) and QR codes are properly printed. Non-compliance carries a penalty of 10% of the tax amount (minimum ₹10,000) per invoice.`,
+      analysis: `India's GST e-invoicing mandate now applies to businesses with turnover ≥ ₹5 Cr (previously ₹100 Cr). This significantly expands the scope — your India entity (VEYRO India Pvt Ltd) has turnover of ₹84.7 Cr, already within scope, but you should validate that all B2B invoices are registered on the Invoice Registration Portal (IRP) and QR codes are properly printed. Non-compliance carries a penalty of 10% of the tax amount (minimum ₹10,000) per invoice.`,
       recommendedActions: [
         'Validate IRP integration — confirm all B2B invoices ≥ ₹50,000 are registered',
         'Update invoice templates to include IRN and QR code as required',
@@ -542,7 +542,7 @@ function buildRegAnalysis(rc: RegulatoryChange): RegAnalysis {
       timeToComply: `${rc.daysToComply} days remaining`,
     },
     'rc-3': {
-      analysis: `UK Making Tax Digital for Income Tax Self Assessment (MTD ITSA) phases in from April 2026 for self-employed and landlords with income > £50K, lowering to £30K and £20K in subsequent years. While your UK entity (GSTPilot UK Ltd) is a corporation not directly affected by MTD ITSA, individual shareholders and partners drawing income > £50K from the business will need MTD-compatible software. Plan ahead by ensuring digital record-keeping for all individual UK tax matters.`,
+      analysis: `UK Making Tax Digital for Income Tax Self Assessment (MTD ITSA) phases in from April 2026 for self-employed and landlords with income > £50K, lowering to £30K and £20K in subsequent years. While your UK entity (VEYRO UK Ltd) is a corporation not directly affected by MTD ITSA, individual shareholders and partners drawing income > £50K from the business will need MTD-compatible software. Plan ahead by ensuring digital record-keeping for all individual UK tax matters.`,
       recommendedActions: [
         'Audit personal UK tax records for affected individuals (directors, shareholders)',
         'Subscribe to MTD-compatible personal tax software (e.g., QuickBooks, Xero)',
@@ -554,7 +554,7 @@ function buildRegAnalysis(rc: RegulatoryChange): RegAnalysis {
       timeToComply: `${rc.daysToComply} days remaining`,
     },
     'rc-4': {
-      analysis: `The EU's VAT in the Digital Age (ViDA) package introduces three pillars: (1) Digital Reporting Requirements (DRR) — real-time e-invoicing for intra-EU B2B transactions by 2030; (2) Single VAT Registration — extension of OSS to B2B and domestic transactions, eliminating need for VAT registration in each member state; (3) Platform Economy — deemed supplier rules for digital platforms. Your German entity (GSTPilot GmbH) currently files monthly Umsatzsteuervoranmeldung — under ViDA, you'll consolidate via OSS in Germany as your identification member state and eliminate French VAT registration.`,
+      analysis: `The EU's VAT in the Digital Age (ViDA) package introduces three pillars: (1) Digital Reporting Requirements (DRR) — real-time e-invoicing for intra-EU B2B transactions by 2030; (2) Single VAT Registration — extension of OSS to B2B and domestic transactions, eliminating need for VAT registration in each member state; (3) Platform Economy — deemed supplier rules for digital platforms. Your German entity (VEYRO GmbH) currently files monthly Umsatzsteuervoranmeldung — under ViDA, you'll consolidate via OSS in Germany as your identification member state and eliminate French VAT registration.`,
       recommendedActions: [
         'Migrate to Peppol-compatible e-invoicing infrastructure (EU standard)',
         'Consolidate EU VAT registrations — close FR VAT registration, use OSS-DE for all EU B2C',
@@ -566,7 +566,7 @@ function buildRegAnalysis(rc: RegulatoryChange): RegAnalysis {
       timeToComply: `${rc.daysToComply} days remaining`,
     },
     'rc-5': {
-      analysis: `FinCEN's Beneficial Ownership Information (BOI) reporting under the Corporate Transparency Act requires all US LLCs, corporations, and similar entities to file BOI reports disclosing individuals who own ≥25% or exercise substantial control. Initial report due by January 1, 2025 for entities formed before 2024. Your US entity (GSTPilot Inc. Delaware) must file — failure carries civil penalty of $591/day and potential criminal penalties up to $10,000 + 3 years imprisonment.`,
+      analysis: `FinCEN's Beneficial Ownership Information (BOI) reporting under the Corporate Transparency Act requires all US LLCs, corporations, and similar entities to file BOI reports disclosing individuals who own ≥25% or exercise substantial control. Initial report due by January 1, 2025 for entities formed before 2024. Your US entity (VEYRO Inc. Delaware) must file — failure carries civil penalty of $591/day and potential criminal penalties up to $10,000 + 3 years imprisonment.`,
       recommendedActions: [
         'Identify all beneficial owners (≥25% ownership or substantial control)',
         'Collect required info: full legal name, DOB, residential address, ID number + image',
@@ -2075,7 +2075,7 @@ export default function AIGlobalAdvisor() {
           </Badge>
         </div>
         <p className="mt-1.5 text-xs text-zinc-400 max-w-2xl">
-          The Oracle for international finance — multi-jurisdiction tax optimization, currency hedging,
+          VEYRO AI for international finance — multi-jurisdiction tax optimization, currency hedging,
           compliance gap analysis, cross-border trade recommendations, regulatory impact, DTAA structuring,
           PE risk assessment & entity structure planning across 10 countries.
         </p>
@@ -2162,7 +2162,7 @@ export default function AIGlobalAdvisor() {
       {/* Footer */}
       <div className="flex items-center justify-center gap-2 text-[10px] text-zinc-600 pt-2">
         <BrainCircuit className="h-3 w-3" />
-        <span>GSTPilot Infinity™ AI Global Advisor — {ORACLE_QAS.length} canned insights · {REGULATORY_CHANGES.length} regulatory changes · {DTAA_MATRIX.length} DTAA pairs analyzed</span>
+        <span>VEYRO™ AI Global Advisor — {ORACLE_QAS.length} canned insights · {REGULATORY_CHANGES.length} regulatory changes · {DTAA_MATRIX.length} DTAA pairs analyzed</span>
       </div>
     </div>
   );

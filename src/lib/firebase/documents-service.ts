@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Firestore Documents Service (Multi-Tenant)
+// VEYRO — Firestore Documents Service (Multi-Tenant)
 //
 // Stores file METADATA for every file uploaded to Firebase Storage.
 //

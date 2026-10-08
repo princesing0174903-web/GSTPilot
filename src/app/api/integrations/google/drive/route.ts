@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GET /api/integrations/google/drive
 // ═══════════════════════════════════════════════════════════════════════════════
-// Lists the user's Drive files (only those created or opened by GSTPilot —
+// Lists the user's Drive files (only those created or opened by VEYRO —
 // the `drive.file` scope limits visibility to app-created files).
 //
 // Query params:

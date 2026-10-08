@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books · Customer Sync Service (Phase 4)
+// VEYRO — Zoho Books · Customer Sync Service (Phase 4)
 //
 // Real, production-grade customer sync against the Zoho Books REST API:
 //   • listZohoCustomers()       — paginated GET /contacts?contact_type=customer
@@ -31,11 +31,11 @@ import { invalidateSnapshotCache } from '@/lib/financial-engine';
 
 // ─── Client mirror helper (Phase 5 BUG FIX) ─────────────────────────────────
 //
-// GSTPilot's Client Registry (Prisma `Client`) is the SINGLE source of truth
+// VEYRO's Client Registry (Prisma `Client`) is the SINGLE source of truth
 // for every page that needs a customer list:
 //   • GST Returns → "Create New Return" client dropdown
 //   • Reconciliation, Review, AI Tasks, Audit Logs, Client Health
-//   • Oracle AI (reads db.client.findMany)
+//   • VEYRO AI (reads db.client.findMany)
 //
 // Before this fix, the Phase 4 customer sync wrote ONLY to the `ZohoCustomer`
 // table — so the GST Return dropdown was empty even after a successful sync.
@@ -43,11 +43,11 @@ import { invalidateSnapshotCache } from '@/lib/financial-engine';
 // gstin within the same firm). B2C customers (no gstin) get a synthetic key
 // `ZOHO-CONTACT-{contactId}` so the unique constraint is satisfied.
 //
-// This is the bridge between the Zoho-synced world and the GSTPilot-native world.
+// This is the bridge between the Zoho-synced world and the VEYRO-native world.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Mirror a Zoho customer into the Prisma `Client` table so every GSTPilot page
+ * Mirror a Zoho customer into the Prisma `Client` table so every VEYRO page
  * that reads from `Client` (GST Returns, Reconciliation, Oracle, etc.) sees the
  * synced customer. Idempotent — upserts by gstin.
  */
@@ -72,7 +72,7 @@ async function mirrorZohoCustomerToClient(
         id: organizationId,
         name: contact.company_name || contact.contact_name
           ? `${contact.company_name || contact.contact_name} (Org)`
-          : 'GSTPilot Organization',
+          : 'VEYRO Organization',
         subscriptionPlan: 'enterprise',
         maxClients: 100000,
         isActive: true,
@@ -568,7 +568,7 @@ export async function syncZohoCustomersIntoDb(opts: {
           imported++;
         }
 
-        // Mirror into the Client table so every GSTPilot page (GST Returns,
+        // Mirror into the Client table so every VEYRO page (GST Returns,
         // Reconciliation, Oracle, Client Health, etc.) sees this customer.
         // Best-effort — a failure here does NOT fail the ZohoCustomer upsert.
         try {

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Memory Timeline (PROMPT 6)
+// VEYRO AI™ — Memory Timeline (PROMPT 6)
 //
 // Groups memories into Today / Yesterday / Last Week / Last Month / Older
 // buckets for the timeline UI view. Also provides a keyword-filtered timeline

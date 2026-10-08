@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — InvoicePreview
+// VEYRO™ — InvoicePreview
 //
 // Collapsible Live Preview pane. Wraps the existing InvoiceA4Preview (no API
 // changes — pure presentation). Default state: collapsed (the form is the

@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Bank Connector™ — Account Aggregator Framework
+// VEYRO Bank Connector™ — Account Aggregator Framework
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // In production, bank data is fetched via the RBI Account Aggregator (AA) framework:
 //   1. User consents to share financial data via an AA (e.g., OneMoney, Anumati)
-//   2. GSTPilot registers a consent request with the AA
+//   2. VEYRO registers a consent request with the AA
 //   3. User approves via the AA app
-//   4. GSTPilot fetches FI data (balances, transactions) from the AA
+//   4. VEYRO fetches FI data (balances, transactions) from the AA
 //
 // This module provides the connection storage + transaction parsing structure.
 // When a real AA API key is configured, actual transactions are fetched.

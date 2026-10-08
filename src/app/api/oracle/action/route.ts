@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Oracle Autonomous Action API (Phase Delta · 2)
+// VEYRO — Oracle Autonomous Action API (Phase Delta · 2)
 // POST /api/oracle/action — executes an Oracle action with permission gates,
 // audit logging, and dry-run support.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     const ctx: ActionContext = {
       organizationId: String(organizationId ?? 'preview-org'),
       userId: String(userId ?? 'preview-user'),
-      userEmail: String(userEmail ?? 'preview@gstpilot.in'),
+      userEmail: String(userEmail ?? 'preview@veyro.com'),
     };
 
     const result = await executeOracleAction(

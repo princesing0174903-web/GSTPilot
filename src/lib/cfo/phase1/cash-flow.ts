@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — CASH FLOW ENGINE
+// VEYRO AI CFO™ Phase 1 — CASH FLOW ENGINE
 //
 // Real cash flow analytics from connected business data:
 //   • Current cash position (bank + cash from synced bank transactions + payments)

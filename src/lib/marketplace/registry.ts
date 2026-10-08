@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Integration Marketplace™ — Registry
+// VEYRO Global Integration Marketplace™ — Registry
 // Install / uninstall / connect / disconnect installed integrations.
 // ═══════════════════════════════════════════════════════════════════════════════
 

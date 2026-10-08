@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Provider Interface
+// VEYRO Real Banking Foundation™ — Provider Interface
 //
 // IBankProvider is the SINGLE contract every banking backend must implement.
 // Today we ship two live implementations:

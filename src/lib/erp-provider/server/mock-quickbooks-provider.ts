@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Mock QuickBooks Online Provider (SERVER)
+// VEYRO ERP & Accounting Integrations™ — Mock QuickBooks Online Provider (SERVER)
 //
 // Deterministic simulated QuickBooks Online responses. Seeded by company name.
 //

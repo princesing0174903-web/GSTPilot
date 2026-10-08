@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — GenerateWorkbench
+// VEYRO AI Production Pipeline™ — GenerateWorkbench
 //
 // The production AI generation interface. Preserves the existing premium
 // aesthetic (glass-surface cards, accent-gradient highlights, framer-motion

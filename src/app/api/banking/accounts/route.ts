@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Accounts API (TASK 12)
+// VEYRO Banking Module™ — Accounts API (TASK 12)
 //
 // GET  /api/banking/accounts?organizationId=...   → listAccounts(orgId)
 // POST /api/banking/accounts                       → createAccount({...body, orgId, uid})

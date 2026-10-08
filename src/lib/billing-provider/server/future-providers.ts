@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Future Production Providers (SERVER-ONLY)
+// VEYRO Billing™ — Future Production Providers (SERVER-ONLY)
 //
 // FutureRazorpayProvider + FutureStripeProvider — placeholders for the
 // production payment gateway integrations. Every method throws

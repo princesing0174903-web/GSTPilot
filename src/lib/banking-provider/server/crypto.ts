@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Token Encryption (SERVER-ONLY)
+// VEYRO Real Banking Foundation™ — Token Encryption (SERVER-ONLY)
 //
 // AES-256-GCM authenticated encryption for bank connection tokens / account
 // metadata / consent handles.

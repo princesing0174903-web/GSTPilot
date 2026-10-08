@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Calculations & Numbering
+// VEYRO Real Invoice Engine™ — Calculations & Numbering
 //
 // Pure functions — no Firestore, no side-effects. The service layer calls
 // these to derive every money field. The UI NEVER computes totals.

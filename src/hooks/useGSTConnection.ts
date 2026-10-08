@@ -2,9 +2,9 @@
 import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — useGSTConnection() Hook
+// VEYRO Real GSTN Integration™ — useGSTConnection() Hook
 //
-// The SINGLE hook every GSTPilot component uses to interact with the GST
+// The SINGLE hook every VEYRO component uses to interact with the GST
 // connection. Mirrors the useInvoices() + useGenerationJobs() pattern:
 //
 //   • READ — real-time subscriptions to connection, profile, returns, notices,

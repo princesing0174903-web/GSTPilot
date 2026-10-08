@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Cashflow Analyzer
+// VEYRO AI Intelligence Engine — Cashflow Analyzer
 //
 // Combines banking + invoices data to detect cash position problems and
 // collection opportunities. Emits signals like "negative balance", "negative

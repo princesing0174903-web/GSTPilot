@@ -7,7 +7,7 @@ import { getGSTProvider } from '@/lib/gstn-provider/server/registry'
 // POST /api/gstr-filing/[id]/file — File a GST return with GSTN
 //
 // CRITICAL: This route MUST NEVER fake an ARN (acknowledgment number).
-// GSTPilot never simulates successful government filings.
+// VEYRO never simulates successful government filings.
 //
 // Filing flow:
 //   1. Fetch the filing from Prisma
@@ -63,7 +63,7 @@ export async function POST(
             'Live GSTN integration required to file. Your return has been prepared and validated — ' +
             'to file directly with the GST portal, configure GSTN API credentials ' +
             '(GSTN_CLIENT_ID, GSTN_CLIENT_SECRET, GSTN_PROVIDER=official). ' +
-            'GSTPilot never simulates successful government filings.',
+            'VEYRO never simulates successful government filings.',
           code: 'MOCK_PROVIDER_CANNOT_FILE',
           provider: provider.name,
         },
@@ -177,7 +177,7 @@ export async function POST(
       return NextResponse.json(
         {
           error: isNotImplemented
-            ? 'GSTN filing is not yet configured. The official GSTN provider requires API credentials (GSTN_CLIENT_ID, GSTN_CLIENT_SECRET). Contact your administrator to configure GSTN integration. GSTPilot never simulates successful government filings.'
+            ? 'GSTN filing is not yet configured. The official GSTN provider requires API credentials (GSTN_CLIENT_ID, GSTN_CLIENT_SECRET). Contact your administrator to configure GSTN integration. VEYRO never simulates successful government filings.'
             : `GSTN filing failed: ${errorMsg}`,
           code: isNotImplemented ? 'NOT_IMPLEMENTED' : 'FILING_FAILED',
           provider: provider.name,

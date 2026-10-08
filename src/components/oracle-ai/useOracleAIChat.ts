@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI™ — Streaming chat hook
+// VEYRO AI™ — Streaming chat hook
 //
 // Consumes the SSE stream from /api/oracle-ai/chat and exposes:
 //   • messages:        the full message list (loaded + live)

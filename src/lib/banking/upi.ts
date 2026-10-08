@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Cloud™ — Module 3: UPI Cloud
+// VEYRO Banking Cloud™ — Module 3: UPI Cloud
 // UPI IDs, QR Collections, Payment Requests, Payment Tracking.
 // Deterministic engine. No LLM.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -137,7 +137,7 @@ export async function createPaymentRequest(input: {
     upiId: input.upiId,
     payerName: input.payerName,
     amount: input.amount,
-    note: input.note || 'Payment Request from GSTPilot',
+    note: input.note || 'Payment Request from VEYRO',
     reference,
     status: 'requested',
     createdAt: now.toISOString(),

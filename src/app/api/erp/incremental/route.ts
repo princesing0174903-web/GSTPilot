@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Incremental Sync API
+// VEYRO ERP & Accounting Integrations™ — Incremental Sync API
 //
 // POST /api/erp/incremental
 //   Body: { organizationId, connectionId, provider }

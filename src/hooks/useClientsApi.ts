@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useClientsApi() Hook  (Prisma-backed tenant-scoped clients)
+// VEYRO — useClientsApi() Hook  (Prisma-backed tenant-scoped clients)
 //
 // Companion to `useInvoicesApi()` for the Invoice Workspace page. Reads from
 // `GET /api/clients?organizationId=X` (Prisma → SQLite) and exposes a simple

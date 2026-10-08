@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Message Action Bar (Premium Enterprise UX)
+// VEYRO AI™ — Message Action Bar (Premium Enterprise UX)
 //
 // Polished, accessible, memoized action row for each Oracle assistant message:
 //   • Copy response       (with "Copied" confirmation)
@@ -125,7 +125,7 @@ function OracleMessageActionsImpl({
   const handleShare = useCallback(async () => {
     try {
       const url = typeof window !== 'undefined' ? window.location.href : '';
-      const shareText = `${content}\n\n— Oracle, GSTPilot AI CFO`;
+      const shareText = `${content}\n\n— Oracle, VEYRO AI CFO`;
       if (navigator.share) {
         await navigator.share({ title: 'Oracle Response', text: shareText, url });
         return;

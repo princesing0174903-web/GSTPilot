@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot GSTN Connector™ — REAL GSTIN Validation
+// VEYRO GSTN Connector™ — REAL GSTIN Validation
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // GSTIN Format: 15 characters

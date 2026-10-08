@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Business Snapshot Orchestrator
+// VEYRO — Business Snapshot Orchestrator
 //
-// This is the SINGLE SOURCE OF TRUTH for every financial metric in GSTPilot.
+// This is the SINGLE SOURCE OF TRUTH for every financial metric in VEYRO.
 //
 // Every dashboard, Oracle, AI CFO, Run Business, Autonomous, and Home page
 // MUST call getBusinessSnapshot() — never query the database directly.

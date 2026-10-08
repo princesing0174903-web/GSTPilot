@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Workflow Engine: Executor
+// VEYRO AI™ — Workflow Engine: Executor
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Executes a WorkflowPlan step-by-step, streaming progress via a callback.
@@ -366,7 +366,7 @@ export async function executeWorkflow(
     },
   ).catch(() => {});
 
-  // Persist the workflow result to the Oracle audit log (best-effort)
+  // Persist the workflow result to VEYRO AI audit log (best-effort)
   try {
     await db.oracleAIToolCall.create({
       data: {

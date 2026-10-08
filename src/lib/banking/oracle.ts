@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Cloud™ — Orchestrator + Oracle Context Block
+// VEYRO Banking Cloud™ — Orchestrator + Oracle Context Block
 // Composes the full BankingState from all 8 modules and formats it for Oracle.
 // Deterministic. No LLM. Oracle consumes the formatted block.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -97,7 +97,7 @@ No bank accounts connected yet. Encourage the user to connect a bank account (HD
     (c) => `  - ${c.customerName}: outstanding ${inrShort(c.outstanding)}, avg delay ${c.avgDelayDays}d, risk ${c.riskScore}/100 (${c.riskLevel}), delay probability ${Math.round(c.delayProbability * 100)}%`,
   ).join('\n');
 
-  return `## LIVE BANKING CLOUD STATE (Phase 8 Step 2 — GSTPilot Banking Cloud™)
+  return `## LIVE BANKING CLOUD STATE (Phase 8 Step 2 — VEYRO Banking Cloud™)
 You have real-time access to the user's banking position. Treat these numbers as authoritative when the user asks about cash, banks, UPI, collections, reconciliation, or payment behaviour.
 
 ### Module 1 — Bank Accounts

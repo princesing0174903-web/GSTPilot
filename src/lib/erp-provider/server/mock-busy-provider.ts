@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Mock Busy Accounting Provider (SERVER)
+// VEYRO ERP & Accounting Integrations™ — Mock Busy Accounting Provider (SERVER)
 //
 // Deterministic simulated Busy Accounting responses. Seeded by company name.
 //

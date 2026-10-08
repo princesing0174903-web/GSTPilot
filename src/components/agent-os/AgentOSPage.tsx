@@ -350,7 +350,7 @@ interface MarketAgent {
 const marketAgents: MarketAgent[] = [
   { id: 'mk-1', name: 'GST Late Fee Calculator', author: 'Rajesh Kumar, CA', description: 'Automatically calculates late fees for delayed GST returns with interest computation', downloads: 4523, rating: 4.8, icon: Calculator, tags: ['GST', 'Compliance', 'Fees'] },
   { id: 'mk-2', name: 'ITC Reconciliation Bot', author: 'Priya Sharma & Co', description: 'Cross-verifies ITC claimed vs available in GSTR-2A/2B with auto-adjustment suggestions', downloads: 3876, rating: 4.9, icon: Database, tags: ['ITC', 'Reconciliation', '2A/2B'] },
-  { id: 'mk-3', name: 'Client Onboarding Agent', author: 'GSTPilot Team', description: 'Complete client onboarding: GSTIN verification, compliance profile, return setup, welcome kit', downloads: 5210, rating: 4.7, icon: Sparkles, tags: ['Onboarding', 'CRM', 'Setup'] },
+  { id: 'mk-3', name: 'Client Onboarding Agent', author: 'VEYRO Team', description: 'Complete client onboarding: GSTIN verification, compliance profile, return setup, welcome kit', downloads: 5210, rating: 4.7, icon: Sparkles, tags: ['Onboarding', 'CRM', 'Setup'] },
   { id: 'mk-4', name: 'Monthly Report Generator', author: 'Deepak Verma, CA', description: 'Generates comprehensive monthly reports: P&L, compliance summary, client health, cash flow', downloads: 2934, rating: 4.6, icon: FileText, tags: ['Reports', 'Analytics', 'Monthly'] },
   { id: 'mk-5', name: 'Payment Reminder Bot', author: 'Mehta Associates', description: 'Smart payment reminders with escalation, follow-up scheduling, and acknowledgment tracking', downloads: 3456, rating: 4.5, icon: Clock, tags: ['Payments', 'Reminders', 'Finance'] },
   { id: 'mk-6', name: 'Compliance Checker', author: 'Singh & Partners', description: 'Real-time compliance monitoring across GST, TDS, ROC with deadline prediction and alerts', downloads: 4102, rating: 4.8, icon: Shield, tags: ['Compliance', 'Monitoring', 'Alerts'] },
@@ -1556,7 +1556,7 @@ function MarketplaceTab() {
           <h2 className="text-lg font-semibold text-slate-800">Agent Marketplace</h2>
           <p className="text-sm text-slate-500">Community-built agents you can install and customize</p>
         </div>
-        <Button className="bg-emerald-600 hover:bg-emerald-700 gap-1.5" onClick={() => toast.info('Agent sharing coming soon', { description: 'Publish your agent to the GSTPilot marketplace.' })}>
+        <Button className="bg-emerald-600 hover:bg-emerald-700 gap-1.5" onClick={() => toast.info('Agent sharing coming soon', { description: 'Publish your agent to the VEYRO marketplace.' })}>
           <Share2 className="h-4 w-4" /> Share Your Agent
         </Button>
       </div>

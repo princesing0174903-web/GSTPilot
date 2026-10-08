@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPILOT NETWORK™ — Core Engine
-// Deterministic, transparent network engine for the GSTPilot Network™ OS (Phase 6).
+// Deterministic, transparent network engine for the VEYRO Network™ OS (Phase 6).
 //
 // Modules implemented here:
 //   Module 1  Business Network Graph™        — buildNetworkGraph()
@@ -523,7 +523,7 @@ export function buildBusinessDirectory(
     verified: true,
     annualRevenue: cfo.dashboard.revenue.thisMonth * 12 || 5000000,
     yearsActive: 5,
-    description: `${firmName} — your firm on GSTPilot Network™. Serving ${cfo.clientCount} clients with GST, audit, and advisory services.`,
+    description: `${firmName} — your firm on VEYRO Network™. Serving ${cfo.clientCount} clients with GST, audit, and advisory services.`,
     contactEmail: 'contact@yourfirm.in',
     contactPhone: '+91 9876543210',
     tags: ['Financial Services', 'CA Firm', myFirm?.state ?? 'Maharashtra'],
@@ -1222,7 +1222,7 @@ export function buildFeed(
 
   // Compliance update
   items.push({
-    id: 'feed_1', type: 'compliance_update', author: 'GSTPilot Network', authorType: 'business',
+    id: 'feed_1', type: 'compliance_update', author: 'VEYRO Network', authorType: 'business',
     authorTier: 'platinum',
     title: 'CBIC extends GSTR-3B deadline for June 2025 to 21st July',
     body: 'The CBIC has extended the GSTR-3B filing deadline for June 2025 from 20th July to 21st July for taxpayers with turnover ≤ ₹5 Cr. No late fee applicable if filed by the extended date.',
@@ -1243,10 +1243,10 @@ export function buildFeed(
 
   // Industry insight
   items.push({
-    id: 'feed_3', type: 'industry_insight', author: 'GSTPilot Intelligence', authorType: 'business',
+    id: 'feed_3', type: 'industry_insight', author: 'VEYRO Intelligence', authorType: 'business',
     authorTier: 'platinum',
     title: 'Manufacturing sector ITC claims up 18% YoY in Q1 FY26',
-    body: 'Data from 4,200 manufacturing businesses on GSTPilot Network shows ITC claims rose 18% YoY in Q1 FY26, driven by improved GSTR-2B reconciliation rates. Average ITC-to-output ratio now at 67%.',
+    body: 'Data from 4,200 manufacturing businesses on VEYRO Network shows ITC claims rose 18% YoY in Q1 FY26, driven by improved GSTR-2B reconciliation rates. Average ITC-to-output ratio now at 67%.',
     timestamp: daysAgo(1), likes: 198, comments: 34, shares: 56,
   });
 
@@ -1255,7 +1255,7 @@ export function buildFeed(
     items.push({
       id: 'feed_4', type: 'new_connection', author: cas[3].name, authorType: 'ca',
       authorTier: cas[3].networkTier,
-      title: `${cas[3].name} joined GSTPilot Network™`,
+      title: `${cas[3].name} joined VEYRO Network™`,
       body: `New ${cas[3].designation} from ${cas[3].city} joined the network. Specialises in ${cas[3].specializations.map((s) => CA_SPEC_LABELS_SHORT[s]).join(', ')}. Available for new clients.`,
       timestamp: daysAgo(1), likes: 78, comments: 6, shares: 4,
     });
@@ -1263,7 +1263,7 @@ export function buildFeed(
 
   // Recommendation
   items.push({
-    id: 'feed_5', type: 'recommendation', author: 'GSTPilot Oracle', authorType: 'business',
+    id: 'feed_5', type: 'recommendation', author: 'VEYRO AI', authorType: 'business',
     authorTier: 'platinum',
     title: `3 CAs in Mumbai available for GST notice response`,
     body: 'Based on your business profile and recent notice activity, Oracle recommends reaching out to top-rated notice specialists in Mumbai. Average response time under 6 hours.',
@@ -1295,7 +1295,7 @@ export function buildFeed(
 
   // Announcement
   items.push({
-    id: 'feed_8', type: 'announcement', author: 'GSTPilot Network', authorType: 'business',
+    id: 'feed_8', type: 'announcement', author: 'VEYRO Network', authorType: 'business',
     authorTier: 'platinum',
     title: 'New: AI-powered ITC Optimisation now live for all Platinum members',
     body: 'Platinum tier members can now access AI-driven ITC optimisation that auto-identifies blocked credits, suggests reversals, and predicts ITC availability for the next 90 days. Upgrade your tier to unlock.',
@@ -1786,7 +1786,7 @@ export function buildCADetail(state: NetworkState, caId: string): CANetworkDetai
 export function formatNetworkContextBlock(state: NetworkState): string {
   const mb = state.myBusiness;
   const lines: string[] = [];
-  lines.push(`## LIVE NETWORK STATE (Phase 6 — GSTPilot Network™)`);
+  lines.push(`## LIVE NETWORK STATE (Phase 6 — VEYRO Network™)`);
   lines.push(`You have real-time access to India's Financial Network. Use these relationships and scores when answering network questions.`);
   lines.push('');
   lines.push(`### My Network`);

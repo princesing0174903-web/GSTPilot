@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Verify OTP API
+// VEYRO Real GSTN Integration™ — Verify OTP API
 //
 // POST /api/gstn/verify-otp
 //   Body: { organizationId, gstin, username, otp }

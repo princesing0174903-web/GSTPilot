@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Mock Tally Prime Provider (SERVER)
+// VEYRO ERP & Accounting Integrations™ — Mock Tally Prime Provider (SERVER)
 //
 // Deterministic simulated Tally Prime responses. Seeded by company name so the
 // same company always yields the same dataset — syncs are idempotent.

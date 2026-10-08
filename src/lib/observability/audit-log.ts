@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Immutable Audit Logging
+// VEYRO™ — Immutable Audit Logging
 //
 // Writes append-only audit-log entries to the Firestore `audit_logs`
 // collection (org-scoped via the `organizationId` field on every document).

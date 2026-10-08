@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Executive Analytics Dashboard
+// VEYRO — Executive Analytics Dashboard
 // 8-tab comprehensive analytics: MRR, ARR, Forecast, Churn, Profitability,
 // Workload, Productivity, CLV — all computed from live Firestore data
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1757,7 +1757,7 @@ export default function AnalyticsPage() {
           <div>
             <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Executive Analytics</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {firm?.firmName || 'GSTPilot'} · Real-time insights from {fmtNum(clients.length)} clients
+              {firm?.firmName || 'VEYRO'} · Real-time insights from {fmtNum(clients.length)} clients
             </p>
           </div>
         </div>

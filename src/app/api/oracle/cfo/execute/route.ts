@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Execute API (the ACT step)
+// VEYRO AI CFO™ — Execute API (the ACT step)
 //
 // POST /api/oracle/cfo/execute
 //
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   const approvalId: string = body.approvalId;
   const decision: 'approved' | 'rejected' = body.decision;
   const userId = String(body.userId ?? 'preview-user');
-  const userEmail = String(body.userEmail ?? 'preview@gstpilot.in');
+  const userEmail = String(body.userEmail ?? 'preview@veyro.com');
   // In preview mode (Firestore rules deny reads), the client passes the full
   // approval object back so we can execute without a Firestore lookup.
   const inlineApproval = body.approval ?? null;

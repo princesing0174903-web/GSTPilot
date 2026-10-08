@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Business Digital DNA™
+// VEYRO — Business Digital DNA™
 // A consolidated view of 6 business scores that let AI understand who you are,
 // how your business behaves, and what may happen next.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -386,7 +386,7 @@ function buildDnaSummary(scores: DnaScore[]): {
         <>
           Your Business Digital DNA is{' '}
           <span className="accent-text font-medium">still forming</span>. Add
-          clients, invoices, and returns to let GSTPilot AI understand who you
+          clients, invoices, and returns to let VEYRO AI understand who you
           are, how you behave, and what&apos;s next.
         </>
       ),
@@ -540,7 +540,7 @@ function EmptyState({ onAddClient }: { onAddClient: () => void }) {
         Add your first client to unlock your Business DNA
       </h3>
       <p className="text-sm text-muted-foreground max-w-md">
-        GSTPilot AI needs at least one client, invoice, or return to start
+        VEYRO AI needs at least one client, invoice, or return to start
         computing your 6 business scores. Once added, your DNA updates live.
       </p>
       <Button

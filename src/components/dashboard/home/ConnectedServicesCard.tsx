@@ -15,7 +15,7 @@ import {
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot Home — Connected Services (Honest, Real Integrations Only)
+ * VEYRO Home — Connected Services (Honest, Real Integrations Only)
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * Stabilization directive: "The Home page must only show integrations that

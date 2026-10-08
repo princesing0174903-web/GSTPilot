@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Collector Registry
+// VEYRO AI Intelligence Engine — Collector Registry
 //
 // The single place new collectors register. The engine imports `COLLECTORS`
 // from here and runs them all in parallel. Adding a new data source is a

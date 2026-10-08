@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Learning Engine (PROMPT 6)
+// VEYRO AI™ — Learning Engine (PROMPT 6)
 //
 // Auto-learning from user behaviour. Oracle notices when the user repeatedly
 // edits reports, always exports PDF, ignores certain advice, prefers short

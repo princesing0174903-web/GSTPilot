@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Service Library
+// VEYRO — Zoho Books Service Library
 //
 // Phase 1 scope: ONLY the organization-info fetch used to populate the
 // connection-status UI (multi-tenant organization mapping). No accounting

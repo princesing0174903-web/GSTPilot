@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Intent Router
+// VEYRO AI CFO™ — Intent Router
 //
 // Maps a natural-language user message → DetectedToolCall[] using:
 //   1. Tool.detect() — regex + keyword scoring per tool

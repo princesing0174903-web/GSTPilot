@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Consent Management Types
+// VEYRO Real Banking Foundation™ — Consent Management Types
 //
 // Type definitions for the Account Aggregator consent lifecycle UI.
 // These types are PURE (no Firebase, no Node imports) — safe for client code.
@@ -16,7 +16,7 @@ import type { BankProviderName } from './types';
  * The lifecycle status of an AA consent.
  *
  * Mirrors the Setu consent status enum (SetuConsentStatus) but mapped to
- * GSTPilot's UI-friendly names. The mapping happens in the SetuAAProvider
+ * VEYRO's UI-friendly names. The mapping happens in the SetuAAProvider
  * adapter once it's wired.
  */
 export type ConsentStatus =

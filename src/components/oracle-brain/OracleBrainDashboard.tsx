@@ -211,7 +211,7 @@ function CommandCenter() {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask Oracle anything… e.g. Who owes me more than ₹5 lakh?"
+            placeholder="Ask VEYRO AI anything… e.g. Who owes me more than ₹5 lakh?"
             className="border-white/10 bg-white/5 pr-9 font-medium text-white placeholder:text-white/30 focus-visible:border-emerald-500/40"
             disabled={loading}
           />
@@ -509,7 +509,7 @@ export function OracleBrainDashboard() {
             </div>
             <div>
               <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-                Oracle Intelligence
+                VEYRO AI Intelligence
                 <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-widest text-emerald-400">
                   Live
                 </span>
@@ -619,7 +619,7 @@ export function OracleBrainDashboard() {
         {/* ── Footer ── */}
         <footer className="mt-8 border-t border-white/5 pt-4 text-center">
           <p className="text-[11px] text-white/25">
-            Oracle Intelligence • Every number traceable to a real database record • No fabricated analytics
+            VEYRO AI Intelligence • Every number traceable to a real database record • No fabricated analytics
           </p>
         </footer>
       </div>

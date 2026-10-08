@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     // 2. Create default CA Firm
     const firm = await db.firm.create({
       data: {
-        name: 'GSTPilot Demo Firm',
+        name: 'VEYRO Demo Firm',
         state: 'Maharashtra',
       },
     })
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
     await db.firmSettings.create({
       data: {
         firmId: firm.id,
-        firmName: 'GSTPilot Demo Firm',
+        firmName: 'VEYRO Demo Firm',
       },
     })
 

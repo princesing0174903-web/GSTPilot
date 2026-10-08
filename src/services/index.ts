@@ -1,7 +1,7 @@
 /**
  * Service Layer — Barrel Export
  *
- * Central import point for all GSTPilot service adapters.
+ * Central import point for all VEYRO service adapters.
  * Each service provides a stubbed architecture for external integrations
  * that will be connected to real APIs in V2.
  *

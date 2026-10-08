@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Shared Service Layer: Customers (Clients)
+// VEYRO — Shared Service Layer: Customers (Clients)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Canonical create/update/delete logic for customers (the Prisma `Client`
-// model). Both /api/clients and the Oracle createCustomer/updateCustomer/
+// model). Both /api/clients and VEYRO AI createCustomer/updateCustomer/
 // deleteCustomer actions call THESE functions so audit logs, graph events,
 // timeline events, and activity logs fire identically.
 //

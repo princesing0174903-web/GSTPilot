@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — Client-Safe Firestore Service
+// VEYRO Billing, Subscriptions & Payments™ — Client-Safe Firestore Service
 //
 // The single entry point for all billing Firestore operations on the CLIENT side.
 // Mirrors the banking-provider / erp-provider service pattern:

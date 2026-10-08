@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 6: POLICY ENGINE™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 6: POLICY ENGINE™
 // Approval workflows, multi-level authorization, country/department rules.
 // On empty DB, seeds 3 canonical policies: India GST Filing Approval (2-level),
 // Global Corporate Filing (3-level), Payroll Compliance (1-level).

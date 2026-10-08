@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Future Provider Placeholders
+// VEYRO Gmail & WhatsApp Business Automation™ — Future Provider Placeholders
 // (SERVER-ONLY)
 //
 // Two placeholder providers for production integrations. Every method throws

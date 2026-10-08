@@ -6,7 +6,7 @@
 // learns FAQs. Compliance AI learns new GST rules. Every skill level derives
 // from REAL data volume + recency + forecast confidence.
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { EmployeeRole, EmployeeSkill, SkillCategory } from './types';

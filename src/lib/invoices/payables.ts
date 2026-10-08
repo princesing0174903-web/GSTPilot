@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Payables Cloud™
+// VEYRO Real Invoice Engine™ — Payables Cloud™
 // Vendor payables summary, prioritized payment scheduling, cash allocation.
 // Prisma-backed server module.
 // ═══════════════════════════════════════════════════════════════════════════════

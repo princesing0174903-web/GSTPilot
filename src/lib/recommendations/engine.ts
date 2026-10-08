@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — AI Recommendations Engine
+// VEYRO — AI Recommendations Engine
 //
 // Generates REAL strategic recommendations from the Business Snapshot (single
 // source of truth) + targeted Prisma enrichment queries.
@@ -120,7 +120,7 @@ export function generateRecommendationsFromSnapshot(snapshot: {
   //
   //   • "GST filing due — N returns pending" — Action Center already shows
   //     "₹X GST liability pending" (net output tax − ITC) and the next
-  //     upcoming/overdue return. The Oracle daily briefing additionally
+  //     upcoming/overdue return. VEYRO AI daily briefing additionally
   //     reports "GSTR-3B prepared — ready to file" when Oracle has drafted
   //     the return. Re-emitting it as a recommendation was redundant.
   //
@@ -163,7 +163,7 @@ export function generateRecommendationsFromSnapshot(snapshot: {
       description: 'Elevated risk driven by overdue receivables, compliance gaps, or cash flow pressure. Review the risk factors in your snapshot.',
       metric: { label: 'Risk Score', value: `${Math.round(risk)}/100`, trend: 'up' },
       actionView: 'ai-business-copilot',
-      actionLabel: 'Ask Oracle',
+      actionLabel: 'Ask VEYRO AI',
     });
   }
 

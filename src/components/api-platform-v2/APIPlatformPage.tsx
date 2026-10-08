@@ -250,7 +250,7 @@ const apiCategories: ApiCategory[] = [
     icon: <IndianRupee className="h-4 w-4" />,
     description: 'Create payment links, collect UPI, verify, and process refunds',
     endpoints: [
-      { method: 'POST', path: '/api/v1/payments/links', description: 'Create a payment link', requestExample: '{\n  "amount": 59000,\n  "currency": "INR",\n  "description": "Invoice #INV-001",\n  "upi": true\n}', responseExample: '{\n  "id": "plink_abc123",\n  "url": "https://pay.gstpilot.in/abc123",\n  "upi_intent": "upi://pay?..."\n}' },
+      { method: 'POST', path: '/api/v1/payments/links', description: 'Create a payment link', requestExample: '{\n  "amount": 59000,\n  "currency": "INR",\n  "description": "Invoice #INV-001",\n  "upi": true\n}', responseExample: '{\n  "id": "plink_abc123",\n  "url": "https://pay.veyro.com/abc123",\n  "upi_intent": "upi://pay?..."\n}' },
       { method: 'POST', path: '/api/v1/payments/collect-upi', description: 'Collect payment via UPI', requestExample: '{\n  "vpa": "merchant@upi",\n  "amount": 59000\n}', responseExample: '{\n  "id": "pay_xyz789",\n  "status": "pending",\n  "expires_at": "2025-01-15T11:00:00Z"\n}' },
       { method: 'GET', path: '/api/v1/payments/{id}/verify', description: 'Verify payment status', responseExample: '{\n  "id": "pay_xyz789",\n  "status": "captured",\n  "method": "upi",\n  "captured_at": "2025-01-15T10:45:00Z"\n}' },
       { method: 'POST', path: '/api/v1/payments/{id}/refund', description: 'Process a refund', requestExample: '{\n  "amount": 59000,\n  "reason": "Duplicate payment"\n}', responseExample: '{\n  "id": "rfn_abc456",\n  "status": "processed",\n  "amount": 59000\n}' },
@@ -322,7 +322,7 @@ const apiCategories: ApiCategory[] = [
       { method: 'POST', path: '/api/v1/documents/upload', description: 'Upload a document', requestExample: '{\n  "file": "<binary>",\n  "type": "invoice",\n  "client_gstin": "27AADCB2230F1ZP"\n}', responseExample: '{\n  "id": "doc_abc123",\n  "status": "uploaded",\n  "extraction_started": true\n}' },
       { method: 'POST', path: '/api/v1/documents/extract/{id}', description: 'Extract data from document', responseExample: '{\n  "id": "doc_abc123",\n  "extracted": { "amount": 59000, "gstin": "27..." },\n  "confidence": 0.97\n}' },
       { method: 'POST', path: '/api/v1/documents/classify/{id}', description: 'Classify document type', responseExample: '{\n  "id": "doc_abc123",\n  "type": "tax_invoice",\n  "confidence": 0.94\n}' },
-      { method: 'GET', path: '/api/v1/documents/{id}', description: 'Get stored document details', responseExample: '{\n  "id": "doc_abc123",\n  "url": "https://storage.gstpilot.in/...",\n  "metadata": {...}\n}' },
+      { method: 'GET', path: '/api/v1/documents/{id}', description: 'Get stored document details', responseExample: '{\n  "id": "doc_abc123",\n  "url": "https://storage.veyro.com/...",\n  "metadata": {...}\n}' },
     ],
   },
 ];
@@ -641,7 +641,7 @@ export default function APIPlatformPage() {
 
   // --- Code Snippets ---
   const codeSnippets: Record<string, string> = {
-    curl: `curl -X POST https://api.gstpilot.in/v1/gst/returns/file \\
+    curl: `curl -X POST https://api.veyro.com/v1/gst/returns/file \\
   -H "Authorization: Bearer gpi_live_sk_a4k8m2n9p1q3r5s7" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -718,7 +718,7 @@ print(filing.arn)  # AA110125001234F`,
             </Badge>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
-            GSTPilot API Platform™
+            VEYRO API Platform™
           </h1>
           <p className="text-slate-300 text-sm md:text-base max-w-xl">
             Stripe for Financial APIs in India — Build powerful GST, accounting, and compliance apps with our production-ready REST APIs.
@@ -846,7 +846,7 @@ print(filing.arn)  # AA110125001234F`,
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-800">API Reference</h2>
-          <p className="text-sm text-slate-500">Complete documentation for all GSTPilot API endpoints</p>
+          <p className="text-sm text-slate-500">Complete documentation for all VEYRO API endpoints</p>
         </div>
         <Badge variant="secondary" className="text-xs">v1.0</Badge>
       </div>
@@ -905,7 +905,7 @@ print(filing.arn)  # AA110125001234F`,
                           <div className="space-y-3">
                             <div className="text-xs text-slate-500">Base URL</div>
                             <Input
-                              value={`https://api.gstpilot.in${ep.path}`}
+                              value={`https://api.veyro.com${ep.path}`}
                               readOnly
                               className="text-xs font-mono"
                             />
@@ -1038,7 +1038,7 @@ print(filing.arn)  # AA110125001234F`,
                       <EmptyState
                         icon={Key}
                         title="No API keys yet"
-                        description="Generate your first API key to start using the GSTPilot API."
+                        description="Generate your first API key to start using the VEYRO API."
                         compact
                       />
                     </td>

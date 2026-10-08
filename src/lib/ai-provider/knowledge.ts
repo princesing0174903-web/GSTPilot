@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Business Knowledge Engine
+// VEYRO AI Oracle™ & AI CFO™ — Business Knowledge Engine
 //
 // A PURE, CLIENT-SAFE function that transforms a real-data snapshot into a
 // structured BusinessContext. This is what makes Oracle "understand" the

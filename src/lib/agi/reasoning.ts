@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — CONTINUOUS AUTONOMOUS REASONING™
+// VEYRO Infinity™ — INFINITY AGI™ — CONTINUOUS AUTONOMOUS REASONING™
 //
 // Oracle reasons continuously — not only when asked. Every few minutes Oracle
 // automatically: monitors enterprise health, evaluates opportunities, evaluates

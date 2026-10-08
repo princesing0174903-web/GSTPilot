@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — ENTERPRISE EXECUTION CLOUD™ (MISSION CONTROL)
+// VEYRO Infinity™ — ENTERPRISE EXECUTION CLOUD™ (MISSION CONTROL)
 // Shared Type Contracts — Phase 10
 // One global execution pipeline. Every action from every module flows through it.
 // Founder & Owner: Prince Singh.

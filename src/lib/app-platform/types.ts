@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — Type System
+// VEYRO Global AI App Marketplace™ — Type System
 // Ecosystem platform: apps, AI employees, SDK, webhooks, plugins, monetization.
 // Catalog models are GLOBAL; installs/webhooks/plugins/sandbox/analytics are tenant-scoped.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -480,7 +480,7 @@ export const APP_CATEGORY_META: Record<AppCategory, { label: string; icon: strin
 
 /** App type metadata. */
 export const APP_TYPE_META: Record<AppType, { label: string; icon: string; description: string }> = {
-  native: { label: 'Native App', icon: 'AppWindow', description: 'Full-featured application integrated into GSTPilot' },
+  native: { label: 'Native App', icon: 'AppWindow', description: 'Full-featured application integrated into VEYRO' },
   ai: { label: 'AI App', icon: 'BrainCircuit', description: 'AI-powered application with model access' },
   industry: { label: 'Industry App', icon: 'Building2', description: 'Industry-specific solution module' },
   dashboard: { label: 'Dashboard', icon: 'LayoutDashboard', description: 'Custom dashboard with widgets' },

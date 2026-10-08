@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Module 9: Invoice Analytics
+// VEYRO Real Invoice Engine™ — Module 9: Invoice Analytics
 // Revenue, top clients, collection efficiency, gross margin, expense ratio, profitability.
 // Deterministic. Reads from Prisma. No LLM.
 // ═══════════════════════════════════════════════════════════════════════════════

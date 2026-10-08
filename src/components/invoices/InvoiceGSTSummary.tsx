@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — InvoiceGSTSummary
+// VEYRO™ — InvoiceGSTSummary
 //
 // The third row of the rebuilt Invoice Builder — three premium cards side by
 // side:

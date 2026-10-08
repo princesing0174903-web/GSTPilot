@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Premium Skeletons
+// VEYRO — Zoho Books Premium Skeletons
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Loading state for the connected-mode dashboard. Mirrors the real layout

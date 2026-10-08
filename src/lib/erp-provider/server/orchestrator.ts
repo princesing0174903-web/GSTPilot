@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Server Orchestrator (SERVER-ONLY)
+// VEYRO ERP & Accounting Integrations™ — Server Orchestrator (SERVER-ONLY)
 //
 // The thin server-side layer that:
 //   1. Resolves the active provider via the registry

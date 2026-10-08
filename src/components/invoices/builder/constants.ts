@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Invoice Builder · Constants
+// VEYRO™ — Invoice Builder · Constants
 //
 // All static data tables: GST rates, units, invoice types, payment terms,
 // payment modes, state code → name map, default T&C, default bank details,

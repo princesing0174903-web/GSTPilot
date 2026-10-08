@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Edge Middleware
+// VEYRO Infinity™ — Edge Middleware
 //
 // Responsibilities:
 //   1. Security headers (CSP, frame-ancestors, X-Frame-Options, etc.)

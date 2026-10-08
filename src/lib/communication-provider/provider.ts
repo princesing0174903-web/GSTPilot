@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Provider Interfaces
+// VEYRO Gmail & WhatsApp Business Automation™ — Provider Interfaces
 //
 // IGmailProvider     — the SINGLE contract every Gmail backend implements.
 // IWhatsAppProvider  — the SINGLE contract every WhatsApp backend implements.

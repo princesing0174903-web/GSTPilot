@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Route-Auth Helper
+// VEYRO — Zoho Books Route-Auth Helper
 //
 // Shared helper for the Zoho Books service routes: resolves the org+user from
 // request headers, fetches a valid (auto-refreshed) access token, and returns

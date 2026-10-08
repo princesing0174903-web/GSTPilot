@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Status API
+// VEYRO ERP & Accounting Integrations™ — Status API
 //
 // GET /api/erp/status?provider=tally
 //   Returns: { ok: true, name, provider, isLive, healthy, mode }

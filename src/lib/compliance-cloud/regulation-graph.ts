@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 1: REGULATION GRAPH™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 1: REGULATION GRAPH™
 // Global Regulation Knowledge Graph — DB-first, seed fallback with 20+ REAL Indian
 // regulations (CGST Act, Income Tax, TDS, EPF, ESI, Companies Act, RBI, Labour laws).
 // Founder & Owner: Prince Singh.

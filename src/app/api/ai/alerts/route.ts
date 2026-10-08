@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Alerts API
+// VEYRO AI Oracle™ & AI CFO™ — Alerts API
 //
 // GET /api/ai/alerts?orgId=         — derive alerts (recomputed live each call)
 //

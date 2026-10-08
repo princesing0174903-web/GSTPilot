@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Provider Registry (SERVER-ONLY)
+// VEYRO Billing™ — Provider Registry (SERVER-ONLY)
 //
 // The SINGLE switch-point between providers. Today returns MockRazorpayProvider
 // by default; when PAYMENT_PROVIDER env var is set to one of the future provider

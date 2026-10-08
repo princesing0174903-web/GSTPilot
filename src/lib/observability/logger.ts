@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Structured Logger
+// VEYRO™ — Structured Logger
 //
 // A single, app-wide logger that:
 //   • pretty-prints colored output in development (for terminal readability)

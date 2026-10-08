@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Workflow Engine (barrel)
+// VEYRO AI™ — Workflow Engine (barrel)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Oracle Priority 2 — Autonomous Workflow Engine.

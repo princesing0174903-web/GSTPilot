@@ -86,11 +86,11 @@ export type AppView =
   | 'economic-graph'
   | 'economic-war-room'
   | 'run-my-company'
-  // GSTPilot Infinity™ Layer
+  // VEYRO Infinity™ Layer
   | 'business-dna'
-  // Phase 8 Step 3 — GSTPilot Real Invoice Engine™
+  // Phase 8 Step 3 — VEYRO Real Invoice Engine™
   | 'invoice-cloud'
-  // Phase 8 Step 5 — GSTPilot Execution Engine™
+  // Phase 8 Step 5 — VEYRO Execution Engine™
   | 'execution-engine'
   // Phase 2 — Real Data Engine™
   | 'connections'
@@ -217,7 +217,7 @@ export type AppView =
   | 'google-workspace'
   // Phase Zoho Books — Accounting Integration (OAuth)
   | 'zoho-books'
-  // Oracle Intelligence — The Financial Brain
+  // VEYRO AI Intelligence — The AI Operating System
   | 'oracle-brain'
   | 'gst-reconciliation';
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Server-side Session Helpers (requireAuth + requireOrgMembership)
+// VEYRO — Server-side Session Helpers (requireAuth + requireOrgMembership)
 //
 // SERVER-ONLY. Never import this from a client component. Uses the Firebase
 // Admin SDK to verify the caller's ID token and (optionally) their membership

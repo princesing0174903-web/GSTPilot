@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ — Operating System Dashboard
+// VEYRO AI CFO™ — Operating System Dashboard
 // Phase 3 — The CFO that runs your business 24/7.
 //
 // Modules rendered here:
@@ -13,7 +13,7 @@
 //   Module 7 — Action Engine (execute from recommendations)
 //   Module 8 — CFO Memory (trends, client behaviour, insights)
 //
-// Module 5 (Ask CFO) + Module 9 (CFO Personality) live in the Oracle chat
+// Module 5 (Ask CFO) + Module 9 (CFO Personality) live in VEYRO AI chat
 // workspace — /api/oracle/chat system prompt.
 //
 // Tagline: Understand Your Business. Predict Your Future. Recommend Your Next Move.
@@ -857,7 +857,7 @@ export default function AICFODashboardPage() {
               </div>
               <div>
                 <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                  GSTPilot AI CFO<span className="accent-text">™</span>
+                  VEYRO AI CFO<span className="accent-text">™</span>
                 </h1>
                 <p className="text-xs text-muted-foreground">
                   Understand Your Business · Predict Your Future · Recommend Your Next Move
@@ -1101,7 +1101,7 @@ export default function AICFODashboardPage() {
       <FadeIn delay={0.7}>
         <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-emerald-500/[0.04] to-cyan-500/[0.04] p-5 text-center">
           <p className="text-sm font-medium text-foreground">
-            GSTPilot AI CFO<span className="accent-text">™</span> — Always Watching. Always Predicting. Always Advising.
+            VEYRO AI CFO<span className="accent-text">™</span> — Always Watching. Always Predicting. Always Advising.
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
             Understand Your Business · Predict Your Future · Recommend Your Next Move · Run Your Business

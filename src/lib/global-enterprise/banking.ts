@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO Infinity™ — Global Enterprise Operating System™
 // Global Banking Engine™ — SWIFT/IBAN/local rails/international transfers/
 // treasury/cash pooling. Oracle consolidates worldwide bank balances.
 // Founder & Owner: Prince Singh.

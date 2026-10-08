@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Premium Floating Dock
+// VEYRO™ — Premium Floating Dock
 //
 // A single, elegant glassmorphism dock positioned above the bottom margin
 // on the right side. Contains exactly 3 actions:

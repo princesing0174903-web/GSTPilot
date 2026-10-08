@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Production GST Report Engine
+// VEYRO AI CFO™ — Production GST Report Engine
 //
 // The REAL GST report generation engine. No simulations. No placeholders.
 // When a CA types "Generate this month's GST report", this engine:

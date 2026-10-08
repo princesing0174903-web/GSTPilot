@@ -1,11 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Source Engine
+// VEYRO AI™ — Source Engine
 //
 // A curated knowledge base of GST Law, CBIC Circulars, and GSTN documentation.
 // Two responsibilities:
 //   1. retrieveSources(query) — lightweight keyword retrieval returning the most
 //      relevant citable sources for a user's question (top-K).
-//   2. ensureSourcesSeeded() — idempotently seed the OracleSource table on first
+//   2. ensureSourcesSeeded() — idempotently seed VEYRO AISource table on first
 //      load so citations resolve to real references.
 //
 // Every important Oracle answer should cite sources; this engine supplies them.

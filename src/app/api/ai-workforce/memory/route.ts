@@ -13,7 +13,7 @@
 // Backed by the 60s cached WorkforceDashboard bundle. The
 // X-Workforce-Memory-Count header exposes the total memory entry count.
 //
-// Tagline: GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company.
+// Tagline: VEYRO AI Workforce™ — Don't just use AI. Build an AI Company.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';

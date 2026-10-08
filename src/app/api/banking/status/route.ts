@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Provider Status API
+// VEYRO Real Banking Foundation™ — Provider Status API
 //
 // GET /api/banking/status
 //   Returns: { ok: true, result: { healthy, name, provider, isLive } }

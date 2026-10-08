@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Billing Engine (SERVER-ONLY, pure functions)
+// VEYRO Billing™ — Billing Engine (SERVER-ONLY, pure functions)
 //
 // Pure functions for billing calculations: proration, renewals, grace periods,
 // trials, MRR/ARR, failed-payment retry schedules, coupon application.

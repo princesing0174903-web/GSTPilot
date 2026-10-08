@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPILOT ENTERPRISE AI PLATFORM™ — DEVELOPER PLATFORM CONSOLE
 //
-// Turns GSTPilot from an enterprise application into a platform developers &
+// Turns VEYRO from an enterprise application into a platform developers &
 // partners can build on. 12 subsystems, all extended on REAL connected data:
 //
 //   1.  Enterprise App Marketplace™  — browse + install apps

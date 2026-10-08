@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Provider Registry (SERVER-ONLY)
+// VEYRO Gmail & WhatsApp Business Automation™ — Provider Registry (SERVER-ONLY)
 //
 // The SINGLE switch-point between providers. Today returns the mock providers;
 // when env vars are set to one of the future provider names, the registry

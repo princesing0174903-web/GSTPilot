@@ -21,7 +21,7 @@
 // After approval the Workforce dashboard cache is invalidated so the next
 // GET reflects the updated status.
 //
-// Tagline: GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company.
+// Tagline: VEYRO AI Workforce™ — Don't just use AI. Build an AI Company.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Complete Bank Connection (AA deferred-completion step)
+// VEYRO — Complete Bank Connection (AA deferred-completion step)
 //
 // POST /api/banking/complete?connectionRef=<consentId>
 //

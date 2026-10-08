@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Prompt Injection & Untrusted-Data Sanitizer
+// VEYRO AI™ — Prompt Injection & Untrusted-Data Sanitizer
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Business records (invoice buyer names, customer emails, supplier names,

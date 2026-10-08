@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books OAuth 2.0 Client + Token Store
+// VEYRO — Zoho Books OAuth 2.0 Client + Token Store
 //
 // Handles the full OAuth 2.0 Authorization Code Flow lifecycle:
 //   • Resolve Zoho endpoints from the ZOHO_DC env var (in / com / eu / au / jp / ca)

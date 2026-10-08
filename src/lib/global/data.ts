@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Phase 14: Global Expansion Data Layer
+// VEYRO Infinity™ — Phase 14: Global Expansion Data Layer
 //
 // Pure static data for Multi-Country Accounting, Multi-Currency, Multi-Tax,
 // International Banking, Global Compliance, International ERP, Multi-Language,
@@ -765,12 +765,12 @@ export interface TaxPosition {
 }
 
 export const TAX_POSITIONS: TaxPosition[] = [
-  { country: 'IN', entity: 'GSTPilot India Pvt Ltd', revenue: 847200000, taxableIncome: 184600000, corporateTax: 46605820, lossCarryforward: 12000000, taxCredits: 3400000, effectiveRate: 22.4, netTax: 31205820 },
-  { country: 'US', entity: 'GSTPilot Inc. (Delaware)', revenue: 1240000, taxableIncome: 248000, corporateTax: 52080, lossCarryforward: 45000, taxCredits: 12000, effectiveRate: 16.3, netTax: 37080 },
-  { country: 'GB', entity: 'GSTPilot UK Ltd', revenue: 480000, taxableIncome: 92000, corporateTax: 23000, lossCarryforward: 18000, taxCredits: 5000, effectiveRate: 19.6, netTax: 13000 },
-  { country: 'DE', entity: 'GSTPilot GmbH', revenue: 720000, taxableIncome: 138000, corporateTax: 41676, lossCarryforward: 22000, taxCredits: 8000, effectiveRate: 22.3, netTax: 28676 },
-  { country: 'SG', entity: 'GSTPilot Pte Ltd', revenue: 610000, taxableIncome: 152000, corporateTax: 25840, lossCarryforward: 0, taxCredits: 6000, effectiveRate: 13.1, netTax: 19840 },
-  { country: 'AE', entity: 'GSTPilot FZ-LLC', revenue: 520000, taxableIncome: 142000, corporateTax: 12780, lossCarryforward: 0, taxCredits: 0, effectiveRate: 9.0, netTax: 12780 },
+  { country: 'IN', entity: 'VEYRO India Pvt Ltd', revenue: 847200000, taxableIncome: 184600000, corporateTax: 46605820, lossCarryforward: 12000000, taxCredits: 3400000, effectiveRate: 22.4, netTax: 31205820 },
+  { country: 'US', entity: 'VEYRO Inc. (Delaware)', revenue: 1240000, taxableIncome: 248000, corporateTax: 52080, lossCarryforward: 45000, taxCredits: 12000, effectiveRate: 16.3, netTax: 37080 },
+  { country: 'GB', entity: 'VEYRO UK Ltd', revenue: 480000, taxableIncome: 92000, corporateTax: 23000, lossCarryforward: 18000, taxCredits: 5000, effectiveRate: 19.6, netTax: 13000 },
+  { country: 'DE', entity: 'VEYRO GmbH', revenue: 720000, taxableIncome: 138000, corporateTax: 41676, lossCarryforward: 22000, taxCredits: 8000, effectiveRate: 22.3, netTax: 28676 },
+  { country: 'SG', entity: 'VEYRO Pte Ltd', revenue: 610000, taxableIncome: 152000, corporateTax: 25840, lossCarryforward: 0, taxCredits: 6000, effectiveRate: 13.1, netTax: 19840 },
+  { country: 'AE', entity: 'VEYRO FZ-LLC', revenue: 520000, taxableIncome: 142000, corporateTax: 12780, lossCarryforward: 0, taxCredits: 0, effectiveRate: 9.0, netTax: 12780 },
 ];
 
 // ─── FX Exposure & Hedging ─────────────────────────────────────────────────────
@@ -943,7 +943,7 @@ export const PAYMENT_LIFECYCLE: Record<string, PaymentStage[]> = {
     { stage: 'Compliance Check', timestamp: '2024-09-28 09:15', location: 'RBI / FEMA', status: 'completed', detail: 'FEMA compliance verified' },
     { stage: 'FX Conversion', timestamp: '2024-09-28 09:22', location: 'Wise mid-market', status: 'completed', detail: 'USD 84,000 @ ₹83.20 = ₹6,988,800' },
     { stage: 'Correspondent Bank', timestamp: '2024-09-28 14:00', location: 'JP Morgan Chase, NY', status: 'completed', detail: 'SWIFT MT103 transmitted' },
-    { stage: 'Beneficiary Credit', timestamp: '2024-09-28 16:30', location: 'HSBC India', status: 'completed', detail: 'Credited to GSTPilot India account' },
+    { stage: 'Beneficiary Credit', timestamp: '2024-09-28 16:30', location: 'HSBC India', status: 'completed', detail: 'Credited to VEYRO India account' },
   ],
   'cbp-2': [
     { stage: 'Initiated', timestamp: '2024-10-01 11:00', location: 'Frankfurt, DE', status: 'completed', detail: 'SEPA direct debit via Stripe' },

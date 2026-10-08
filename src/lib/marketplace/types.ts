@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Integration Marketplace™ — Type System
+// VEYRO Global Integration Marketplace™ — Type System
 // Universal connectivity platform: 2,000+ connectors, event bus, sync engine.
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -304,7 +304,7 @@ export const STANDARD_EVENT_TYPES = [
 
 /** AI Connector Engine — intent templates. */
 export const AI_CONNECTOR_INTENTS: { pattern: RegExp; connectorSlug: string; action: string; description: string }[] = [
-  { pattern: /sync.*shopify|shopify.*order/i, connectorSlug: 'shopify', action: 'sync_orders', description: 'Sync all Shopify orders into GSTPilot' },
+  { pattern: /sync.*shopify|shopify.*order/i, connectorSlug: 'shopify', action: 'sync_orders', description: 'Sync all Shopify orders into VEYRO' },
   { pattern: /invoice.*razorpay|razorpay.*invoice/i, connectorSlug: 'razorpay', action: 'generate_invoices', description: 'Generate invoices from Razorpay payments' },
   { pattern: /lead.*gmail|gmail.*lead|crm.*gmail/i, connectorSlug: 'gmail', action: 'create_leads', description: 'Create CRM leads from Gmail conversations' },
   { pattern: /jira.*ticket|ticket.*jira/i, connectorSlug: 'jira', action: 'create_ticket', description: 'Open a Jira ticket from Support AI' },

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — FINANCIAL INTELLIGENCE SECTIONS
+// VEYRO AI CFO™ Phase 1 — FINANCIAL INTELLIGENCE SECTIONS
 //
 // Renders the Phase 1 Financial Intelligence Engine bundle on top of the
 // existing AI CFO Dashboard. Does NOT modify or replace any existing UI —
@@ -21,7 +21,7 @@
 //  11.  Business Risk Engine (10 risks × Low/Medium/High/Critical)
 //  12.  AI CFO Recommendations (with Reason/Impact/Priority/Confidence)
 //
-// Tagline: GSTPilot AI CFO™ — Every business deserves a world-class CFO.
+// Tagline: VEYRO AI CFO™ — Every business deserves a world-class CFO.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -957,7 +957,7 @@ export default function AICFOPhase1Sections() {
       <FadeIn delay={0.65}>
         <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.06] to-cyan-500/[0.04] p-5 text-center">
           <p className="text-sm font-medium text-foreground">
-            GSTPilot AI CFO<span className="accent-text">™</span> — Every business deserves a world-class CFO.
+            VEYRO AI CFO<span className="accent-text">™</span> — Every business deserves a world-class CFO.
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
             {data.dataSources.join(' · ')} · {data.invoiceCount} invoices · {data.clientCount} clients · Generated {new Date(data.generatedAt).toLocaleTimeString('en-IN')}

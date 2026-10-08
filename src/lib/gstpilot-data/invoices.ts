@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Invoices Firestore Service
+// VEYRO™ — Invoices Firestore Service
 //
 // CRUD + real-time subscription for invoice documents at:
 //   organizations/{organizationId}/invoices/{invoiceId}

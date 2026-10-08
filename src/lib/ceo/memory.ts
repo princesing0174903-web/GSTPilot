@@ -18,7 +18,7 @@
 // Capped at 15 memories, sorted by importance desc. No fabrication — every
 // memory ties back to a real business event.
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type {

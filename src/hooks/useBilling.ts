@@ -2,9 +2,9 @@
 import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — useBilling() Hook
+// VEYRO Billing, Subscriptions & Payments™ — useBilling() Hook
 //
-// The SINGLE hook every GSTPilot component uses to interact with billing data.
+// The SINGLE hook every VEYRO component uses to interact with billing data.
 // Mirrors the useBanking() / useERP() pattern:
 //
 //   • READ — real-time subscriptions to subscription + billing account + invoices

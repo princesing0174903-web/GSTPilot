@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Confidence Scoring Engine (PROMPT 5)
+// VEYRO AI™ — Confidence Scoring Engine (PROMPT 5)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Every conclusion Oracle makes MUST carry a confidence score. Oracle NEVER

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Approval & Audit Layer
+// VEYRO AI CFO™ — Approval & Audit Layer
 //
 // APPROVAL:
 //   Critical actions never auto-execute. The analyze route creates a pending
@@ -9,7 +9,7 @@
 //
 // AUDIT:
 //   Every CFO action (approved or rejected, success or failure) creates an
-//   audit entry in the oracle_cfo_actions Firestore collection with:
+//   audit entry in VEYRO AI_cfo_actions Firestore collection with:
 //     timestamp, user, action, recordsAffected, aiProvider, executionMs,
 //     result, rollbackStatus, decisionCard
 // ═══════════════════════════════════════════════════════════════════════════════

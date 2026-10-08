@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Type Definitions
+// VEYRO ERP & Accounting Integrations™ — Type Definitions
 //
 // The single source of truth for the ERP data model. Every field maps 1:1 to a
 // Firestore collection. All types are PURE (no Firebase imports) so they are
@@ -154,7 +154,7 @@ export interface ERPSyncJob {
 // ─── ERP Customer (erp_customers collection) ──────────────────────────────────
 
 /**
- * A customer synced from the ERP — mapped to GSTPilot's Client entity.
+ * A customer synced from the ERP — mapped to VEYRO's Client entity.
  * Stored in Firestore `erp_customers/{customerId}`.
  */
 export interface ERPCustomer {
@@ -164,7 +164,7 @@ export interface ERPCustomer {
   provider: ERPProviderName;
   /** The ERP's internal id for this customer. */
   erpCustomerId: string;
-  /** GSTPilot client id (set after data-mapper links them). */
+  /** VEYRO client id (set after data-mapper links them). */
   mappedClientId: string | null;
   name: string;
   gstin: string | null;
@@ -226,7 +226,7 @@ export interface ERPVendor {
 export type ERPInvoiceType = 'sales' | 'purchase';
 
 /**
- * An invoice synced from the ERP — mapped to GSTPilot's Invoice entity.
+ * An invoice synced from the ERP — mapped to VEYRO's Invoice entity.
  * Stored in Firestore `erp_invoices/{invoiceId}`.
  */
 export interface ERPInvoice {
@@ -236,7 +236,7 @@ export interface ERPInvoice {
   provider: ERPProviderName;
   /** The ERP's invoice number. */
   erpInvoiceNumber: string;
-  /** GSTPilot invoice id (set after data-mapper links them). */
+  /** VEYRO invoice id (set after data-mapper links them). */
   mappedInvoiceId: string | null;
   invoiceType: ERPInvoiceType;
   /** Customer (sales) or vendor (purchase) name. */

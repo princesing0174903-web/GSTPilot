@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Smart Reconciliation Page (Prisma-backed · ARCHITECTURE FIX)
+// VEYRO — Smart Reconciliation Page (Prisma-backed · ARCHITECTURE FIX)
 //
 // ROOT CAUSE (previously):
 //   This page imported `useFireInvoices` / `useFireBankTransactions` /

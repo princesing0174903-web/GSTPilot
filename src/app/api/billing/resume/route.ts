@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Resume API
+// VEYRO Billing™ — Resume API
 // POST /api/billing/resume
 //   Body: { organizationId, subscriptionId }
 // ═══════════════════════════════════════════════════════════════════════════════

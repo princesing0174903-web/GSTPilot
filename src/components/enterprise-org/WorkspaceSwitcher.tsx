@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — WorkspaceSwitcher
+// VEYRO — WorkspaceSwitcher
 //
 // A premium organization switcher for the top bar. Shows the current org
 // (logo + name + plan badge) and a dropdown of all orgs the user belongs to

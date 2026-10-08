@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Data Normalization Engine (PHASE 2A · MODULE 3)
+// VEYRO Infinity™ — Data Normalization Engine (PHASE 2A · MODULE 3)
 //
 // Unifies entities across the Business Graph — Clients, Invoices, Returns,
 // Notices, Bank Transactions, Expenses, Payments, Documents, Vendors — into a

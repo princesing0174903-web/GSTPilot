@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — App Analytics™
+// VEYRO Global AI App Marketplace™ — App Analytics™
 // Tracks: Installs · Uninstalls · Revenue · Retention · Errors · Performance
 // User Engagement · API Calls · AI Usage · Automation Usage · Crash Reports
 // ═══════════════════════════════════════════════════════════════════════════════

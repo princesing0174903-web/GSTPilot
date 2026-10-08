@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — REAL FINANCIAL HEALTH SCORE
+// VEYRO AI CFO™ Phase 1 — REAL FINANCIAL HEALTH SCORE
 //
 // Computes a 0-100 weighted health score using 10 factors:
 //   1.  Revenue Growth (15%)

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Premium Skeletons
+// VEYRO — Premium Skeletons
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A small library of skeleton layouts that mirror the real view shapes.
@@ -172,7 +172,7 @@ export function FormSkeleton({
 
 // ────────────────────────────────────────────────────────────────────────────────
 // OracleSkeleton — Oracle avatar + message bubbles.
-// Used by Oracle Brain view while the Oracle chunk loads.
+// Used by Oracle Brain view while VEYRO AI chunk loads.
 // ────────────────────────────────────────────────────────────────────────────────
 export function OracleSkeleton({ className }: { className?: string }) {
   return (

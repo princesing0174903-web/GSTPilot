@@ -14,7 +14,7 @@ import {
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot Home — Business Setup Progress (collapsible, demoted)
+ * VEYRO Home — Business Setup Progress (collapsible, demoted)
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * Per Task 6 (Dashboard Premium Polish — Point 1): this card is now

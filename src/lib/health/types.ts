@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Health, Monitoring & Alerting — Type System
+// VEYRO™ — Health, Monitoring & Alerting — Type System
 //
 // Pure types only. No imports from Firebase / Prisma / Next — safe to import
 // from both client and server code. The implementations (checks, monitor,

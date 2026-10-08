@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Public API Surface (TASK 12)
+// VEYRO Banking Module™ — Public API Surface (TASK 12)
 //
 // Re-exports everything the API routes and UI hooks need. Keeps import paths
 // stable: `import { ... } from '@/lib/banking-prisma'`.

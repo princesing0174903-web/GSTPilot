@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 2: DEADLINE ENGINE™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 2: DEADLINE ENGINE™
 // Reuses getUpcomingDeadlinesGlobally + getGlobalComplianceReport from the
 // Global Enterprise compliance layer; adds per-country + calendar views + Oracle
 // executive notification hook. Founder & Owner: Prince Singh.

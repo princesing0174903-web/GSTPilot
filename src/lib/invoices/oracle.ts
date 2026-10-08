@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ (Invoice Cloud™) — Oracle Orchestrator + Context
+// VEYRO Real Invoice Engine™ (Invoice Cloud™) — Oracle Orchestrator + Context
 // Composes the full InvoiceCloudState from all 10 modules and formats it for Oracle.
 // Deterministic. No LLM. Oracle consumes the formatted block.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -176,7 +176,7 @@ No invoices, expenses, or payroll data connected yet. Encourage the user to crea
     (p) => `  - ${p.label}: ${inrShort(p.amount)} (${p.count} items, ${p.deltaPct >= 0 ? '+' : ''}${p.deltaPct}% vs last month)`,
   ).join('\n');
 
-  return `## LIVE INVOICE CLOUD STATE (Phase 8 Step 3 — GSTPilot Real Invoice Engine™)
+  return `## LIVE INVOICE CLOUD STATE (Phase 8 Step 3 — VEYRO Real Invoice Engine™)
 You have real-time access to the user's complete ERP: invoices, expenses, receivables, payables, payments, TDS, payroll, OCR, and revenue intelligence. Treat these numbers as authoritative when the user asks about any sale, expense, collection, payment, payroll, forecast, or profitability.
 
 ### Module 1 — Sales Invoice Engine

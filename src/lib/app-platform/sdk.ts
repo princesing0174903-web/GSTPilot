@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — Extension SDK
+// VEYRO Global AI App Marketplace™ — Extension SDK
 // Developer SDK metadata: languages, templates, CLI, emulator, packaging, publishing.
 // ═══════════════════════════════════════════════════════════════════════════════
 

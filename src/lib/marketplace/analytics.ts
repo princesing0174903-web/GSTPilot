@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Integration Marketplace™ — Health, Analytics & Developer
+// VEYRO Global Integration Marketplace™ — Health, Analytics & Developer
 // Connector health dashboard, analytics aggregation, developer platform.
 // ═══════════════════════════════════════════════════════════════════════════════
 

@@ -239,7 +239,7 @@ export default function GlobalFinancialNetwork() {
                     Live Network Topology
                   </CardTitle>
                   <CardDescription className="text-xs text-white/50">
-                    Central GSTPilot Network hub · {ORG_CONNECTIONS.length} direct connections shown · 4.82M total orgs in network
+                    Central VEYRO Network hub · {ORG_CONNECTIONS.length} direct connections shown · 4.82M total orgs in network
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -303,7 +303,7 @@ export default function GlobalFinancialNetwork() {
                     <animate attributeName="r" values="30;32;30" dur="2.4s" repeatCount="indefinite" />
                   </circle>
                   <text x={CENTER.x} y={CENTER.y - 4} textAnchor="middle" fontSize="9" fill="white" fontWeight="700">
-                    GSTPilot
+                    VEYRO
                   </text>
                   <text x={CENTER.x} y={CENTER.y + 8} textAnchor="middle" fontSize="8" fill="white" fillOpacity="0.8">
                     Network

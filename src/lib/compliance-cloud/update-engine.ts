@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 8: UPDATE ENGINE™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 8: UPDATE ENGINE™
 // Auto-detects new tax laws, GST changes, RBI/MCA notifications. On first run,
 // seeds a few canonical recent updates so executives see actionable items.
 // Founder & Owner: Prince Singh.

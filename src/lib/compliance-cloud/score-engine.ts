@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 7: SCORE ENGINE™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 7: SCORE ENGINE™
 // Global Compliance Score™ — weighted avg of tax/payroll/corporate/banking/legal
 // dimensions. Starts at 100; subtracts per open risk (critical -25, high -12,
 // medium -5, low -2) and per upcoming critical deadline (-10). Persisted to

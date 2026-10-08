@@ -315,7 +315,7 @@ export default function AIBusinessCopilotPage() {
     setMessages([{
       id: 'welcome',
       role: 'assistant',
-      content: 'Welcome to GSTPilot AI Business Copilot. I can answer questions about your clients, invoices, compliance, cash flow, and more.\n\nI have access to your live firm data — just ask me anything and I\'ll give you data-driven, actionable insights. What would you like to know?',
+      content: 'Welcome to VEYRO AI Business Copilot. I can answer questions about your clients, invoices, compliance, cash flow, and more.\n\nI have access to your live firm data — just ask me anything and I\'ll give you data-driven, actionable insights. What would you like to know?',
       timestamp: new Date(),
       dataRefs: ['clients', 'invoices', 'returns'],
     }])

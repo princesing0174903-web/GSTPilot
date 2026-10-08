@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Data Sync · Type Definitions
+// VEYRO — Zoho Books Data Sync · Type Definitions
 //
 // Zero `any`. Models every Zoho Books API list-response shape we sync from,
-// plus the normalized GSTPilot records the mapper produces, and the sync
+// plus the normalized VEYRO records the mapper produces, and the sync
 // orchestrator's progress / stats / resume types.
 //
 // SERVER-ONLY.
@@ -585,7 +585,7 @@ export interface NormalizedCreditNote {
   zohoUpdatedAt: Date | null;
 }
 
-// ─── Normalized GSTPilot record payloads (mapper output) ─────────────────────
+// ─── Normalized VEYRO record payloads (mapper output) ─────────────────────
 //
 // The mapper produces these normalized payloads. The sync services upsert them
 // into the corresponding Prisma models. NEVER raw Zoho JSON — always the

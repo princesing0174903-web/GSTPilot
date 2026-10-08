@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Provider Interface
+// VEYRO Real GSTN Integration™ — Provider Interface
 //
 // IGSTProvider is the SINGLE contract every GSTN backend must implement.
 // Today we ship two implementations:

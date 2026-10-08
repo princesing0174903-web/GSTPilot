@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Service — Reconciliation Matching Helpers (Pure Functions)
+// VEYRO Banking Service — Reconciliation Matching Helpers (Pure Functions)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Given a banking transaction and a synthetic ledger of invoices / payments /

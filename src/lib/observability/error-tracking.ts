@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Centralized Error Tracking
+// VEYRO™ — Centralized Error Tracking
 //
 // Captures errors + messages to Firestore `error_reports` collection with:
 //   • Per-request breadcrumb buffer (via AsyncLocalStorage on Node, global

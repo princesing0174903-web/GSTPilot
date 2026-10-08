@@ -51,7 +51,7 @@ import { formatCurrency, formatDate } from '@/lib/gst-utils';
 import { StatusPill, PaymentPill, RiskBadge } from './InvoiceStatusPills';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Invoice Table (Premium Enterprise Edition)
+// VEYRO — Invoice Table (Premium Enterprise Edition)
 //
 // Professional data table with:
 //   • Sticky header with sortable columns (Invoice #, Client, GSTIN, Date,

@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Customers → Client
+// VEYRO — Zoho Books Sync · Customers → Client
 //
 // Syncs Zoho Books contacts (type=customer) into the existing `Client` Prisma
-// model. Oracle Memory Engine reads db.client.findMany — so synced Zoho
+// model. VEYRO AI Memory Engine reads db.client.findMany — so synced Zoho
 // customers appear in Oracle's memory snapshot with zero Oracle code changes.
 //
 // Idempotent: each Zoho contact_id is looked up in ZohoEntityMap. If found →

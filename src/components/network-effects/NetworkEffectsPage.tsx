@@ -114,9 +114,9 @@ const pendingInvites = [
 ];
 
 const inviteTemplates = [
-  { name: 'Professional', desc: 'Formal tone for business associates', preview: 'Dear Colleague, I invite you to join GSTPilot — India\'s leading GST compliance platform...' },
-  { name: 'Casual', desc: 'Friendly tone for known contacts', preview: 'Hey! You should check out GSTPilot — it\'s made GST filing so much easier for us...' },
-  { name: 'Follow-up', desc: 'Gentle reminder for pending invites', preview: 'Just a reminder — your GSTPilot invite is waiting! Join 10,000+ CA firms already on the platform...' },
+  { name: 'Professional', desc: 'Formal tone for business associates', preview: 'Dear Colleague, I invite you to join VEYRO — India\'s leading GST compliance platform...' },
+  { name: 'Casual', desc: 'Friendly tone for known contacts', preview: 'Hey! You should check out VEYRO — it\'s made GST filing so much easier for us...' },
+  { name: 'Follow-up', desc: 'Gentle reminder for pending invites', preview: 'Just a reminder — your VEYRO invite is waiting! Join 10,000+ CA firms already on the platform...' },
 ];
 
 const referralHistory = [
@@ -341,7 +341,7 @@ function NetworkOverviewTab() {
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <Globe className="h-5 w-5 text-emerald-600" />
-              Viral Loop — How GSTPilot Grows
+              Viral Loop — How VEYRO Grows
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -491,7 +491,7 @@ function InviteSystemTab() {
     role: 'Client',
     message: '',
   });
-  const [inviteLink] = useState('https://gstpilot.in/invite/CA-SHARMA-2025');
+  const [inviteLink] = useState('https://veyro.com/invite/CA-SHARMA-2025');
   const [copied, setCopied] = useState(false);
   const [inviteSent, setInviteSent] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(0);
@@ -667,7 +667,7 @@ function InviteSystemTab() {
                 </Button>
               </div>
               <p className="text-xs text-slate-400">
-                Share this link with anyone to invite them to GSTPilot
+                Share this link with anyone to invite them to VEYRO
               </p>
             </CardContent>
           </Card>
@@ -682,7 +682,7 @@ function InviteSystemTab() {
               <div className="p-3 bg-white rounded-lg border border-slate-100">
                 <SimulatedQRCode />
               </div>
-              <p className="text-xs text-slate-400">Scan to join GSTPilot</p>
+              <p className="text-xs text-slate-400">Scan to join VEYRO</p>
             </CardContent>
           </Card>
 
@@ -1341,13 +1341,13 @@ function PartnerDashboardTab() {
             {[
               {
                 title: 'Joint Webinars',
-                desc: 'Host GST compliance webinars with GSTPilot branding',
+                desc: 'Host GST compliance webinars with VEYRO branding',
                 icon: '🎥',
                 status: 'Available',
               },
               {
                 title: 'Blog Features',
-                desc: 'Get featured on GSTPilot blog with your firm profile',
+                desc: 'Get featured on VEYRO blog with your firm profile',
                 icon: '📝',
                 status: 'Apply Now',
               },

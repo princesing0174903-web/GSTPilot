@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Real Data Activation Layer
+// VEYRO Infinity™ — Real Data Activation Layer
 // Shared types for GSTN + Bank connection data.
 // ═══════════════════════════════════════════════════════════════════════════════
 

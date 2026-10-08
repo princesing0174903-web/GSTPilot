@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Expense Cloud™ (Prisma-free utils)
+// VEYRO Real Invoice Engine™ — Expense Cloud™ (Prisma-free utils)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pure utility functions extracted out of `./expenses` so client components
 // (InvoiceCloudPage) can render UI without dragging Prisma into their bundle.

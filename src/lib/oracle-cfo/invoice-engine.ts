@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Production Invoice Engine
+// VEYRO AI CFO™ — Production Invoice Engine
 //
 // The REAL invoice creation engine. No simulations. No placeholders.
 // When a CA types "Create an invoice for ABC Pvt Ltd worth ₹50,000 at 18% GST",

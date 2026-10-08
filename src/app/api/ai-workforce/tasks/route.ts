@@ -15,7 +15,7 @@
 // Backed by the 60s cached WorkforceDashboard bundle. The
 // X-Workforce-Open-Tasks header exposes the total open task count.
 //
-// Tagline: GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company.
+// Tagline: VEYRO AI Workforce™ — Don't just use AI. Build an AI Company.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';

@@ -1778,7 +1778,7 @@ export default function GlobalComplianceEngine() {
       {/* Footer note */}
       <div className="flex items-center justify-center gap-2 text-[10px] text-zinc-600 pt-2">
         <ShieldCheck className="h-3 w-3" />
-        <span>GSTPilot Infinity™ Global Compliance Engine — {FILING_DEADLINES.length} tracked filings across 10 jurisdictions</span>
+        <span>VEYRO™ Global Compliance Engine — {FILING_DEADLINES.length} tracked filings across 10 jurisdictions</span>
       </div>
     </div>
   );

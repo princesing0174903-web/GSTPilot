@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Pause API
+// VEYRO Billing™ — Pause API
 // POST /api/billing/pause
 //   Body: { organizationId, subscriptionId, reason? }
 // ═══════════════════════════════════════════════════════════════════════════════

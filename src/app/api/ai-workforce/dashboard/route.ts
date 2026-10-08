@@ -11,7 +11,7 @@
 // X-Workforce-Cache header reports HIT|MISS by comparing the
 // generatedAt timestamp to the last response we sent.
 //
-// Tagline: GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company.
+// Tagline: VEYRO AI Workforce™ — Don't just use AI. Build an AI Company.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';

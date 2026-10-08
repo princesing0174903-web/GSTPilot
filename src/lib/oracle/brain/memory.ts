@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ Brain — Persistent Workspace Memory
+// VEYRO AI™ Brain — Persistent Workspace Memory
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Oracle remembers things about each workspace (org): company name, GST number,

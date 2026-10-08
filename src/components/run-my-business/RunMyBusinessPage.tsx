@@ -1212,7 +1212,7 @@ function OrchestratorModule({
                 className="border-white/10 bg-white/[0.03] text-xs hover:bg-white/[0.06]"
               >
                 <MessageSquare className="mr-1.5 h-3 w-3" />
-                Ask Oracle about this plan
+                Ask VEYRO AI about this plan
               </Button>
             </div>
           </CardContent>
@@ -1678,13 +1678,13 @@ function PersonalityModule({ personality, delay }: { personality: RmbPersonality
 
           <div className="text-center">
             <p className="text-sm font-medium text-foreground">
-              GSTPilot Run My Business<span className="accent-text">™</span>
+              VEYRO Run My Business<span className="accent-text">™</span>
             </p>
             <p className="mt-1 text-[11px] text-muted-foreground">
               Think · Delegate · Execute · Operate.
             </p>
             <p className="mt-2 text-[10px] text-muted-foreground/60">
-              Founded &amp; developed by the GSTPilot team
+              Founded &amp; developed by the VEYRO team
             </p>
           </div>
         </CardContent>
@@ -1895,7 +1895,7 @@ export default function RunMyBusinessPage() {
               </div>
               <div>
                 <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                  GSTPilot Run My Business<span className="accent-text">™</span>
+                  VEYRO Run My Business<span className="accent-text">™</span>
                 </h1>
                 <p className="text-xs text-muted-foreground">
                   Ask Anything · Delegate Everything · Think · Delegate · Execute · Operate.
@@ -1934,7 +1934,7 @@ export default function RunMyBusinessPage() {
               className="border-emerald-500/30 bg-emerald-500/[0.05] text-emerald-300 hover:bg-emerald-500/[0.1]"
             >
               <MessageSquare className="mr-2 h-3.5 w-3.5" />
-              Ask Oracle
+              Ask VEYRO AI
             </Button>
           </div>
         </div>

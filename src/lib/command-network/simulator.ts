@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Command Simulator™
+// VEYRO Infinity™ — Command Simulator™
 //
 // Before executing any command, Oracle simulates:
 //   financial impact, operational impact, compliance impact, legal impact,

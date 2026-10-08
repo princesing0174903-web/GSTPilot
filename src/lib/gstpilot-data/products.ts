@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Products Firestore Service
+// VEYRO™ — Products Firestore Service
 //
 // CRUD + real-time subscription for product documents at:
 //   organizations/{organizationId}/products/{productId}

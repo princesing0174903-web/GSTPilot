@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Shared GSTR-2B Sync Runner (SERVER-ONLY)
+// VEYRO — Shared GSTR-2B Sync Runner (SERVER-ONLY)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The single implementation of "fetch GSTR-2B from the configured provider +

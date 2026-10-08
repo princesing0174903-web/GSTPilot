@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Health API
+// VEYRO Billing™ — Health API
 //
 // GET /api/billing/health?organizationId=...
 //   Returns the org's billing health snapshot.

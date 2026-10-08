@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Client-Safe Firestore Service
+// VEYRO Gmail & WhatsApp Business Automation™ — Client-Safe Firestore Service
 //
 // The single entry point for all communication Firestore operations on the
 // CLIENT side. Mirrors the banking-provider / ai-provider service pattern:

@@ -1,9 +1,9 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Upgrade Phase 1: AI Evolution Panel
+// VEYRO AI™ — Upgrade Phase 1: AI Evolution Panel
 //
-// An overlay panel launched from within the Oracle workspace header (no rail
+// An overlay panel launched from within VEYRO AI workspace header (no rail
 // navigation changes). Surfaces all 10 upgrades:
 //   • Forecasting (30/90/365-day, 8 metrics, confidence)
 //   • Specialist Agents (8 CFO-domain experts + auto-router)
@@ -136,7 +136,7 @@ export function OracleEvolutionPanel({ open, onClose }: Props) {
                   <Sparkles className="h-5 w-5 text-emerald-400" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-white">Oracle AI Evolution</h2>
+                  <h2 className="text-sm font-semibold text-white">VEYRO AI Evolution</h2>
                   <p className="text-[11px] text-white/50">Enterprise AI CFO Capabilities</p>
                 </div>
               </div>

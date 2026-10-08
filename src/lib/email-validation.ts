@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// GSTPilot™ — Real Email & Password Validation Library
+// VEYRO™ — Real Email & Password Validation Library
 // Phase 9A: "the email should be correct and should present in world"
 // ═══════════════════════════════════════════════════════════════════════════
 

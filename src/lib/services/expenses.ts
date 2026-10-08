@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Shared Service Layer: Expenses
+// VEYRO — Shared Service Layer: Expenses
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Canonical create/update/delete logic for expenses. Both /api/expenses and
-// the Oracle createExpense/updateExpense/deleteExpense actions call THESE
+// VEYRO AI createExpense/updateExpense/deleteExpense actions call THESE
 // functions so audit logs, graph events, timeline events, and activity logs
 // fire identically.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Oracle Intelligence Engine™
-// The Financial Brain of India™
+// VEYRO — VEYRO AI Intelligence Engine™
+// The AI Operating System for Business™
 //
-// Canonical type system for the Oracle Intelligence Engine. Every collector,
+// Canonical type system for the VEYRO AI Intelligence Engine. Every collector,
 // analyzer, ranker, and the briefing assembler speaks these types. Adding a
 // new data source means: (1) define its dataset shape below, (2) implement a
 // Collector that returns that shape, (3) register it in the engine. Analyzers

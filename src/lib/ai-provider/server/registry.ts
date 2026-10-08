@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Provider Registry (SERVER-ONLY)
+// VEYRO AI Oracle™ & AI CFO™ — Provider Registry (SERVER-ONLY)
 //
 // The SINGLE switch-point between AI providers. Today returns MockAIProvider;
 // when the `AI_PROVIDER` env var is set to one of the future provider names,

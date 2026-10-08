@@ -37,7 +37,7 @@ import {
 import type { ApiClient } from '@/hooks/useClientsApi';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Invoice Filters (Premium)
+// VEYRO — Invoice Filters (Premium)
 //
 // Search + filter bar with:
 //   • Debounced multi-field search with clear button

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Universal Search Engine
+// VEYRO AI™ — Universal Search Engine
 //
 // Searches across every major business entity in one shot:
 //   • Clients (trade name / GSTIN / legal name)

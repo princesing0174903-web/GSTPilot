@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — In-Memory Rate Limiter (per-process)
+// VEYRO — In-Memory Rate Limiter (per-process)
 //
 // A lightweight sliding-window rate limiter for Next.js API routes. Designed for
 // single-instance sandboxes / preview environments. For multi-instance prod, swap
@@ -160,7 +160,7 @@ export const RATE_LIMIT_PRESETS = {
   auth: { windowMs: 60_000, max: 10 } satisfies RateLimitRule,
   /** OTP verify — very tight: 5 req / minute per user/IP. */
   otp: { windowMs: 60_000, max: 5 } satisfies RateLimitRule,
-  /** Oracle AI endpoints (chat, ask, recommend). 20 req / minute per user. */
+  /** VEYRO AI endpoints (chat, ask, recommend). 20 req / minute per user. */
   oracle: { windowMs: 60_000, max: 20 } satisfies RateLimitRule,
   /** Admin / provisioning mutations. 20 req / minute. */
   admin: { windowMs: 60_000, max: 20 } satisfies RateLimitRule,

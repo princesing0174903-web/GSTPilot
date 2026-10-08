@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Communication Cloud™ — SMS Cloud™ Engine
+// VEYRO Communication Cloud™ — SMS Cloud™ Engine
 // OTP, GST alerts, payment reminders, due-date alerts, collection reminders.
 // Pure TypeScript — importable from both client and server.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -72,7 +72,7 @@ export function generateSmsMessage(
 
   // Fallback inline message
   return {
-    message: `GSTPilot: ${data.message ?? 'You have a new notification.'} Reply STOP to opt out.`,
+    message: `VEYRO: ${data.message ?? 'You have a new notification.'} Reply STOP to opt out.`,
     templateName: null,
   };
 }

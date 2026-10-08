@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — AI App Builder™
+// VEYRO Global AI App Marketplace™ — AI App Builder™
 // Oracle™ can generate apps automatically from natural language.
 // Build CRM Extension · Create Invoice Dashboard · Generate HR Workflow
 // Create AI Employee · Generate Reports · Create Automation · Deploy App · Publish App
@@ -76,7 +76,7 @@ const BUILDER_INTENTS: { pattern: RegExp; appType: AppType; category: AppCategor
   {
     pattern: /deploy.*app|publish.*app|ship.*app/i,
     appType: 'native', category: 'productivity', action: 'deploy_app',
-    description: 'Deploy and publish an app to the GSTPilot marketplace.',
+    description: 'Deploy and publish an app to the VEYRO marketplace.',
     suggestedName: 'Deployed App',
     permissions: ['publish:apps'],
   },
@@ -207,7 +207,7 @@ export async function buildOracleAppPlatformContext(tenantId?: string): Promise<
     const installedList = installs.slice(0, 12).map((i) => `${i.appName} v${i.version} (${i.status})`).join(', ');
     const topApps = analytics.topApps.slice(0, 5).map((a) => `${a.name} (${a.installs} installs)`).join(', ');
 
-    return `## GSTPilot Global AI App Marketplace™ (Ecosystem Platform)
+    return `## VEYRO Global AI App Marketplace™ (Ecosystem Platform)
 You are connected to the Global AI App Marketplace — a platform where developers build, publish, and install AI-powered applications.
 
 ### APP PLATFORM STATE (LIVE)

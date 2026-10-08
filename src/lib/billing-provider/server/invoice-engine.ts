@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Invoice Engine (SERVER-ONLY, pure functions)
+// VEYRO Billing™ — Invoice Engine (SERVER-ONLY, pure functions)
 //
 // Pure functions for invoice generation:
 //   • Invoice number generation (GSTP/{YYYY}/{MM}/{seq:05d})

@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Shared Service Layer: Payments
+// VEYRO — Shared Service Layer: Payments
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Canonical record/refund/markPaid logic for payments. Both /api/payments and
-// the Oracle recordPayment/refundPayment/markInvoicePaid actions call THESE
+// VEYRO AI recordPayment/refundPayment/markInvoicePaid actions call THESE
 // functions so invoice balance recomputation, audit logs, graph events,
 // timeline events, and activity logs fire identically.
 // ═══════════════════════════════════════════════════════════════════════════════

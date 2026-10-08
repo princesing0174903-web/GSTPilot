@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Firestore Data Config
+// VEYRO™ — Firestore Data Config
 //
 // Single source of truth for the Firestore collection paths the
 // Customers / Products / Invoices modules write to.

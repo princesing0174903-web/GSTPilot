@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Invoices View
+// VEYRO™ — Invoices View
 //
 // Real-time invoice list backed by Firestore onSnapshot:
 //   organizations/GSTpilot_SAAS/invoices
@@ -196,7 +196,7 @@ interface InvoiceFormState {
 
 const EMPTY_FORM: InvoiceFormState = {
   customerId: '',
-  sellerName: 'GSTPilot SAAS',
+  sellerName: 'VEYRO SAAS',
   sellerGstin: '',
   sellerAddress: '',
   sellerStateCode: '27', // Maharashtra default

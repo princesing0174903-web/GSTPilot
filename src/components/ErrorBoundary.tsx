@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Root ErrorBoundary
+// VEYRO™ — Root ErrorBoundary
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A top-level React error boundary that wraps <AppRoot/>. Catches ANY uncaught
@@ -110,7 +110,7 @@ export class ErrorBoundary extends Component<
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
         <div className="w-full max-w-xl rounded-2xl border border-white/[0.06] bg-white/[0.02] p-2">
           <PremiumErrorState
-            title="GSTPilot ran into a problem"
+            title="VEYRO ran into a problem"
             description={sanitizeErrorForDisplay(err)}
             onRetry={this.handleRetry}
             retryLabel="Try again"
@@ -121,7 +121,7 @@ export class ErrorBoundary extends Component<
             }}
             oracleSuggestion="If this keeps happening, ask Oracle to diagnose the issue — open the command palette with ⌘K and type 'report error'."
             errorCode={errorCode}
-            supportHref="mailto:support@gstpilot.in"
+            supportHref="mailto:support@veyro.com"
             className="py-10"
           />
           <div className="flex justify-center pb-4">

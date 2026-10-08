@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Command Automation™
+// VEYRO Infinity™ — Command Automation™
 //
 // Automatically launch: workflows, AI reasoning, approvals, notifications,
 // connector sync, compliance checks, payroll, reporting, deployments,

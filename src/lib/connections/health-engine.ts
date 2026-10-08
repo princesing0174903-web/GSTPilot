@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Business Health Score Engine
+// VEYRO Infinity™ — Business Health Score Engine
 //
 // Computes 6 sub-scores + an overall (0-100) Business Health Score from real
 // GSTN + Bank data. The weighting and signals are transparent and explainable.

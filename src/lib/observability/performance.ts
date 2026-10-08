@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Performance Monitoring
+// VEYRO™ — Performance Monitoring
 //
 // Records metrics in an in-memory ring buffer (last 10 000 entries) for
 // near-zero-cost instrumentation of API calls, Firestore reads/writes, and

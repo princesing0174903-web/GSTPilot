@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Refund API
+// VEYRO Billing™ — Refund API
 // POST /api/billing/refund
 //   Body: RefundPaymentInput
 // ═══════════════════════════════════════════════════════════════════════════════

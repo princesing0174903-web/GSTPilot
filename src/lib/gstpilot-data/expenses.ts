@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Expenses Firestore Service
+// VEYRO™ — Expenses Firestore Service
 //
 // CRUD + real-time subscription for expense documents at:
 //   organizations/{organizationId}/expenses/{expenseId}

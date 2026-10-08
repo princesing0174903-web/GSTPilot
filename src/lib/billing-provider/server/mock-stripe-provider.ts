@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Mock Stripe Provider (SERVER-ONLY)
+// VEYRO Billing™ — Mock Stripe Provider (SERVER-ONLY)
 //
 // A deterministic, in-memory simulated Stripe payment gateway. Used as the
 // international-default payment backend so the entire billing flow works

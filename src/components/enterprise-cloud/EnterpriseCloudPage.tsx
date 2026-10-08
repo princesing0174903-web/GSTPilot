@@ -1247,7 +1247,7 @@ function OrgMarketplaceTab() {
       <Card className="bg-white/[0.02] border-white/[0.06]">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2"><Zap className="h-4 w-4 text-amber-400" /> Auto-Connected Engines</CardTitle>
-          <CardDescription className="text-xs text-muted-foreground/60">Installed modules automatically wire into these GSTPilot engines</CardDescription>
+          <CardDescription className="text-xs text-muted-foreground/60">Installed modules automatically wire into these VEYRO engines</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">

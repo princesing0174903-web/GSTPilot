@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — FINANCIAL INTELLIGENCE ORCHESTRATOR
+// VEYRO AI CFO™ Phase 1 — FINANCIAL INTELLIGENCE ORCHESTRATOR
 //
 // Combines all Phase 1 engines into a single FinancialIntelligenceBundle:
 //   • fetchRawCFOData → all connected business data from Prisma
@@ -17,7 +17,7 @@
 // Pure server-side TypeScript. Never throws — on any engine failure, returns
 // a partial bundle with sensible empty states so the API never breaks.
 //
-// Tagline: GSTPilot AI CFO™ — Every business deserves a world-class CFO.
+// Tagline: VEYRO AI CFO™ — Every business deserves a world-class CFO.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type {
@@ -49,7 +49,7 @@ import { computeHealthScore } from './health-score';
 import { computeRecommendations } from './recommendations';
 import { filingDueDate } from './data';
 
-const TAGLINE = 'GSTPilot AI CFO™ — Every business deserves a world-class CFO.';
+const TAGLINE = 'VEYRO AI CFO™ — Every business deserves a world-class CFO.';
 
 // ─── GST Position (computed inline — small enough to not warrant its own file) ─
 function computeGSTPosition(data: RawCFOData): GSTPositionAnalytics {

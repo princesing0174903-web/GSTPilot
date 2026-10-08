@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Live Command Observability™
+// VEYRO Infinity™ — Live Command Observability™
 //
 // Monitor every command-network target from one screen:
 //   organizations, departments, countries, workers, queues, connectors,

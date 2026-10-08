@@ -18,7 +18,7 @@ import { formatCurrency, formatNumber } from '@/lib/gst-utils';
 import type { ApiInvoice } from '@/hooks/useInvoicesApi';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Invoice KPI Cards (Premium)
+// VEYRO — Invoice KPI Cards (Premium)
 //
 // 7 KPI cards: Total Invoices, Paid, Pending, Overdue, Total Value,
 // Outstanding, Avg Invoice Value. Each card has icon, trend, subtitle,

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Provider Interface
+// VEYRO AI Production Pipeline™ — Provider Interface
 //
 // IGenProvider is the SINGLE contract every AI backend must implement.
 // Today we ship two implementations:

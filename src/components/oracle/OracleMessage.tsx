@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Message Renderer (Phase 2 — Oracle Intelligence™)
+// VEYRO AI™ — Message Renderer (Phase 2 — VEYRO AI Intelligence™)
 //
 // Renders a single Oracle message as a CFO-grade strategic brief:
 //   1. Key Insight          (top, bold, accent bar — the headline)

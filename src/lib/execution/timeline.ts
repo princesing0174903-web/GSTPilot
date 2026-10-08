@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Execution Engine™ — MODULE 7: Execution Timeline™
+// VEYRO Execution Engine™ — MODULE 7: Execution Timeline™
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // ═══════════════════════════════════════════════════════════════════════════════
 // The 09:02 / 09:07 / 09:12 / 09:14 / 09:17 style single-day activity stream.
 // Stitched from ExecutionTask[] + the 6 pipeline stages so an Oracle / dashboard
-// can render "what GSTPilot did today" as a chronological narrative.
+// can render "what VEYRO did today" as a chronological narrative.
 //
 // Stages:
 //   observe → think → decide → execute → confirm → learn

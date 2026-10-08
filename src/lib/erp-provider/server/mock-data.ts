@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Shared Mock Data Generator
+// VEYRO ERP & Accounting Integrations™ — Shared Mock Data Generator
 //
 // Deterministic realistic Indian business data shared by all four Mock ERP
 // providers (Tally, Zoho Books, Busy, QuickBooks). Seeded by company name so

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Deadlines Analyzer
+// VEYRO AI Intelligence Engine — Deadlines Analyzer
 //
 // Merges deadline signals from multiple sources:
 //   • GST notice response dates

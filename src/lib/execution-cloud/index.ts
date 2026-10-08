@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Enterprise Execution Cloud™ (MISSION CONTROL)
+// VEYRO Infinity™ — Enterprise Execution Cloud™ (MISSION CONTROL)
 // Public barrel. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════
 export * from './types';

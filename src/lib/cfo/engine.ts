@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ — Core Engine
+// VEYRO AI CFO™ — Core Engine
 // Phase 3: The brain that turns business data into CFO intelligence.
 //
 // Combines:

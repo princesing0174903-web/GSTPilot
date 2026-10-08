@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Public GSTIN Verification API
+// VEYRO Real GSTN Integration™ — Public GSTIN Verification API
 //
 // POST /api/gstn/verify-gstin
 //   Body: { organizationId, gstin }

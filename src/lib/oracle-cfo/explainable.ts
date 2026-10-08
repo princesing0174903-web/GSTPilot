@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Explainable AI Layer
+// VEYRO AI CFO™ — Explainable AI Layer
 //
 // Structures every answer with the 6 mandatory explainability fields:
 //   1. WHY            — the core reasoning (1-2 sentences)
@@ -143,7 +143,7 @@ export function generateAlternatives(
 
   if (alts.length === 0) {
     alts.push({
-      option: 'Ask Oracle for a more specific analysis',
+      option: 'Ask VEYRO AI for a more specific analysis',
       tradeOff: 'More targeted question yields a more actionable recommendation.',
     });
   }

@@ -1,9 +1,9 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useInvoices() Hook
+// VEYRO — useInvoices() Hook
 //
-// The single hook every GSTPilot component uses to:
+// The single hook every VEYRO component uses to:
 //   • LIST invoices for the current organization (real-time, org-scoped)
 //   • CREATE a new invoice (server-calculated totals + atomic numbering)
 //   • UPDATE an invoice (re-calculated totals)

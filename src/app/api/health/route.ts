@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — /api/health — Public Lightweight Health Probe
+// VEYRO™ — /api/health — Public Lightweight Health Probe
 //
 // GET /api/health
 //   Public (no auth) — designed for uptime monitors (UptimeRobot, Pingdom,

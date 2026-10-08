@@ -1,4 +1,4 @@
-/** GSTPilot Global Integration Marketplace™ — service layer barrel. */
+/** VEYRO Global Integration Marketplace™ — service layer barrel. */
 export * from './types'
 export * from './catalog'
 export * from './registry'

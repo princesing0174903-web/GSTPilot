@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Premium Empty State
+// VEYRO Infinity™ — Premium Empty State
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A large, premium empty state with:
@@ -21,7 +21,7 @@
 //     description="Create your first invoice to start tracking payments and GST."
 //     primaryAction={{ label: "Create Invoice", onClick: () => setView('invoices-new') }}
 //     secondaryAction={{ label: "Import from Zoho", onClick: () => setView('zoho') }}
-//     oracleSuggestion="Ask Oracle to draft your first invoice from last month's sales data."
+//     oracleSuggestion="Ask VEYRO AI to draft your first invoice from last month's sales data."
 //     quickTips={["Use ⌘K to quickly navigate", "Connect Zoho to auto-import invoices"]}
 //   />
 // ═══════════════════════════════════════════════════════════════════════════════

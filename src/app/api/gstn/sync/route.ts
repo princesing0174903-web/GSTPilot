@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Sync API
+// VEYRO Real GSTN Integration™ — Sync API
 //
 // POST /api/gstn/sync
 //   Body: {

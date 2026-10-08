@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Shared Service Layer: Invoices
+// VEYRO — Shared Service Layer: Invoices
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Canonical create/update/delete/duplicate/send logic for invoices. Both
-// /api/invoices and the Oracle createInvoice/updateInvoice/deleteInvoice/
+// /api/invoices and VEYRO AI createInvoice/updateInvoice/deleteInvoice/
 // duplicateInvoice/sendInvoice actions call THESE functions so audit logs,
 // graph events, timeline events, and activity logs fire identically.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -455,7 +455,7 @@ export async function duplicateInvoice(
  * integration status before claiming the message was delivered. Never report
  * "sent" to the user unless the communication provider confirmed success.
  *
- * The Oracle sendInvoice action uses this.
+ * VEYRO AI sendInvoice action uses this.
  */
 export async function sendInvoice(
   orgId: string,

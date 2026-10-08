@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Role-Based Access Control (RBAC) Permission Matrix
+// VEYRO — Role-Based Access Control (RBAC) Permission Matrix
 //
 // A single source of truth for what each role can do. Pure functions — no
 // React, no Firestore. Safe to import from client, server, or rules tooling.

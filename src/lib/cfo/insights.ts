@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ — Module 11: Smart CFO Insights (Phase 3)
+// VEYRO AI CFO™ — Module 11: Smart CFO Insights (Phase 3)
 //
 // Surfaces the most important CFO takeaways from the live engine:
 //   • topRisks         — highest-severity risks + critical analysis conditions

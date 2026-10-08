@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Provider Diagnostics API
+// VEYRO Billing™ — Provider Diagnostics API
 //
 // GET /api/billing/provider
 //   Returns: { ok: true, name, provider, isLive, mode, healthy, cryptoOk }

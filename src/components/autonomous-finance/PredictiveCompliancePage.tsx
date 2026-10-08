@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Predictive Compliance Page (Phase Delta · 5)
+// VEYRO — Predictive Compliance Page (Phase Delta · 5)
 // AI forecasts of compliance risks, weeks before deadlines.
 // ═══════════════════════════════════════════════════════════════════════════════
 

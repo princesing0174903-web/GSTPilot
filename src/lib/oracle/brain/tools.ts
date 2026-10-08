@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ Brain — Tool Registry
+// VEYRO AI™ Brain — Tool Registry
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The tools Oracle can call to read real business data and take real actions.
@@ -1782,7 +1782,7 @@ const NAVIGATE_VIEWS: Record<string, string> = {
 const navigateTool: OracleTool = {
   name: 'navigate',
   description:
-    'Navigate the user to a specific page/section of GSTPilot. Use this when the user says "open invoices", "go to customers", "show reports", "open banking", "open banking intelligence", "take me to settings", etc. The user stays in the conversation — they can continue chatting after navigating. Valid targets: dashboard, invoices, clients (customers), returns (GST), banking, banking-intelligence, expenses, payments, reports (analytics), crm (leads), documents, timeline (activity), team, settings, notifications, tasks, vendors, reconcile, inventory (products), oracle.',
+    'Navigate the user to a specific page/section of VEYRO. Use this when the user says "open invoices", "go to customers", "show reports", "open banking", "open banking intelligence", "take me to settings", etc. The user stays in the conversation — they can continue chatting after navigating. Valid targets: dashboard, invoices, clients (customers), returns (GST), banking, banking-intelligence, expenses, payments, reports (analytics), crm (leads), documents, timeline (activity), team, settings, notifications, tasks, vendors, reconcile, inventory (products), oracle.',
   category: 'action',
   argsSchema: {
     view: { type: 'string', required: true, description: 'The page to open: dashboard, invoices, clients, returns, banking, banking-intelligence, expenses, payments, reports, crm, documents, timeline, team, settings, notifications, tasks, vendors, reconcile, inventory, oracle' },

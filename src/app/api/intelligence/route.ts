@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Intelligence™ — V16 Oracle API
+// VEYRO Intelligence™ — V16 Oracle API
 // Backend: z-ai-web-dev-sdk LLM with live Firestore data context
 // Returns Perplexity-style structured response:
 //   { answer, insights[], sources[], actions[], suggestedPrompts[], intent, thinkingSteps[] }
@@ -181,7 +181,7 @@ async function generateLLMAnswer(
   const ZAI = (await import('z-ai-web-dev-sdk')).default
   const zai = await ZAI.create()
 
-  const systemPrompt = `You are GSTPilot Intelligence™ — the AI Brain of the user's Indian CA firm / business.
+  const systemPrompt = `You are VEYRO Intelligence™ — the AI Brain of the user's Indian CA firm / business.
 
 You have LIVE access to the firm's Firestore data (clients, invoices, returns, payments, notifications, activities). The current data snapshot is provided below as "Live Business Context".
 

@@ -15,7 +15,7 @@
 // a partial bundle with empty states so the API never breaks. Every value
 // comes from REAL connected business data.
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { fetchWorkforceData } from './data';

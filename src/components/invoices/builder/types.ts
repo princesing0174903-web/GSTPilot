@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Invoice Builder · Shared Types
+// VEYRO™ — Invoice Builder · Shared Types
 //
 // Single source of truth for all types used by the rebuilt InvoiceBuilder.
 // Kept 1:1 compatible with the original InvoiceBuilder.tsx prop interface so

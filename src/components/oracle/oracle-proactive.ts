@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Proactive Engine (Phase 3 — Agent Engine™)
+// VEYRO AI™ — Proactive Engine (Phase 3 — Agent Engine™)
 //
 // Oracle pushes intelligent notifications based on business memory — due dates,
 // cash warnings, client behaviour signals, compliance drift. Like a real CFO

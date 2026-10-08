@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Activation API
+// VEYRO AI™ — Activation API
 // POST /api/oracle/activate
 //
 // Production backend workflow that runs when the user completes the 4-step
@@ -552,7 +552,7 @@ function generateRecommendationsFromSnapshot(s: BusinessSnapshot): GeneratedReco
       type: 'all_good',
       title: 'Your business is in good shape',
       description: `Health score ${s.healthScore}/100, collection rate ${(s.collectionRate * 100).toFixed(0)}%, no overdue returns. Keep monitoring your cash flow and margins.`,
-      actionLabel: 'Ask Oracle for insights',
+      actionLabel: 'Ask VEYRO AI for insights',
       priority: 'low',
       actionView: 'ai-business-copilot',
     });
@@ -661,7 +661,7 @@ export async function POST(req: NextRequest) {
         activatedAt: nowIso,
         activatedBy: decodedUid,
         // Snapshot summary persisted on the org doc for quick gating (the full
-        // snapshot lives in the oracle/activation subcollection doc below).
+        // snapshot lives in VEYRO AI/activation subcollection doc below).
         summary: {
           healthScore: scores.healthScore,
           riskScore: scores.riskScore,
@@ -679,7 +679,7 @@ export async function POST(req: NextRequest) {
       { merge: true },
     );
 
-    // ── 6b. Create/update the Oracle activation document (audit record) ──
+    // ── 6b. Create/update VEYRO AI activation document (audit record) ──
     // Path: organizations/{orgId}/oracle/activation
     // This is the persistent "Oracle state" document. Every page reads from
     // the Business Snapshot API for live numbers, but this doc is the

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — MockWhatsAppProvider (SERVER-ONLY)
+// VEYRO Gmail & WhatsApp Business Automation™ — MockWhatsAppProvider (SERVER-ONLY)
 //
 // The default WhatsApp Business provider. Produces DETERMINISTIC, realistic
 // message data seeded by the phone number — the same number always returns the

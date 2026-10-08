@@ -1,6 +1,6 @@
 'use client';
 
-// Oracle-specific error boundary. If anything in the Oracle route throws during
+// Oracle-specific error boundary. If anything in VEYRO AI route throws during
 // render, the user sees an on-brand retry screen instead of a blank page. This
 // is additive (only affects /oracle) — the global app error boundary is left
 // untouched.

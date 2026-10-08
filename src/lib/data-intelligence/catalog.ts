@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™
+// VEYRO Infinity™ — Global Data Intelligence Cloud™
 // Subsystem 1+2: Universal Data Catalog™ + Enterprise Data Fabric™
 // ═══════════════════════════════════════════════════════════════════════════════
 //

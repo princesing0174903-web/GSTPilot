@@ -88,7 +88,7 @@ function buildContextBlock(s: BusinessSnapshot): string {
 - Zoho Books synced entities: ${s.perEntity.zohoCustomers} customers, ${s.perEntity.zohoVendors} vendors, ${s.perEntity.zohoInvoices} invoices, ${s.perEntity.zohoBills} bills, ${s.perEntity.zohoBankAccounts} bank accounts.`
 }
 
-const BASE_INSTRUCTIONS = `You are the AI CFO inside GSTPilot FinOS. You produce sharp, decision-grade financial analyses for the CEO/CFO.
+const BASE_INSTRUCTIONS = `You are the AI CFO inside VEYRO FinOS. You produce sharp, decision-grade financial analyses for the CEO/CFO.
 
 Use ONLY the data provided below. If data is missing, say so — do NOT fabricate.
 

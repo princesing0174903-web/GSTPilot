@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Forecasting — Pure formatting helpers (Prisma-free)
+// VEYRO AI™ — Forecasting — Pure formatting helpers (Prisma-free)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pure currency formatter extracted out of `./forecasting` so client
 // components can format forecast values without dragging Prisma into their

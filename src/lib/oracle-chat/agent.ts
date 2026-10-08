@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ORACLE CHAT — Agent Orchestrator (Financial CEO)
 // ═══════════════════════════════════════════════════════════════════════════════
-// The Oracle agent. Pipeline:
+// VEYRO AI agent. Pipeline:
 //   1. Ensure a DB session exists (create if missing) — REAL database memory
 //   2. Load conversation history from DB (not just client-passed)
 //   3. Recall durable semantic memory (OracleMemory) for context
@@ -664,7 +664,7 @@ Confidence: 100%
     callbacks.onEvent({ type: 'insights', insights });
   }
 
-  // 12. Persist the oracle message to OracleAIMessage (real database memory)
+  // 12. Persist VEYRO AI message to OracleAIMessage (real database memory)
   const oracleMsgId = await persistOracleMessage(conversationId, {
     content: fullContent,
     executiveSummary: parsed.executiveSummary,

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Central Gemini AI Service
+// VEYRO AI™ — Central Gemini AI Service
 //
 // ONE entry point for every Oracle feature. Uses Gemini 2.5 Flash via the
 // official @google/genai SDK. Loads GEMINI_API_KEY from process.env — NEVER
@@ -138,7 +138,7 @@ export const NO_DATA_ANSWER =
 
 function buildSystemPrompt(ctx: OracleContext): string {
   return [
-    'You are GSTPilot Oracle™ — an enterprise AI CFO for Indian SMEs.',
+    'You are VEYRO AI™ — an enterprise AI CFO for Indian SMEs.',
     '',
     'HARD RULES (never break):',
     '1. Answer ONLY from the Business Context provided below.',

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Provider Interface
+// VEYRO ERP & Accounting Integrations™ — Provider Interface
 //
 // IERPProvider is the SINGLE contract every ERP / accounting backend implements.
 // Today we ship five implementations per ERP:

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Token Encryption (SERVER-ONLY)
+// VEYRO Real GSTN Integration™ — Token Encryption (SERVER-ONLY)
 //
 // AES-256-GCM authenticated encryption for GST session tokens.
 //

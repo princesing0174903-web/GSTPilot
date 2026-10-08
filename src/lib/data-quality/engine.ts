@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Data Quality Engine™
+// VEYRO Data Quality Engine™
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Runs REAL quality checks on connected data:

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — React API Hook (TASK 12)
+// VEYRO Banking Module™ — React API Hook (TASK 12)
 //
 // The single client-side entry point for all banking data. Mirrors the
 // useInvoicesApi pattern: typed fetch wrappers with loading/error states.

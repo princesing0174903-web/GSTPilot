@@ -153,7 +153,7 @@ During our GSTR-2B reconciliation for the period ${run.period}, we noticed the f
 Please review your GSTR-1 filing for this invoice and amend if necessary. We are unable to claim input tax credit until this is resolved.
 
 Regards,
-GSTPilot Reconciliation Team`;
+VEYRO Reconciliation Team`;
           return { matchId: m.id, supplier, invoiceNo: invNo, subject, body };
         });
         return NextResponse.json({ ok: true, action, affected: matches.length, emailDrafts: drafts });

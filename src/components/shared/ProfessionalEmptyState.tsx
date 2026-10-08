@@ -9,7 +9,7 @@ import type { LucideIcon } from 'lucide-react';
  * ProfessionalEmptyState — premium onboarding empty state.
  *
  * Renders a centered icon inside a circular gradient badge (accent-tinted),
- * a headline, supporting copy, and up to two CTAs. Built for the GSTPilot
+ * a headline, supporting copy, and up to two CTAs. Built for the VEYRO
  * enterprise dark theme: blue (#2563EB) accent, pure black surfaces.
  *
  * Animation uses a slow ease-out curve for a confident, premium entrance.

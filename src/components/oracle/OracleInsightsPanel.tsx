@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Insights Panel (Phase 2 — Oracle Intelligence™)
+// VEYRO AI™ — Insights Panel (Phase 2 — VEYRO AI Intelligence™)
 //
 // A live, always-on strategic signal panel. Shows 5 insights derived from
 // the live Business Memory:

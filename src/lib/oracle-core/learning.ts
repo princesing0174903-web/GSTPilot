@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Self-Improvement Engine™
+// VEYRO AI Intelligence Core™ — Self-Improvement Engine™
 // Oracle learns from accepted/rejected recommendations, successful/failed
 // automations, revenue growth, customer behavior, collections, expenses, and
 // compliance. Every lesson is weighted, applied, and reinforced or decayed.
@@ -83,7 +83,7 @@ export interface LearningStats {
   topLessons: LearningRecord[];
 }
 
-/** Aggregate learning statistics for the Oracle dashboard. */
+/** Aggregate learning statistics for VEYRO AI dashboard. */
 export async function getLearningStats(): Promise<LearningStats> {
   const firmId = FIRM_ID;
   const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);

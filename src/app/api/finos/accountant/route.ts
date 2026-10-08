@@ -70,7 +70,7 @@ Indian accounting references:
 - Use ₹, Lakhs, Crores formatting.`
 }
 
-const BASE_INSTRUCTIONS = `You are the AI Accountant inside GSTPilot FinOS.
+const BASE_INSTRUCTIONS = `You are the AI Accountant inside VEYRO FinOS.
 
 Your role:
 - Classify transactions into Indian accounting heads (Ind AS / Schedule III).

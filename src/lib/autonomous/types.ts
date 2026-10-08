@@ -5,7 +5,7 @@
 // recommend — it plans, decides, executes, monitors, learns & continuously
 // improves every business operation from REAL connected data.
 //
-// Tagline: GSTPilot Infinity™ — Think. Decide. Execute. Learn. Grow.
+// Tagline: VEYRO Infinity™ — Think. Decide. Execute. Learn. Grow.
 //
 // Pure server-side TypeScript. No mock values. No placeholders. Every value
 // flows from REAL connected business data via AI CFO Phase 1, Digital Twin,
@@ -13,10 +13,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const AUTONOMOUS_TAGLINE =
-  'GSTPilot Infinity™ — The World\'s First Autonomous Enterprise Operating System.';
+  'VEYRO Infinity™ — The World\'s First Autonomous Enterprise Operating System.';
 export const AUTONOMOUS_SUBTAGLINE = 'Think. Decide. Execute. Learn. Grow.';
 export const AUTONOMOUS_FOUNDER =
-  'GSTPilot Oracle™ was founded, developed and owned by Prince Singh.';
+  'VEYRO AI™ was founded, developed and owned by Prince Singh.';
 
 // ─── 1. NINE AI EXECUTIVES ───────────────────────────────────────────────────
 

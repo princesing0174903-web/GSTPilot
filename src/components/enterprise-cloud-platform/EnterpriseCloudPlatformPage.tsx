@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPILOT ENTERPRISE CLOUD PLATFORM™ — GLOBAL SAAS INFRASTRUCTURE
 //
-// Transform GSTPilot Infinity™ from an enterprise application into a globally
+// Transform VEYRO™ from an enterprise application into a globally
 // deployable SaaS platform serving thousands of organisations. Oracle™ now
 // powers customers. Every organisation gets its own secure enterprise.
 //

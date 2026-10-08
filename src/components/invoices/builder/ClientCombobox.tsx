@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Invoice Builder · Client Combobox
+// VEYRO™ — Invoice Builder · Client Combobox
 //
 // Searchable client picker (Popover + Command). Premium h-12 trigger, large
 // list rows, health-pill, GSTIN-verified badge, and an inline "Add new client"

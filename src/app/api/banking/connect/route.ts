@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Connect API
+// VEYRO Real Banking Foundation™ — Connect API
 //
 // POST /api/banking/connect
 //   Body: { organizationId, provider?, accountHolder, bankName, accountNumber,

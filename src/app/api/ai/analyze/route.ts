@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Analyze API
+// VEYRO AI Oracle™ & AI CFO™ — Analyze API
 //
 // POST /api/ai/analyze
 //   Body: { organizationId, module?: 'business' | 'cashflow' | 'gst' | 'invoices' | 'expenses' }

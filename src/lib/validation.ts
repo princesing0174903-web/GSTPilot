@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Shared Zod Schemas + Validation Helpers
+// VEYRO — Shared Zod Schemas + Validation Helpers
 //
 // Centralised zod schemas for the most-used API routes so we don't redefine
 // them per file. Plus a `parseBody` helper that converts a zod failure into a

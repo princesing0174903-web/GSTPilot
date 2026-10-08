@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Setu AA Provider (SERVER-ONLY, REAL)
+// VEYRO Real Banking Foundation™ — Setu AA Provider (SERVER-ONLY, REAL)
 //
 // Implements the FULL `IBankProvider` contract against the live Setu Account
 // Aggregator gateway. Uses the existing Setu SDK (`src/lib/setu/*`) — no second

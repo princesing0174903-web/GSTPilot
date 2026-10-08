@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Service Layer
+// VEYRO Real Invoice Engine™ — Service Layer
 //
 // The single entry point for all invoice operations. Every function is:
 //   • Multi-tenant — filters on `organizationId`, never crosses org boundaries

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Enterprise Command Analytics™
+// VEYRO Infinity™ — Enterprise Command Analytics™
 //
 // Generate command-network analytics:
 //   decision speed, execution efficiency, department productivity,

@@ -12,7 +12,7 @@
 //   • One-liner focus for the day
 //
 // Every value flows from REAL connected data (CFO Phase 1 + Digital Twin).
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { DailyCEOBrief, BriefMetrics, BriefRiskItem, BriefPriority, BriefCollection, BriefGSTDeadline, BriefBankPosition, BriefUpcomingExpense, BriefPayrollStatus, BriefRecommendation, BriefMeeting } from './types';

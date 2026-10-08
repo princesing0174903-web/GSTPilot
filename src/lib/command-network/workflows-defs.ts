@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Command Network Workflow Definitions (Prisma-free)
+// VEYRO Infinity™ — Command Network Workflow Definitions (Prisma-free)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pure static workflow template definitions extracted from workflows.ts so
 // client components can import them WITHOUT pulling @prisma/client into the bundle.

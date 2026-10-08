@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Invoice Builder · Shared UI primitives
+// VEYRO™ — Invoice Builder · Shared UI primitives
 //
 // Premium-grade primitives consumed by every panel of the rebuilt Invoice
 // Builder. All inputs are LARGE (h-12 / 48px), all surfaces use the gst-card

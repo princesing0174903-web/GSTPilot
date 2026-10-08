@@ -2,7 +2,7 @@
 import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — useAIInsights() Hook
+// VEYRO AI Oracle™ & AI CFO™ — useAIInsights() Hook
 //
 // Real-time subscription to AI-generated insights for the current organization.
 // Insights are persisted in the `ai_memory` Firestore collection with

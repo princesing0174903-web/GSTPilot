@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const TWIN_TAGLINE =
-  'GSTPilot Digital Twin™ — Remember Everything. Understand Everything. Simulate Everything. Predict Everything.';
+  'VEYRO Digital Twin™ — Remember Everything. Understand Everything. Simulate Everything. Predict Everything.';
 const CACHE_TTL_MS = 120_000;
 
 let cachedForecast: { data: TwinForecast; ts: number } | null = null;

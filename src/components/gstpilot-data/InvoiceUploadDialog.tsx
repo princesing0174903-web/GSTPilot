@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Phase 3: Invoice Upload & AI Extraction Dialog
+// VEYRO™ — Phase 3: Invoice Upload & AI Extraction Dialog
 //
 // Multi-step pipeline:
 //   1. Select file (PDF/JPG/JPEG/PNG, ≤20 MB) + validate

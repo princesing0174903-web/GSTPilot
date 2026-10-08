@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Type System
+// VEYRO AI Intelligence Core™ — Type System
 // One Brain. Every Decision. Entire Enterprise.
 // ═══════════════════════════════════════════════════════════════════════════════
 

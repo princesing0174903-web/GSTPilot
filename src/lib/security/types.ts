@@ -1,11 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Enterprise Security Layer: Type System
+// VEYRO — Enterprise Security Layer: Type System
 //
 // Phase 11 security infrastructure. Pure types — no runtime, no React, no
 // Firestore. Safe to import from client, server, or Edge middleware.
 //
 // This module is the single source of truth for the security-layer vocabulary:
-//   • OrgRole        — the five formal roles in a GSTPilot organization
+//   • OrgRole        — the five formal roles in a VEYRO organization
 //   • Permission     — the eight coarse-grained actions the engine reasons about
 //   • Resource       — the fourteen resource domains the engine protects
 //   • PermissionMatrix — the role × resource × permission decision table
@@ -117,7 +117,7 @@ export interface SecurityContext {
   /** The org's subscription status. `none` if no subscription record exists. */
   subscriptionStatus: SubscriptionStatus;
   /**
-   * `true` if the caller is a GSTPilot staff super-admin (identified by an
+   * `true` if the caller is a VEYRO staff super-admin (identified by an
    * allow-listed email / custom claim). Super-admins bypass RBAC entirely.
    */
   isSuperAdmin: boolean;

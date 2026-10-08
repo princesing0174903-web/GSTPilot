@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Integration Marketplace™ — Event Bus™
+// VEYRO Global Integration Marketplace™ — Event Bus™
 // Publish events from every connector. AI CEO™, AI Workforce™, Automation™,
 // and Oracle™ consume these events automatically.
 // ═══════════════════════════════════════════════════════════════════════════════

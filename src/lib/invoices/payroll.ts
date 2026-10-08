@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Payroll Cloud™
+// VEYRO Real Invoice Engine™ — Payroll Cloud™
 // Indian salary breakdown, TDS estimation, payslip generation. Pure TypeScript.
 // ═══════════════════════════════════════════════════════════════════════════════
 

@@ -161,7 +161,7 @@ const CANONICAL_OPPORTUNITIES: OpportunitySeed[] = [
     type: 'partnership',
     title: 'Co-sell with Infosys on mid-market ERP rollouts',
     description:
-      'Joint GTM motion — Infosys implementation + GSTPilot tax/compliance layer; 60+ shared accounts identified',
+      'Joint GTM motion — Infosys implementation + VEYRO tax/compliance layer; 60+ shared accounts identified',
     potentialValue: 4500000,
     probability: 55,
     source: 'network',

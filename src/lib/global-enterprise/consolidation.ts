@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO Infinity™ — Global Enterprise Operating System™
 // Global Consolidation Engine™ — Consolidates revenue/expense/profit/tax/payroll/
 // cashflow/assets/liabilities across every entity × country × currency with FX conversion.
 // Founder & Owner: Prince Singh. Built on REAL production business data.
@@ -155,7 +155,7 @@ export async function upsertConsolidationEntry(input: {
 }
 
 // ─── Extract REAL metrics from Prisma for an entity ──────────────────────────
-// Entities map to Clients (GSTPilot treats each Client as a business entity).
+// Entities map to Clients (VEYRO treats each Client as a business entity).
 // We derive entity financials from real Client + Invoice + Expense + Payroll data.
 
 export interface EntityRealMetrics {
@@ -172,7 +172,7 @@ export interface EntityRealMetrics {
 
 /**
  * Extract real financial metrics for an entity from Prisma.
- * Maps the GSTPilot Client (which represents a real business entity) to financials.
+ * Maps the VEYRO Client (which represents a real business entity) to financials.
  * Uses the entity's taxId or registrationNo to match against Client.gstin or tradeName.
  */
 export async function extractEntityMetrics(entityId: string, period: string): Promise<EntityRealMetrics> {

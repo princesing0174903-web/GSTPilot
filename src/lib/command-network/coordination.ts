@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Cross-Module Coordination™
+// VEYRO Infinity™ — Cross-Module Coordination™
 //
 // Automatically coordinate every department through Oracle:
 //   CRM · Sales · Marketing · Finance · GST · Payroll · Banking · HR · Projects ·

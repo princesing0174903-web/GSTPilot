@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Expenses View
+// VEYRO™ — Expenses View
 //
 // Real-time expense list backed by Firestore onSnapshot:
 //   organizations/GSTpilot_SAAS/expenses

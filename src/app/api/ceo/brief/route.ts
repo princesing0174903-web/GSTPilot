@@ -9,7 +9,7 @@
 //
 // Returns { brief: DailyCEOBrief | null, tagline } — null when no live data.
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';

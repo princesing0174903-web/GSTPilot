@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Typed Errors
+// VEYRO Gmail & WhatsApp Business Automation™ — Typed Errors
 //
 // Every failure mode in the communication flow has a dedicated error class so
 // callers can branch on `instanceof` and show the right UX (retry vs re-auth vs

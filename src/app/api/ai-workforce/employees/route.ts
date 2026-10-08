@@ -10,7 +10,7 @@
 // X-Workforce-Employee-Count header exposes the total headcount for quick
 // client-side checks.
 //
-// Tagline: GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company.
+// Tagline: VEYRO AI Workforce™ — Don't just use AI. Build an AI Company.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';

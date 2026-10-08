@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Barrel Export (CLIENT-SAFE)
+// VEYRO AI Oracle™ & AI CFO™ — Barrel Export (CLIENT-SAFE)
 //
 // The single import surface for AI functionality. This file is CLIENT-SAFE —
 // it only re-exports types, errors, the provider interface, the pure engines,

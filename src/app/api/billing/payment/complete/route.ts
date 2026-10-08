@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Complete Payment API
+// VEYRO Billing™ — Complete Payment API
 // POST /api/billing/payment/complete
 //   Body: { organizationId, orderId, paymentId, signature? }
 // ═══════════════════════════════════════════════════════════════════════════════

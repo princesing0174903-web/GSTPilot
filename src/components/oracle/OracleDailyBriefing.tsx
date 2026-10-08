@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — OracleDailyBriefing
+// VEYRO — OracleDailyBriefing
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The single most important card on the dashboard. Oracle wakes up with
@@ -10,7 +10,7 @@
 //
 // Layout (single full-width card, premium glass surface, amber-tinted border):
 //
-//   ┌─ Oracle AI   [Built-in · Live]            [mood badge] [Open →] ─┐
+//   ┌─ VEYRO AI   [Built-in · Live]            [mood badge] [Open →] ─┐
 //   │                                                                │
 //   │  "I've done 3 tasks — 2 need your sign-off"                    │
 //   │   Review and approve to keep the workflow moving.              │
@@ -222,7 +222,7 @@ function BriefingEmpty({ onOpenOracle }: BriefingEmptyProps) {
 
         <div className="flex-1 pt-0.5">
           <div className="flex items-center gap-2">
-            <h2 className="text-[15px] font-semibold text-white">Oracle AI</h2>
+            <h2 className="text-[15px] font-semibold text-white">VEYRO AI</h2>
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
               <span className="h-1 w-1 animate-pulse rounded-full bg-emerald-400" />
               Built-in
@@ -500,7 +500,7 @@ function OracleDailyBriefingImpl({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <h2 className="truncate text-[15px] font-semibold text-white">
-                Oracle AI
+                VEYRO AI
               </h2>
               {/* Built-in live pulse badge */}
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">

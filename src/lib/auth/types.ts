@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Multi-Tenant Auth & Organization Type System
+// VEYRO — Multi-Tenant Auth & Organization Type System
 //
 // Production-grade type definitions for the multi-tenant SaaS architecture.
 // Every user belongs to exactly one active organization. Every Firestore

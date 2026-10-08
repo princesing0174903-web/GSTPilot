@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Account Detail API (TASK 12)
+// VEYRO Banking Module™ — Account Detail API (TASK 12)
 //
 // GET    /api/banking/accounts/:id?organizationId=...   → getAccount(id, orgId)
 // PATCH  /api/banking/accounts/:id                       → updateAccount(id, orgId, body, uid)

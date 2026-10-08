@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Typed Errors
+// VEYRO AI Production Pipeline™ — Typed Errors
 //
 // Every failure mode in the AI pipeline has a dedicated error class so callers
 // can branch on `instanceof` and show the right UX (retry vs re-auth vs

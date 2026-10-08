@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ — Report Generation Engine (Phase 3, Module 13)
+// VEYRO AI CFO™ — Report Generation Engine (Phase 3, Module 13)
 // Generates 10 professional CFO report types:
 //   1. Executive Summary     6. Risk Report
 //   2. Financial Report      7. Board Report
@@ -123,7 +123,7 @@ function buildSections(
       title: 'No Business Data Connected',
       narrative: [
         'This report requires connected business data to generate meaningful insights.',
-        'Once you add clients, invoices, expenses, and GST filings, GSTPilot Oracle™ will automatically populate this report with live financial intelligence.',
+        'Once you add clients, invoices, expenses, and GST filings, VEYRO AI™ will automatically populate this report with live financial intelligence.',
       ],
     }];
   }

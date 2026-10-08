@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Provider Info API (TASK 12)
+// VEYRO Banking Module™ — Provider Info API (TASK 12)
 //
 // GET /api/banking/provider
 //   → getProviderInfo()

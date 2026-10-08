@@ -6,7 +6,7 @@
 // success, confidence, learning progress. Every metric derives from REAL
 // connected business data — no fabricated scores.
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { EmployeeRole, EmployeePerformance, PerformanceLeaderboardEntry, Department } from './types';

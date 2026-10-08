@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Executive APIs — Shared Helpers
+// VEYRO Executive APIs — Shared Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Common helpers for all 12 Executive API endpoints:

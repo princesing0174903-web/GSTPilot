@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Dashboard API (TASK 12)
+// VEYRO Banking Module™ — Dashboard API (TASK 12)
 //
 // GET /api/banking/dashboard?organizationId=...
 //   Auto-seeds the org (idempotent) then returns the full dashboard summary:

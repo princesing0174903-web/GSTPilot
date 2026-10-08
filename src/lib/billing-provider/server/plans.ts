@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — Subscription Plans (SERVER-ONLY)
+// VEYRO Billing, Subscriptions & Payments™ — Subscription Plans (SERVER-ONLY)
 //
-// The 5 canonical subscription plans for GSTPilot. These are seeded into
+// The 5 canonical subscription plans for VEYRO. These are seeded into
 // Firestore `subscription_plans/{planId}` (a GLOBAL collection). The values
 // here are the source of truth — the service layer reads from Firestore, but
 // the orchestrator + invoice engine consult these constants directly to avoid
@@ -31,7 +31,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     name: 'Free',
     tagline: 'For solo founders getting started',
     description:
-      'Everything you need to file your first GST return. Limited usage — perfect for trying GSTPilot.',
+      'Everything you need to file your first GST return. Limited usage — perfect for trying VEYRO.',
     priceMonthly: 0,
     priceYearly: 0,
     currency: 'INR',

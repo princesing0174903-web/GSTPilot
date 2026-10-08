@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Service — Setu Provider (Real Banking Integration)
+// VEYRO Banking Service — Setu Provider (Real Banking Integration)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Implements the FULL `BankingService` interface (30 methods) against live

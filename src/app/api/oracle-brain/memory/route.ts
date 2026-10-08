@@ -1,4 +1,4 @@
-// GET /api/oracle-brain/memory — Oracle Memory Engine snapshot.
+// GET /api/oracle-brain/memory — VEYRO AI Memory Engine snapshot.
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { buildMemorySnapshot } from '@/lib/oracle-intelligence/memory-engine';

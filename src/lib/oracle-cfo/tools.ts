@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Production Tool Registry
+// VEYRO AI CFO™ — Production Tool Registry
 //
 // Every tool here performs a REAL business operation against live data.
 // No simulations. No placeholders. If a tool says "create invoice", an invoice
@@ -534,7 +534,7 @@ export const CFO_TOOLS: Tool[] = [
         const notifId = genId('notif');
         const message =
           (input.message as string) ||
-          `Dear ${input.clientName}, this is a gentle reminder that invoice ${input.invoiceId} for ₹${Number(input.amount ?? 0).toLocaleString('en-IN')} is ${input.daysOverdue} days overdue. Kindly arrange payment at your earliest convenience. — GSTPilot`;
+          `Dear ${input.clientName}, this is a gentle reminder that invoice ${input.invoiceId} for ₹${Number(input.amount ?? 0).toLocaleString('en-IN')} is ${input.daysOverdue} days overdue. Kindly arrange payment at your earliest convenience. — VEYRO`;
 
         await withRetry(
           () => writeDoc(COLLECTIONS.NOTIFICATIONS, notifId, {
@@ -650,7 +650,7 @@ export const CFO_TOOLS: Tool[] = [
         const notifId = genId('notif');
         const message =
           (input.message as string) ||
-          `Hi ${input.clientName}, this is a friendly reminder from GSTPilot. Invoice ${input.invoiceId} for ₹${Number(input.amount ?? 0).toLocaleString('en-IN')} is ${input.daysOverdue} days overdue. Please arrange payment. Thank you!`;
+          `Hi ${input.clientName}, this is a friendly reminder from VEYRO. Invoice ${input.invoiceId} for ₹${Number(input.amount ?? 0).toLocaleString('en-IN')} is ${input.daysOverdue} days overdue. Please arrange payment. Thank you!`;
 
         await writeDoc(COLLECTIONS.NOTIFICATIONS, notifId, {
           notificationId: notifId,

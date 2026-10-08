@@ -19,10 +19,10 @@ export async function resolveOrgId(explicit?: string): Promise<string> {
   // Should never happen after seeding, but guard anyway
   const created = await db.platformOrganization.create({
     data: {
-      name: 'GSTPilot Anchor Org',
+      name: 'VEYRO Anchor Org',
       slug: 'gstpilot-anchor',
       domain: 'gstpilot.ai',
-      legalName: 'GSTPilot Anchor Org',
+      legalName: 'VEYRO Anchor Org',
       country: 'IN',
       timezone: 'Asia/Kolkata',
       currency: 'INR',

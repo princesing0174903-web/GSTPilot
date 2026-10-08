@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Payment Webhook Handler
+// VEYRO AI CFO™ — Payment Webhook Handler
 //
 // POST /api/oracle/cfo/payment-link/webhook?provider=razorpay|stripe
 //

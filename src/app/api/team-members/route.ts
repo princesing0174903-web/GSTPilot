@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     })
 
     // Build a Notification for the invited user.
-    // We don't know the invitee's userId (they may not have a GSTPilot account
+    // We don't know the invitee's userId (they may not have a VEYRO account
     // yet). Resolve a fallback recipient: if invitedBy is set, notify that user
     // (the inviter) so they can track the invitation status; otherwise leave
     // userId null and the notification surfaces in firm-wide inboxes.

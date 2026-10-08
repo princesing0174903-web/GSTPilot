@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Agent Execution Panel (Phase 3 — Agent Engine™)
+// VEYRO AI™ — Agent Execution Panel (Phase 3 — Agent Engine™)
 //
 // A right-side panel showing Oracle's task queue, grouped by status:
 //   • Running    (with live progress bar + step timeline)

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Risk helpers
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Risk helpers
 // Small adapter used by the digital twin / engine. Isolated so the twin file
 // can depend on risk-engine DB queries without circular imports.
 // Founder & Owner: Prince Singh.

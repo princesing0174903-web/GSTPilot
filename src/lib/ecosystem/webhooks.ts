@@ -239,9 +239,9 @@ export async function emitEvent(input: {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-GSTPilot-Event': input.eventType,
-          'X-GSTPilot-Signature': 'sha256=' + simpleHash(payloadJson + (sub.secret ?? '')),
-          'X-GSTPilot-Delivery': 'del_' + Math.random().toString(36).slice(2, 12),
+          'X-VEYRO-Event': input.eventType,
+          'X-VEYRO-Signature': 'sha256=' + simpleHash(payloadJson + (sub.secret ?? '')),
+          'X-VEYRO-Delivery': 'del_' + Math.random().toString(36).slice(2, 12),
         },
         body: payloadJson,
         signal: controller.signal,

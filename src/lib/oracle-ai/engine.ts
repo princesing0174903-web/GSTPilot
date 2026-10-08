@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI™ Intelligence Layer — Engine
+// VEYRO AI™ Intelligence Layer — Engine
 //
 // The engine orchestrates a chat turn end-to-end:
 //   1. Load (or create) the session + agent persona
@@ -347,7 +347,7 @@ async function buildSystemPrompt(agent: OracleAIAgent, firmId: string): Promise<
   return `${agent.systemPrompt}
 
 ## YOUR ROLE
-You are ${agent.name}, the ${agent.role} of GSTPilot Infinity.
+You are ${agent.name}, the ${agent.role} of VEYRO.
 
 ${context}
 

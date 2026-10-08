@@ -1,7 +1,7 @@
 {
-  "name": "GSTPilot — The Financial Brain of India",
-  "short_name": "GSTPilot",
-  "description": "The world's most premium Financial Operating System for Chartered Accountants and Indian Businesses.",
+  "name": "VEYRO | The AI Operating System for Business",
+  "short_name": "VEYRO",
+  "description": "VEYRO is an AI operating system for modern businesses, combining financial intelligence, operations, invoicing, banking, reporting, automation and compliance in one platform.",
   "id": "/",
   "start_url": "/",
   "display": "standalone",
@@ -9,7 +9,7 @@
   "background_color": "#000000",
   "theme_color": "#000000",
   "categories": ["business", "finance", "productivity", "utilities"],
-  "lang": "en-IN",
+  "lang": "en",
   "dir": "ltr",
   "scope": "/",
   "icons": [
@@ -26,13 +26,13 @@
       "purpose": "any"
     },
     {
-      "src": "/android-chrome-192.png",
+      "src": "/icon.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/android-chrome-512.png",
+      "src": "/icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -44,9 +44,9 @@
       "purpose": "any"
     },
     {
-      "src": "/brand/gstpilot-icon.svg",
+      "src": "/icon.png",
       "sizes": "any",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     }
   ],
@@ -54,13 +54,13 @@
     {
       "name": "Dashboard",
       "short_name": "Home",
-      "description": "Open the GSTPilot dashboard",
+      "description": "Open the VEYRO dashboard",
       "url": "/?view=dashboard"
     },
     {
-      "name": "Oracle AI",
-      "short_name": "Oracle",
-      "description": "Ask the GSTPilot Oracle",
+      "name": "VEYRO AI",
+      "short_name": "AI",
+      "description": "Ask VEYRO AI",
       "url": "/?view=ai-cfo"
     }
   ]

@@ -1,10 +1,10 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Real Data Connectors™ Panel
+// VEYRO AI™ — Real Data Connectors™ Panel
 //
 // Slide-in panel from the right that renders the FinancePage (the full
-// "Connect Your Business Data" experience). Accessible from the OracleChat
+// "Connect Your Business Data" experience). Accessible from VEYRO AIChat
 // top bar via the Plug icon.
 // ═══════════════════════════════════════════════════════════════════════════════
 

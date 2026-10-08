@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Production Analytics Aggregator (server-only)
+// VEYRO Infinity™ — Production Analytics Aggregator (server-only)
 //
 // Aggregates business / revenue / usage / billing metrics across the existing
 // Firestore collections. Every query is wrapped in try/catch and returns

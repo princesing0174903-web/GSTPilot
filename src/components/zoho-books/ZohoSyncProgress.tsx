@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — ZohoSyncProgress
+// VEYRO — ZohoSyncProgress
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Two premium strips shown above the modules grid:

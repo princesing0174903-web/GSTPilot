@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// POST /api/oracle-ai/chat — Streaming chat with the Oracle AI engine
+// POST /api/oracle-ai/chat — Streaming chat with the VEYRO AI engine
 //
 // Request body:
 //   {

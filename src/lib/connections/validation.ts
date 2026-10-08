@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 2 — Data Validation Engine™
+// VEYRO Infinity™ — PHASE 2B · MODULE 2 — Data Validation Engine™
 //
 // Validates imported GSTN + Bank data BEFORE it is trusted. Produces:
 //   • validationStatus: 'clean' | 'warnings' | 'errors'

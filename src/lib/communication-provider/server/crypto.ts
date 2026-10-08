@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Token Encryption (SERVER-ONLY)
+// VEYRO Gmail & WhatsApp Business Automation™ — Token Encryption (SERVER-ONLY)
 //
 // AES-256-GCM authenticated encryption for Gmail OAuth tokens + WhatsApp Cloud
 // API access tokens.

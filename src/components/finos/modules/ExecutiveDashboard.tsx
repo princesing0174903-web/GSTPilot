@@ -34,7 +34,7 @@ const QUICK_ACTIONS = [
   { label: 'Create Invoice', icon: FileText, accent: 'emerald' as const },
   { label: 'File GSTR-1', icon: Receipt, accent: 'amber' as const },
   { label: 'Run Payroll', icon: Users, accent: 'sky' as const },
-  { label: 'Ask Oracle', icon: Sparkles, accent: 'violet' as const },
+  { label: 'Ask VEYRO AI', icon: Sparkles, accent: 'violet' as const },
 ]
 
 export function ExecutiveDashboard() {

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Structured Data Card
+// VEYRO AI™ — Structured Data Card
 //
 // Renders the {structured: StructuredQueryResult} event emitted by the backend
 // BEFORE the streaming text answer. This is the "executive summary" card that

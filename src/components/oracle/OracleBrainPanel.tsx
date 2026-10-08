@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Brain Panel (PROMPT 6)
+// VEYRO AI™ — Brain Panel (PROMPT 6)
 //
 // A full-screen memory side panel showing everything Oracle remembers:
 //   • Recent Memories   • Business Facts   • Pinned Facts
@@ -371,7 +371,7 @@ export function OracleBrainPanel({
                         onClick={() => onSuggestion('What should I do today?')}
                         className="mt-4 rounded-lg bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-300 ring-1 ring-amber-500/30 transition hover:bg-amber-500/25"
                       >
-                        Ask Oracle for today&apos;s plan
+                        Ask VEYRO AI for today&apos;s plan
                       </button>
                     )}
                   </div>
@@ -474,7 +474,7 @@ export function OracleBrainPanel({
                         ))}
                       </div>
                     ) : (
-                      <EmptyHint text="No business facts yet. Ask Oracle about your business to start building memory." />
+                      <EmptyHint text="No business facts yet. Ask VEYRO AI about your business to start building memory." />
                     )}
                   </Section>
                   <Section title="Recent Memories" icon={Clock}>

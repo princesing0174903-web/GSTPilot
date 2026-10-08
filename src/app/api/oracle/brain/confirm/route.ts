@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Action Confirmation API
+// VEYRO AI™ — Action Confirmation API
 // POST /api/oracle/brain/confirm
 //
-// Called by the OracleBrain UI when the user clicks "Confirm & Execute" or
+// Called by VEYRO AIBrain UI when the user clicks "Confirm & Execute" or
 // "Cancel" on an action confirmation card. Delegates to the generic Action
 // Engine — this endpoint has zero knowledge of specific actions.
 //

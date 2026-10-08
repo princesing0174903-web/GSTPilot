@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 6 — Observability Dashboard™
+// VEYRO Infinity™ — PHASE 2B · MODULE 6 — Observability Dashboard™
 //
 // Computes system-health metrics for the System Health™ screen:
 //   • GSTN Status / Bank Status (up / degraded / down)

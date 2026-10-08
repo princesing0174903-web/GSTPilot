@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — AccountingPage (Rebuilt from real Firestore data)
+// VEYRO — AccountingPage (Rebuilt from real Firestore data)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Previously this file was 100% hardcoded demo data (16 fake COA entries, 10 fake
 // journal entries, fake stat cards, fake 12-month chart arrays). It is now wired

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — WorkflowPipeline™
+// VEYRO — WorkflowPipeline™
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The premium visual pipeline that shows the live state of the canonical
@@ -23,7 +23,7 @@
 // Data source: `WorkflowPipeline` from `@/lib/workflow/engine` (real Prisma
 // counts, no mocks).
 //
-// Theme: pure-black GSTPilot dark theme. Glass surfaces, emerald primary,
+// Theme: pure-black VEYRO dark theme. Glass surfaces, emerald primary,
 // amber warning, rose critical, zinc clear. NO indigo, NO blue as primary.
 // ═══════════════════════════════════════════════════════════════════════════════
 

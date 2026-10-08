@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GSP Errors
+// VEYRO — GSP Errors
 // ═══════════════════════════════════════════════════════════════════════════════
 // Typed errors so callers can distinguish auth failures, rate limits, GSTN
 // outages, and configuration errors.

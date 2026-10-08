@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Phase 3: Invoice Extraction API
+// VEYRO™ — Phase 3: Invoice Extraction API
 //
 // POST /api/invoices/extract
 //

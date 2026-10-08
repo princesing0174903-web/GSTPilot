@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Ambient Background
+// VEYRO™ — Ambient Background
 // ───────────────────────────────────────────────────────────────────────────────
 // PREMIUM BLACK ENTERPRISE: No decorative graphics. Pure flat black canvas.
 // All aurora blobs, network lines, and particles have been removed to match

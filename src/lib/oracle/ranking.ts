@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Signal Ranker
+// VEYRO AI Intelligence Engine — Signal Ranker
 //
 // Turns a flat list of Signals into a ranked list (RankedSignal[]) by scoring
 // each on five factors:

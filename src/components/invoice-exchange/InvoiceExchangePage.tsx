@@ -1284,7 +1284,7 @@ function ListInvoiceDialog({
                 <div className="flex justify-between"><span className="text-slate-500">Exchange Fee (0.15%)</span><span className="font-medium text-slate-700">{formatINR(exchangeFee)}</span></div>
               </div>
               <p className="text-[11px] text-slate-500">
-                By listing, you authorize GSTPilot Invoice Exchange to assign this invoice to the highest bidder.
+                By listing, you authorize VEYRO Invoice Exchange to assign this invoice to the highest bidder.
                 Funds will be credited to your linked account within T+1 of acceptance.
               </p>
             </motion.div>
@@ -1368,7 +1368,7 @@ function DashboardTab() {
         <div className="relative space-y-3">
           <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30">
             <Sparkles className="h-3 w-3 mr-1" />
-            GSTPilot Financial Exchange
+            VEYRO Financial Exchange
           </Badge>
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight">
             Invoice Exchange — India&apos;s First B2B Invoice Marketplace
@@ -2059,7 +2059,7 @@ export default function InvoiceExchangePage() {
               </Badge>
             </div>
             <p className="text-xs text-slate-500 mt-1 ml-10">
-              GSTPilot Financial Exchange — B2B invoice marketplace for India
+              VEYRO Financial Exchange — B2B invoice marketplace for India
             </p>
           </div>
           <div className="flex items-center gap-2">

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Workflow Plan API
+// VEYRO AI™ — Workflow Plan API
 // POST /api/oracle/brain/workflow/plan
 //
 // Converts a natural-language message into a WorkflowPlan (no execution).

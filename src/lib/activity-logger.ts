@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Activity Logger (SERVER-ONLY)
+// VEYRO — Activity Logger (SERVER-ONLY)
 //
 // Small shared helper that writes a single activity record to the Firestore
 // `activities` collection. Used by every create/connect/file API route so the

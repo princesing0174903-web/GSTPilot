@@ -1,4 +1,4 @@
-/** GSTPilot Enterprise Cloud™ — service layer barrel. */
+/** VEYRO Enterprise Cloud™ — service layer barrel. */
 export * from './types'
 export * from './tenant'
 export * from './seed'

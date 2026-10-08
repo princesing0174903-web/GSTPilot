@@ -602,7 +602,7 @@ export default function DataWarehouse() {
         <div className="mt-6 flex items-center justify-center gap-2 text-center">
           <BarChart3 className="h-3.5 w-3.5 text-white/30" />
           <p className="text-[11px] text-white/40">
-            Petabyte-scale analytics. SQL, BI, and natural language in one warehouse. — GSTPilot Infinity™
+            Petabyte-scale analytics. SQL, BI, and natural language in one warehouse. — VEYRO™
           </p>
           <ArrowRight className="h-3 w-3 text-white/20" />
         </div>

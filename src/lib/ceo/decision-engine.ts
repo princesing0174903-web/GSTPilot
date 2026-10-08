@@ -16,7 +16,7 @@
 //   • Rollback Plan   — how to undo if it goes wrong
 //   • Approval + Role — minimum role that must approve
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type {

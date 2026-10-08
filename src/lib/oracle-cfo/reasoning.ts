@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Multi-Step Reasoning Pipeline
+// VEYRO AI CFO™ — Multi-Step Reasoning Pipeline
 //
 // Every financial question is run through an 8-step pipeline:
 //   1. Retrieve Data      — pull live records from the business context

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — ZohoConnected
+// VEYRO — ZohoConnected
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The connected-mode dashboard shell. Composes (top → bottom):
@@ -164,7 +164,7 @@ export function ZohoConnected({
         onSyncNow={handleSyncNow}
       />
 
-      {/* (e) Oracle AI insights — HIDDEN until first sync (RULE 3e) */}
+      {/* (e) VEYRO AI insights — HIDDEN until first sync (RULE 3e) */}
       {hasSyncedData ? <ZohoOracleInsights /> : null}
 
       {/* (f) Latest synced records — HIDDEN until first sync (RULE 3f) */}

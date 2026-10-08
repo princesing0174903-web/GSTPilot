@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Barrel Export (CLIENT-SAFE)
+// VEYRO Gmail & WhatsApp Business Automation™ — Barrel Export (CLIENT-SAFE)
 //
 // The single import surface for communication functionality. This file is
 // CLIENT-SAFE — it only re-exports types, errors, the provider interfaces, the

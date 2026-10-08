@@ -1495,7 +1495,7 @@ function CapitalMarketplaceTab() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="space-y-2 max-w-2xl">
             <Badge variant="outline" className="border-emerald-300 text-emerald-700 bg-white">
-              <Sparkles className="h-3 w-3 mr-1" /> GSTPilot Capital Marketplace
+              <Sparkles className="h-3 w-3 mr-1" /> VEYRO Capital Marketplace
             </Badge>
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
               Financing Marketplace — Connect Capital to Business
@@ -2252,7 +2252,7 @@ export default function FinancingMarketplacePage() {
           <div>
             <div className="flex items-center gap-2 text-emerald-600">
               <HandCoins className="h-5 w-5" />
-              <span className="text-xs font-semibold uppercase tracking-wide">GSTPilot Financial Exchange</span>
+              <span className="text-xs font-semibold uppercase tracking-wide">VEYRO Financial Exchange</span>
             </div>
             <h1 className="mt-1 text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
               Financing Marketplace

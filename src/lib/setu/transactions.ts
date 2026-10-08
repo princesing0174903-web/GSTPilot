@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Setu SDK — Transaction Mapping Helpers
+// VEYRO Setu SDK — Transaction Mapping Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Converts Setu's `transactions.transaction[]` into our flat `BankingTransaction`
@@ -63,7 +63,7 @@ function stableTxnId(tx: SetuTransaction, accountId: string, orgId: string): str
  *
  * @param tx Setu transaction object
  * @param accountId Namespaced account id (e.g. "setu:org-1:linkRef-123")
- * @param orgId GSTPilot org id (used to namespace the transaction id)
+ * @param orgId VEYRO org id (used to namespace the transaction id)
  */
 export function mapSetuTransactionToBanking(
   tx: SetuTransaction,

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Production Invoice Creation API
+// VEYRO AI CFO™ — Production Invoice Creation API
 //
 // POST /api/oracle/cfo/invoice/create
 //
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     organizationId: String(body.organizationId ?? 'preview-org'),
     firmId: body.firmId ? String(body.firmId) : null,
     userId: String(body.userId ?? 'preview-user'),
-    userEmail: String(body.userEmail ?? 'preview@gstpilot.in'),
+    userEmail: String(body.userEmail ?? 'preview@veyro.com'),
     userRole: (body.userRole as string) ?? 'manager',
   };
 

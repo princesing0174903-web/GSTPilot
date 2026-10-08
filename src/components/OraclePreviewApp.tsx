@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Oracle Preview App (lightweight, Firebase-free entry)
+// VEYRO — Oracle Preview App (lightweight, Firebase-free entry)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Renders Oracle AI directly with a local demo workspace. This module does
 // NOT import AuthContext / OrgContext / @/lib/firebase, so the dependency
@@ -51,7 +51,7 @@ export function OraclePreviewApp() {
                 <Zap className="h-3.5 w-3.5 text-white" />
               </div>
               <span className="text-sm font-semibold tracking-tight text-foreground">
-                GSTPilot <span className="accent-text">Oracle™</span>
+                VEYRO <span className="accent-text">Oracle™</span>
               </span>
               <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 Preview

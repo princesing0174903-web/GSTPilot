@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Credit Notes → ZohoCreditNote
+// VEYRO — Zoho Books Sync · Credit Notes → ZohoCreditNote
 //
 // Syncs Zoho Books credit notes (/creditnotes) into the `ZohoCreditNote`
 // Prisma model. A credit note is a negative invoice — issued when a customer
@@ -9,7 +9,7 @@
 //   • ZohoCreditNote.customerId → ZohoCustomer.zohoContactId (customer link)
 //   • ZohoCreditNote.invoiceId  → ZohoInvoice.invoice_id (optional invoice link)
 //
-// Oracle Memory Engine can read db.zohoCreditNote.findMany to answer:
+// VEYRO AI Memory Engine can read db.zohoCreditNote.findMany to answer:
 //   "How much credit have I issued?"
 //   "Which customers have open credit notes?"
 //

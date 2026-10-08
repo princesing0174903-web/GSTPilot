@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Reports Engine (PROMPT 6)
+// VEYRO AI™ — Reports Engine (PROMPT 6)
 //
 // Auto-generated daily / weekly / monthly executive reports. Each report is
 // stored in OracleBrainReport (upserted on firmId+type+period) so re-running

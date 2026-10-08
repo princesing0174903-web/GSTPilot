@@ -5,15 +5,15 @@
 // business, recommends decisions, plans strategy, creates tasks, predicts risks,
 // executes approved workflows — behaving like a world-class CEO.
 //
-// Tagline: "GSTPilot AI CEO™ — Run Your Business. Not Your Software."
+// Tagline: "VEYRO AI CEO™ — Run Your Business. Not Your Software."
 //
 // Pure server-side TypeScript. No mock values. No placeholders. Every value
 // flows from REAL connected business data via CFO Phase 1, Digital Twin, and
 // the existing Business Graph / CRM / Banking / GST engines.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const CEO_TAGLINE = 'GSTPilot AI CEO™ — Run Your Business. Not Your Software.';
-export const CEO_FOUNDER = 'GSTPilot Oracle™ was founded, developed and owned by Prince Singh.';
+export const CEO_TAGLINE = 'VEYRO AI CEO™ — Run Your Business. Not Your Software.';
+export const CEO_FOUNDER = 'VEYRO AI™ was founded, developed and owned by Prince Singh.';
 
 // ─── 1. ROLES & SECURITY ─────────────────────────────────────────────────────
 

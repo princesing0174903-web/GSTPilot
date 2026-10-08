@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Setu Consent Return Page
+// VEYRO — Setu Consent Return Page
 //
 // /banking/consent/return
 //
@@ -257,7 +257,7 @@ function ConsentReturnContent() {
 
           {/* Footer note */}
           <p className="text-xs text-muted-foreground/50 pt-4">
-            GSTPilot uses the Setu Account Aggregator gateway to securely fetch
+            VEYRO uses the Setu Account Aggregator gateway to securely fetch
             your bank data with your explicit consent. You can revoke consent
             at any time from your banking settings.
           </p>

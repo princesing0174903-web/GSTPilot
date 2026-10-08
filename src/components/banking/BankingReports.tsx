@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Reports Dashboard (Premium Edition)
+// VEYRO Banking Module™ — Reports Dashboard (Premium Edition)
 //
 // A premium reports dashboard for the Banking Module:
 //
@@ -16,7 +16,7 @@
 //
 // Loading state: skeleton placeholders. Empty state: "No data for this period".
 //
-// Design tokens: pure-black GSTPilot theme. Cards: `glass-surface rounded-2xl
+// Design tokens: pure-black VEYRO theme. Cards: `glass-surface rounded-2xl
 // border border-white/[0.06]`. Primary emerald — NO indigo/blue.
 // ═══════════════════════════════════════════════════════════════════════════════
 

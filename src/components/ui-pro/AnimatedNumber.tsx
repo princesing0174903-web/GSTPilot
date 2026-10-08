@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — AnimatedNumber
+// VEYRO — AnimatedNumber
 //
 // A premium count-up animation for numeric KPI values. The number animates
 // from its previous value to the new value over ~800ms with an ease-out curve.

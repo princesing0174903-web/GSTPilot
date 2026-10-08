@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO Infinity™ — Global Enterprise Operating System™
 // Global Compliance Engine™ — Multi-jurisdiction compliance deadline tracker
 // with risk scoring, upcoming-deadline detection, and Oracle narrative intelligence.
 // Founder & Owner: Prince Singh. All values derived from REAL production data.
@@ -164,7 +164,7 @@ export async function getAllComplianceDeadlines(): Promise<ComplianceDeadlineRec
  * Returns `null` for continuous or entity-specific rules (e.g. "Continuous",
  * "On payday", "Anniversary of incorporation").
  *
- * Recognized rule patterns (covering the GSTPilot canonical registry):
+ * Recognized rule patterns (covering the VEYRO canonical registry):
  *  - Monthly: `"11th of next month"`, `"20th of next month"`, `"7th of next month"`,
  *    `"10th of next month"`, `"15th of next month"`, `"25th of next month (e-filing)"`
  *  - Last day: `"Last day of next month"`
@@ -525,7 +525,7 @@ export async function getGlobalComplianceReport(
 }
 
 /**
- * Builds the Oracle narrative — a 2-3 sentence executive summary naming:
+ * Builds VEYRO AI narrative — a 2-3 sentence executive summary naming:
  *  (1) total jurisdictions + critical-open count,
  *  (2) strongest compliance posture (highest score),
  *  (3) highest-risk jurisdiction (most critical-open), and

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Disconnect API
+// VEYRO Real Banking Foundation™ — Disconnect API
 //
 // POST /api/banking/disconnect
 //   Body: { encryptedConnection }

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Provider Diagnostics
+// VEYRO AI Production Pipeline™ — Provider Diagnostics
 //
 // GET /api/ai/providers
 //

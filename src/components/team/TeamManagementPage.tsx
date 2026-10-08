@@ -103,7 +103,7 @@ export default function TeamManagementPage() {
   const { user } = useAuth();
 
   // ── General tab state ──
-  const [firmName, setFirmName] = useState('GSTPilot Firm');
+  const [firmName, setFirmName] = useState('VEYRO Firm');
   const [gstin, setGstin] = useState('');
   const [state, setState] = useState('');
   const [returnPeriod, setReturnPeriod] = useState('monthly');
@@ -906,7 +906,7 @@ export default function TeamManagementPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
                       <Info className="h-5 w-5 text-emerald-600" />
-                      About GSTPilot
+                      About VEYRO
                     </CardTitle>
                     <CardDescription>
                       Application version and build information
@@ -946,7 +946,7 @@ export default function TeamManagementPage() {
                         <span className="text-white font-bold text-lg">G</span>
                       </div>
                       <div>
-                        <p className="text-sm font-semibold">GSTPilot</p>
+                        <p className="text-sm font-semibold">VEYRO</p>
                         <p className="text-xs text-muted-foreground">
                           Smart GST compliance management for Indian businesses
                         </p>
@@ -996,7 +996,7 @@ export default function TeamManagementPage() {
                         </div>
                         <div className="text-left">
                           <p className="text-sm font-medium">Share Feedback</p>
-                          <p className="text-xs text-muted-foreground">Help us improve GSTPilot</p>
+                          <p className="text-xs text-muted-foreground">Help us improve VEYRO</p>
                         </div>
                         <ExternalLink className="h-4 w-4 ml-auto text-muted-foreground" />
                       </a>

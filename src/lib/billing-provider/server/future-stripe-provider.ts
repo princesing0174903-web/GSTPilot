@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — Future Stripe Provider (SERVER)
+// VEYRO Billing, Subscriptions & Payments™ — Future Stripe Provider (SERVER)
 //
 // Placeholder for the production Stripe integration. Every method throws
 // `NotImplementedError` so the system fails LOUDLY if you switch to this

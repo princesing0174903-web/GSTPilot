@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — Subscription Plans
+// VEYRO Billing, Subscriptions & Payments™ — Subscription Plans
 //
 // Defines the 5 subscription tiers + a `seedSubscriptionPlans()` function that
 // idempotently upserts them to the `subscription_plans` collection.

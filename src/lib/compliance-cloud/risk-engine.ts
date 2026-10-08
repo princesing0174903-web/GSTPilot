@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 3: RISK ENGINE™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 3: RISK ENGINE™
 // Continuous risk detection from REAL production data:
 //  - GSTRFilings past dueDate with status !== 'filed'/'acknowledged'
 //  - Invoices with mismatched GSTR-2B reconciliation

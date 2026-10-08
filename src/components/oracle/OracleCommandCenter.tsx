@@ -1,11 +1,11 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Obsidian Infinity™ Hero Command Box
+// VEYRO AI™ — Obsidian Infinity™ Hero Command Box
 //
 // Home page hero. Calm, premium, Apple + Perplexity quality.
 //   • Large pill, height 64px
-//   • Placeholder: "Ask GSTPilot Oracle..."
+//   • Placeholder: "Ask VEYRO AI..."
 //   • Includes: Attach files · Voice · Send button · 4 suggested chips
 //   • Chips: File GST Return · Generate Report · Predict Revenue · Recover Collections
 //
@@ -115,8 +115,8 @@ export function OracleCommandCenter({
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={1}
-          placeholder="Ask GSTPilot Oracle..."
-          aria-label="Ask GSTPilot Oracle"
+          placeholder="Ask VEYRO AI..."
+          aria-label="Ask VEYRO AI"
           className={cn(
             'min-w-0 flex-1 resize-none border-0 bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-0',
             compact ? 'text-sm' : 'text-base',

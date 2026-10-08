@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Barrel Export
+// VEYRO AI Production Pipeline™ — Barrel Export
 //
 // The SINGLE import surface for the AI generation pipeline.
 //

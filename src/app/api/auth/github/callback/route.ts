@@ -2,7 +2,7 @@
 // GET /api/auth/github/callback
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// GitHub's OAuth redirect target. After the user authorizes GSTPilot on
+// GitHub's OAuth redirect target. After the user authorizes VEYRO on
 // GitHub's consent page, GitHub redirects here with `?code=...&state=...`
 // (or `?error=access_denied` if they cancelled).
 //
@@ -132,7 +132,7 @@ export async function GET(req: Request) {
     return failRedirect('user_lookup_failed', origin);
   }
 
-  // ── 5. Resolve the GSTPilot user (find-or-create + safe account linking) ──
+  // ── 5. Resolve the VEYRO user (find-or-create + safe account linking) ──
   let resolved;
   try {
     resolved = await resolveGitHubUser(userResult.user);

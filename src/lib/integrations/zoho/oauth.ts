@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Zoho Books OAuth Helper (server-only)
+// VEYRO™ — Zoho Books OAuth Helper (server-only)
 // ═══════════════════════════════════════════════════════════════════════════════
 // This module is the SINGLE entry point for all server-side Zoho Books OAuth +
 // API concerns:

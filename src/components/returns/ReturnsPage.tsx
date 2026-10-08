@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Returns Module (8-Step Filing Wizard)
+// VEYRO — Returns Module (8-Step Filing Wizard)
 //
 // WHAT'S NEW (Task RETURNS-WIZARD):
 //   Redesigned the Returns page as a professional 8-step filing wizard with a
@@ -13,7 +13,7 @@
 //   1. Select Client → 2. Select Period → 3. Import Invoices → 4. AI Validation
 //   → 5. GST Calculation → 6. Review → 7. Generate JSON → 8. File Return
 //
-// DESIGN SYSTEM (GSTPilot Infinity™ dark theme):
+// DESIGN SYSTEM (VEYRO Infinity™ dark theme):
 //   • Pure black canvas, #0A0A0A cards, #1F1F1F borders, blue #10B981 accent
 //   • .gst-page-title / .gst-section-title / .gst-card / .gst-card-hover
 //   • .gst-btn .gst-btn-primary/.gst-btn-secondary/.gst-btn-ghost/.gst-btn-lg
@@ -221,7 +221,7 @@ function mapApiClientToItem(c: ClientOption): ClientItem {
 }
 
 // ─── Premium Status Badge config ─────────────────────────────────────────────
-// Maps the 8 filing statuses → premium pill design using the GSTPilot Infinity™
+// Maps the 8 filing statuses → premium pill design using the VEYRO Infinity™
 // .gst-status design system (success / warning / danger / info / neutral).
 
 type PremiumStatusKey =
@@ -818,7 +818,7 @@ function ReturnsEmptyState({ onCreate }: { onCreate: () => void }) {
       </div>
       <h2 className="gst-empty-state-title">No GST Returns Yet</h2>
       <p className="gst-empty-state-desc">
-        Use the wizard above to file your first GST return. GSTPilot pulls
+        Use the wizard above to file your first GST return. VEYRO pulls
         invoice data, calculates liability, validates with AI, and prepares a
         ready-to-file JSON.
       </p>
@@ -1389,7 +1389,7 @@ function StepImportInvoices({
         </div>
         <h3 className="gst-card-title text-foreground mb-1">Pull invoices from the register</h3>
         <p className="gst-description max-w-md mx-auto mb-5">
-          GSTPilot will scan your invoice register for the selected client and period,
+          VEYRO will scan your invoice register for the selected client and period,
           and pull every B2B / B2C / CDNR entry into this return.
         </p>
         <Button
@@ -1441,7 +1441,7 @@ function StepAIValidation({
         <div className="size-14 rounded-2xl bg-gradient-to-br from-[#3B82F6]/20 to-[#3B82F6]/5 border border-[#3B82F6]/30 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/10">
           <Bot className="size-7 text-[#60A5FA]" />
         </div>
-        <h3 className="gst-card-title text-foreground mb-1">Oracle AI validation</h3>
+        <h3 className="gst-card-title text-foreground mb-1">VEYRO AI validation</h3>
         <p className="gst-description max-w-md mx-auto mb-5">
           Oracle checks every line item for GSTIN format, HSN validity, tax-rate
           mismatches, duplicate invoices, and GSTN filing rules.
@@ -1792,7 +1792,7 @@ function StepFileReturn({
         <h3 className="gst-card-title text-foreground mb-1">Ready to file</h3>
         <p className="gst-description max-w-md mx-auto mb-5">
           Submit this return directly to GSTN. If live GSTN credentials are not
-          configured, GSTPilot will honestly tell you and offer the JSON download
+          configured, VEYRO will honestly tell you and offer the JSON download
           for manual filing on gst.gov.in.
         </p>
       </div>
@@ -1822,7 +1822,7 @@ function StepFileReturn({
         <div>
           <p className="text-sm font-semibold text-[#60A5FA]">Honest filing guarantee</p>
           <p className="gst-description">
-            GSTPilot never simulates government filings. If a live GSTN API
+            VEYRO never simulates government filings. If a live GSTN API
             provider is not configured, you&apos;ll be shown the JSON download
             and a &quot;Mark as Ready to File&quot; option — never a fake
             success.
@@ -2678,7 +2678,7 @@ export default function ReturnsPage() {
               onClick={handleContactOracle}
               className="sr-only"
             >
-              Contact Oracle AI
+              Contact VEYRO AI
             </button>
           </div>
         </main>
@@ -2815,7 +2815,7 @@ export default function ReturnsPage() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground leading-relaxed">
-                GSTPilot never simulates government filings. To file directly from this dashboard,
+                VEYRO never simulates government filings. To file directly from this dashboard,
                 connect live GSTN API credentials in Settings. For now, you can:
               </p>
               <div className="space-y-2">

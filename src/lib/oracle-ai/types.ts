@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI™ Intelligence Layer — Shared Type System
+// VEYRO AI™ Intelligence Layer — Shared Type System
 //
 // Pure types — no runtime, no React, no Prisma. Safe to import from client or
-// server. This is the single source of truth for the Oracle AI workspace
+// server. This is the single source of truth for the VEYRO AI workspace
 // vocabulary.
 // ═══════════════════════════════════════════════════════════════════════════════
 

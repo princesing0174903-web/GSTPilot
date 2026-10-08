@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI™ Intelligence Layer — Enterprise Workspace
+// VEYRO AI™ Intelligence Layer — Enterprise Workspace
 //
 // 3-pane layout:
 //   ┌──────────────┬────────────────────────────┬──────────────────┐
@@ -316,7 +316,7 @@ function EmptyState({ onSuggestion }: { onSuggestion: (text: string) => void }) 
       >
         <Sparkles className="h-7 w-7 text-emerald-400" />
       </motion.div>
-      <h2 className="text-lg font-semibold text-foreground">Oracle AI Intelligence Layer</h2>
+      <h2 className="text-lg font-semibold text-foreground">VEYRO AI Intelligence Layer</h2>
       <p className="mt-1 max-w-md text-sm text-muted-foreground">
         Your enterprise AI workspace. Ask anything about your business — Oracle reasons, calls tools, and produces rich artifacts.
       </p>
@@ -612,7 +612,7 @@ export default function OracleAIWorkspacePage() {
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-foreground">
-                {activeSession?.title ?? 'Oracle AI Workspace'}
+                {activeSession?.title ?? 'VEYRO AI Workspace'}
               </div>
               <div className="text-[11px] text-muted-foreground">
                 {activeSession ? `${activeSession.messageCount} messages` : 'Select or start a conversation'}
@@ -734,7 +734,7 @@ export default function OracleAIWorkspacePage() {
                       void handleSend();
                     }
                   }}
-                  placeholder="Ask Oracle anything about your business…"
+                  placeholder="Ask VEYRO AI anything about your business…"
                   className="min-h-[44px] max-h-[160px] resize-none border-0 bg-transparent px-3 py-2.5 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                   rows={1}
                 />

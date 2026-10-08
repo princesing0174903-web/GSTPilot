@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ V16 — Mission Control
+// VEYRO™ V16 — Mission Control
 // Obsidian Black 2.0 · Glass 28px blur · Emerald → Cyan → Blue accent
 //
 // Sections:
@@ -619,7 +619,7 @@ export default function MissionControlPage() {
   // Firestore multiplexes the listener so there is no extra cost.
   const { data: fireClients } = useFireClients();
 
-  // ── GSTPilot live registry (organizations/GSTpilot_SAAS/{customers,products,invoices}) ──
+  // ── VEYRO live registry (organizations/GSTpilot_SAAS/{customers,products,invoices}) ──
   // Real-time onSnapshot — Firestore is the only source of truth for these.
   // Each hook opens its own listener; Firestore multiplexes them server-side.
   const { stats: customerStats, loading: customersLoading } = useGSTpilotCustomers();
@@ -1206,7 +1206,7 @@ export default function MissionControlPage() {
           ) : (
             <PremiumEmptyState
               icon={ListTodo}
-              title="GSTPilot Oracle is ready"
+              title="VEYRO AI is ready"
               description="Connect your business data to receive priorities."
               ctaLabel="[ Connect Services ]"
               onCta={goToSettings}
@@ -1342,7 +1342,7 @@ export default function MissionControlPage() {
           ) : (
             <PremiumEmptyState
               icon={Lightbulb}
-              title="GSTPilot Oracle is ready"
+              title="VEYRO AI is ready"
               description="Connect your business data to receive AI recommendations."
               ctaLabel="[ Connect Services ]"
               onCta={goToSettings}
@@ -1350,15 +1350,15 @@ export default function MissionControlPage() {
           )}
         </WidgetCard>
 
-        {/* Widget 6: Ask Oracle (restored) */}
-        <WidgetCard icon={Brain} title="Ask Oracle" delay={0.80} className="lg:col-span-2">
+        {/* Widget 6: Ask VEYRO AI (restored) */}
+        <WidgetCard icon={Brain} title="Ask VEYRO AI" delay={0.80} className="lg:col-span-2">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl accent-gradient shadow-lg shadow-emerald-500/20">
               <Sparkles className="h-5 w-5 text-white" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground">
-                Ask GSTPilot Oracle anything
+                Ask VEYRO AI anything
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 GST · ITC · Cash flow · Compliance — replies in your language, 24/7.
@@ -1383,7 +1383,7 @@ export default function MissionControlPage() {
               }}
               className="shrink-0 accent-gradient text-white border-0 hover:opacity-90"
             >
-              Ask Oracle
+              Ask VEYRO AI
               <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
             </Button>
           </div>

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Usage API
+// VEYRO Billing™ — Usage API
 //
 // GET /api/billing/usage?organizationId=...
 //   Returns the org's current-period usage by metric + plan limits + percent.

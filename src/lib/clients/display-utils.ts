@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Customer Display Utilities (PQA-3 · Internal IDs Removal)
+// VEYRO — Customer Display Utilities (PQA-3 · Internal IDs Removal)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pure display-layer helpers that ensure NO internal IDs, UUIDs, or synthetic
 // database references ever reach the user's screen in the Customers module.

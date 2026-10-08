@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Explainable Decision Card Builder
+// VEYRO AI CFO™ — Explainable Decision Card Builder
 //
 // Every recommendation Oracle makes is accompanied by a structured decision
 // card containing:

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Plans API
+// VEYRO Billing™ — Plans API
 //
 // GET /api/billing/plans
 //   Returns the 5 canonical subscription plans (Free, Starter, Professional,

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Cloud™ — Type Definitions
+// VEYRO Banking Cloud™ — Type Definitions
 // Phase 8 Step 2: Connect. Reconcile. Predict. Execute.
 //
 // Shared types for all 8 Banking Cloud modules. All engines are deterministic —

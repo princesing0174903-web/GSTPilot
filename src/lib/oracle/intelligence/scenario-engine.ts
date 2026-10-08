@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Intelligence Module: Scenario Engine
+// VEYRO AI™ — Intelligence Module: Scenario Engine
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Safe "what-if" simulation engine. Projects the cash / revenue / receivables /

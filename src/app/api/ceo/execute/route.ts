@@ -22,7 +22,7 @@
 // Returns HTTP 400 for malformed bodies, 200 with the execution result on
 // success. After execution the CEO dashboard cache is invalidated.
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';

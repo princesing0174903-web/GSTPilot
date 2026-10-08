@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Receivables Cloud™ (Prisma-free utils)
+// VEYRO Real Invoice Engine™ — Receivables Cloud™ (Prisma-free utils)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pure utility functions extracted out of `./receivables` so client components
 // (InvoiceCloudPage) can render UI without dragging Prisma into their bundle.

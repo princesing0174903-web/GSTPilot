@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — ZohoKpiRow
+// VEYRO — ZohoKpiRow
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // 4 premium KPI cards shown at the top of the connected-mode dashboard.

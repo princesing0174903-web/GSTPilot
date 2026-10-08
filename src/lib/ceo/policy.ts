@@ -6,7 +6,7 @@
 // (loan, payroll, large payments) require higher approval than benign ones
 // (send reminder, schedule meeting).
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type {

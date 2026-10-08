@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — COLLECTION ENGINE
+// VEYRO AI CFO™ Phase 1 — COLLECTION ENGINE
 //
 // Real collection / receivables analytics:
 //   • Late payments (sorted by days overdue)

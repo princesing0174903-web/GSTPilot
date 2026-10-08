@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot GST Return Engine™ — Validation Engine
+// VEYRO GST Return Engine™ — Validation Engine
 //
 // Pure validation functions for GST data. NO Firebase imports, NO client-only
 // code. Safe to import from both client and server.

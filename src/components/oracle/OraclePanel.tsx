@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Right AI Panel (Infinity™ V16)
+// VEYRO AI™ — Right AI Panel (Infinity™ V16)
 // Two sections only: Today's Focus + live AI Activity.
 // When no real AI activities exist, we rotate simulated activity every 4s to
 // make Oracle feel alive. All focus items derived from live Firestore data.
@@ -190,7 +190,7 @@ function LiveActivityItem({ icon: Icon, label, sublabel }: { icon: LucideIcon; l
 function OracleSkeleton() {
   return (
     <div className="flex-1 space-y-6 overflow-hidden p-4">
-      {/* Branded loading state — Animated GSTPilot logo + “Initializing Financial Brain…” */}
+      {/* Branded loading state — Animated VEYRO logo + “Initializing Financial Brain…” */}
       <div className="flex flex-col items-center justify-center gap-4 py-6">
         <BrandLogoPulse size={56} label="Initializing Financial Brain…" />
       </div>
@@ -346,14 +346,14 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
         type="button"
         onClick={() => setWorkspaceOpen(true)}
         className="group flex w-full items-center gap-2.5 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.03]"
-        aria-label="Open GSTPilot Oracle workspace"
+        aria-label="Open VEYRO AI workspace"
       >
         <div className="flex h-8 w-8 items-center justify-center rounded-lg">
           <BrandLogo variant="icon" theme="dark" size={32} disableGlow />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-baseline gap-0.5">
-            <span className="text-sm font-semibold text-zinc-100">GSTPilot Oracle</span>
+            <span className="text-sm font-semibold text-zinc-100">VEYRO AI</span>
             <sup className="text-[9px] font-medium text-muted-foreground">™</sup>
           </div>
           <div className="flex items-center gap-1">
@@ -429,7 +429,7 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
             )}
           </Section>
 
-          {/* ─── Ask Oracle CTA ─────────────────────────────────────────────── */}
+          {/* ─── Ask VEYRO AI CTA ─────────────────────────────────────────────── */}
           <button
             type="button"
             onClick={() => setWorkspaceOpen(true)}
@@ -439,7 +439,7 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
               <Sparkles className="h-4 w-4 text-white" />
             </div>
             <div className="min-w-0 flex-1">
-              <span className="block text-sm font-medium text-zinc-100">Ask Oracle Anything</span>
+              <span className="block text-sm font-medium text-zinc-100">Ask VEYRO AI Anything</span>
               <span className="block text-[11px] text-muted-foreground">
                 GST · ITC · Cash flow · 10 languages
               </span>
@@ -449,7 +449,7 @@ export function OraclePanel({ onNavigate }: OraclePanelProps) {
 
           {/* Brand footer */}
           <p className="px-1 pt-1 text-center text-[10px] leading-relaxed text-muted-foreground/60">
-            GSTPilot Oracle<span className="align-super text-[7px]">™</span> · The Financial Brain of India
+            VEYRO AI<span className="align-super text-[7px]">™</span> · The AI Operating System for Business
             <br />
             <span className="text-muted-foreground/50">Founded &amp; developed by Prince Singh</span>
           </p>

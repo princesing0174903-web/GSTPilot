@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Type Definitions
+// VEYRO Real GSTN Integration™ — Type Definitions
 //
 // The single source of truth for the GST data model. Every field maps 1:1 to a
 // Firestore collection. All types are PURE (no Firebase imports) so they are

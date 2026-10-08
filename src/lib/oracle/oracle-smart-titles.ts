@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Smart Conversation Titles
+// VEYRO AI™ — Smart Conversation Titles
 //
 // Generates premium, enterprise-grade conversation titles from the user's first
 // message — e.g. "GST Analysis – ABC Traders" or "Cash Runway Forecast" instead

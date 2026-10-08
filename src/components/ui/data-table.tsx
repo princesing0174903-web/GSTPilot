@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Universal Enterprise DataTable
+// VEYRO Infinity™ — Universal Enterprise DataTable
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A premium, production-grade table component with:

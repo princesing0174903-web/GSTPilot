@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GSP Provider Mode Resolution (SERVER-ONLY)
+// VEYRO — GSP Provider Mode Resolution (SERVER-ONLY)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// The SINGLE source of truth for whether GSTPilot is operating with REAL GSTN
+// The SINGLE source of truth for whether VEYRO is operating with REAL GSTN
 // data, SANDBOX (test endpoint) data, DEMO (offline sample) data, or NOT
 // CONNECTED at all.
 //

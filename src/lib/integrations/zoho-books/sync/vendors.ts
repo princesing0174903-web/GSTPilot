@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Vendors → Vendor
+// VEYRO — Zoho Books Sync · Vendors → Vendor
 //
 // Syncs Zoho Books contacts (type=vendor) into the existing `Vendor` Prisma
 // model. Oracle Chat's `search_vendors` tool reads db.vendor.findMany — so

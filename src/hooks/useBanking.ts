@@ -2,9 +2,9 @@
 import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — useBanking() Hook
+// VEYRO Real Banking Foundation™ — useBanking() Hook
 //
-// The SINGLE hook every GSTPilot component uses to interact with banking data.
+// The SINGLE hook every VEYRO component uses to interact with banking data.
 // Mirrors the useGSTConnection() + useInvoices() pattern:
 //
 //   • READ — real-time subscriptions to connections + transactions (org-scoped

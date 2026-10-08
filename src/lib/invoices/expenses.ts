@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Expense Cloud™
+// VEYRO Real Invoice Engine™ — Expense Cloud™
 // Operational spend tracking, auto-categorization, GST claimability detection.
 // Prisma-backed server module.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -2,10 +2,10 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot Infinity™ — FeaturePlaceholder
+ * VEYRO™ — FeaturePlaceholder
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * The SINGLE, premium "not yet available" page for GSTPilot.
+ * The SINGLE, premium "not yet available" page for VEYRO.
  *
  * Per the stabilization directive: "If something isn't implemented, show
  * 'Connect Google to begin syncing data' instead of fake values."

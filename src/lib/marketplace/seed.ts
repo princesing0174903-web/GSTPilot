@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Integration Marketplace™ — Seed
+// VEYRO Global Integration Marketplace™ — Seed
 // Bootstraps realistic installed integrations, events, sync jobs & analytics
 // for the default tenant so the Marketplace shows LIVE data on first load.
 // Idempotent — safe to call on every boot.
@@ -41,9 +41,9 @@ export async function seedMarketplace(): Promise<void> {
         { slug: 'shopify', account: 'gstpilot.myshopify.com', scopes: ['read_orders', 'read_products', 'read_customers'] },
         { slug: 'razorpay', account: 'acc_29ABCDE', scopes: ['payments', 'invoices'] },
         { slug: 'stripe', account: 'acct_1Qxyz...gstpilot', scopes: ['charges', 'customers', 'invoices'] },
-        { slug: 'slack', account: 'GSTPilot Workspace', scopes: ['channels:read', 'chat:write'] },
-        { slug: 'quickbooks', account: 'GSTPilot Pvt Ltd', scopes: ['com.intuit.quickbooks.accounting'] },
-        { slug: 'hubspot', account: 'GSTPilot', scopes: ['contacts', 'companies', 'deals'] },
+        { slug: 'slack', account: 'VEYRO Workspace', scopes: ['channels:read', 'chat:write'] },
+        { slug: 'quickbooks', account: 'VEYRO Pvt Ltd', scopes: ['com.intuit.quickbooks.accounting'] },
+        { slug: 'hubspot', account: 'VEYRO', scopes: ['contacts', 'companies', 'deals'] },
         { slug: 'github', account: 'gstpilot', scopes: ['repo', 'issues'] },
         { slug: 'icici-bank', account: 'ICIC0001234', scopes: ['bank.read'] },
         { slug: 'hdfc-bank', account: 'HDFC0005678', scopes: ['bank.read'] },

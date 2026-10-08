@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Recommendation Engine
+// VEYRO AI Oracle™ & AI CFO™ — Recommendation Engine
 //
 // A PURE, CLIENT-SAFE function that generates actionable recommendations from
 // a real BusinessContext + the detected insights. Each recommendation carries

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Sync API
+// VEYRO Real Banking Foundation™ — Sync API
 //
 // POST /api/banking/sync
 //   Body: { organizationId, connectionId, encryptedConnection, scope?,

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Communication Cloud™ — Email Cloud™ Engine
+// VEYRO Communication Cloud™ — Email Cloud™ Engine
 // Invoice emails, GST notices, collection reminders, reports, forecast reports,
 // and payroll slips. Pure TypeScript — importable from both client and server.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -45,7 +45,7 @@ export function getEmailStats(messages: EmailMessage[]): EmailStats {
 // ─── Email rendering ───────────────────────────────────────────────────────────
 
 /**
- * Wrap body content in a premium dark HTML email template with GSTPilot branding.
+ * Wrap body content in a premium dark HTML email template with VEYRO branding.
  * The template is responsive and works across all major email clients.
  */
 export function renderEmailHtml(subject: string, bodyContent: string): string {
@@ -66,9 +66,9 @@ export function renderEmailHtml(subject: string, bodyContent: string): string {
               <table width="100%">
                 <tr>
                   <td style="vertical-align:middle;">
-                    <img src="https://gstpilot.in/brand/gstpilot-icon-transparent.png" width="40" height="40" alt="GSTPilot" style="vertical-align:middle;margin-right:12px;border-radius:8px;" />
-                    <span style="font-size:18px;font-weight:700;color:#fff;letter-spacing:-0.02em;vertical-align:middle;">GSTPilot<span style="color:#3B82F6;"> Infinity™</span></span>
-                    <br/><span style="font-size:11px;color:rgba(255,255,255,0.5);margin-left:52px;">The Financial Brain of India</span>
+                    <img src="https://gstpilot.in/brand/gstpilot-icon-transparent.png" width="40" height="40" alt="VEYRO" style="vertical-align:middle;margin-right:12px;border-radius:8px;" />
+                    <span style="font-size:18px;font-weight:700;color:#fff;letter-spacing:-0.02em;vertical-align:middle;">VEYRO<span style="color:#3B82F6;"> Infinity™</span></span>
+                    <br/><span style="font-size:11px;color:rgba(255,255,255,0.5);margin-left:52px;">The AI Operating System for Business</span>
                   </td>
                 </tr>
               </table>
@@ -82,8 +82,8 @@ export function renderEmailHtml(subject: string, bodyContent: string): string {
           <tr>
             <td style="padding:24px 32px;border-top:1px solid rgba(255,255,255,0.06);background:#0d0d0d;">
               <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.4);line-height:1.5;">
-                This email was sent by GSTPilot Infinity™ — your AI CFO & COO.<br/>
-                © ${new Date().getFullYear()} GSTPilot. All rights reserved.
+                This email was sent by VEYRO Infinity™ — your AI CFO & COO.<br/>
+                © ${new Date().getFullYear()} VEYRO. All rights reserved.
               </p>
             </td>
           </tr>
@@ -117,7 +117,7 @@ export function generateEmailSubject(
     }
     return subject;
   }
-  return `GSTPilot Notification — ${type}`;
+  return `VEYRO Notification — ${type}`;
 }
 
 /**

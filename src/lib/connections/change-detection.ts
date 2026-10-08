@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 3 — Change Detection Engine™
+// VEYRO Infinity™ — PHASE 2B · MODULE 3 — Change Detection Engine™
 //
 // Snapshots key business metrics before & after every sync, diffs them, and
 // generates typed BusinessEvent rows. Events flow into the Alert Center (M4)

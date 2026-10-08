@@ -56,7 +56,7 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
     // (fresh DB), fall back to a synthetic anchor so the platform always has a
     // host organisation to model the SaaS customer base around.
     const firm = await db.firm.findFirst({ orderBy: { createdAt: 'asc' } });
-    const anchorName = firm?.name || 'GSTPilot Demo Firm';
+    const anchorName = firm?.name || 'VEYRO Demo Firm';
     const anchorDomain = firm?.website || 'gstpilot.ai';
 
     // ── Real-platform anchor counts (was 4 sequential counts — now parallel) ──
@@ -471,11 +471,11 @@ export async function ensurePlatformOrganizationsSeeded(): Promise<void> {
 
     // ── Seed a few marketplace installs for the host org (from real clients) ──
     const installs = [
-      { appId: 'app_gst_suvidha', appName: 'GST Suvidha Pack', appKind: 'compliance_pack', publisher: 'GSTPilot Official', version: '2.4.1', rating: 4.8 },
-      { appId: 'app_tally_connector', appName: 'Tally Connector', appKind: 'connector', publisher: 'GSTPilot Connectors', version: '1.9.0', rating: 4.6 },
-      { appId: 'app_ai_gst_agent', appName: 'AI GST Filing Agent', appKind: 'agent', publisher: 'GSTPilot AI', version: '3.1.2', rating: 4.9 },
-      { appId: 'app_cashflow_dash', appName: 'Cashflow Dashboard', appKind: 'dashboard', publisher: 'GSTPilot Analytics', version: '1.4.0', rating: 4.5 },
-      { appId: 'app_audit_workflow', appName: 'Audit Workflow', appKind: 'workflow', publisher: 'GSTPilot Automation', version: '2.0.3', rating: 4.7 },
+      { appId: 'app_gst_suvidha', appName: 'GST Suvidha Pack', appKind: 'compliance_pack', publisher: 'VEYRO Official', version: '2.4.1', rating: 4.8 },
+      { appId: 'app_tally_connector', appName: 'Tally Connector', appKind: 'connector', publisher: 'VEYRO Connectors', version: '1.9.0', rating: 4.6 },
+      { appId: 'app_ai_gst_agent', appName: 'AI GST Filing Agent', appKind: 'agent', publisher: 'VEYRO AI', version: '3.1.2', rating: 4.9 },
+      { appId: 'app_cashflow_dash', appName: 'Cashflow Dashboard', appKind: 'dashboard', publisher: 'VEYRO Analytics', version: '1.4.0', rating: 4.5 },
+      { appId: 'app_audit_workflow', appName: 'Audit Workflow', appKind: 'workflow', publisher: 'VEYRO Automation', version: '2.0.3', rating: 4.7 },
     ];
     for (const inst of installs) {
       await db.platformMarketplaceInstall.create({

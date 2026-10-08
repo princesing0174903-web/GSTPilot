@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Scores API
+// VEYRO AI Oracle™ & AI CFO™ — Scores API
 //
 // GET /api/ai/score?orgId=         — composite BusinessScore + RiskScore (parallel)
 //

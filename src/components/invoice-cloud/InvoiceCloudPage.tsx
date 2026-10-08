@@ -1,7 +1,7 @@
 'use client'
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — InvoiceCloudPage
+// VEYRO Real Invoice Engine™ — InvoiceCloudPage
 // The flagship financial operations UI. 10 tabs (Overview + 9 modules).
 // Premium dark cinematic theme. Oracle proactive integration.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -610,7 +610,7 @@ export default function InvoiceCloudPage() {
               <h1 className="text-base font-semibold text-white truncate flex items-center gap-2">
                 Invoice Cloud
                 <span className="hidden sm:inline text-[10px] uppercase tracking-wider text-white/40 border border-white/10 rounded-full px-2 py-0.5">
-                  GSTPilot Engine™
+                  VEYRO Engine™
                 </span>
               </h1>
               <p className="text-[11px] text-white/55 truncate">Create. Track. Collect. Automate.</p>
@@ -1105,7 +1105,7 @@ function SalesTab({
               customerId: null, // ad-hoc invoice — no client linked yet
               customerName: payload.customerName,
               invoiceNumber: payload.invoiceNumber || undefined, // engine auto-generates if empty
-              sellerName: 'GSTPilot', // default seller — can be improved later
+              sellerName: 'VEYRO', // default seller — can be improved later
               sellerGstin: '',
               invoiceDate: payload.invoiceDate,
               dueDate: payload.dueDate,

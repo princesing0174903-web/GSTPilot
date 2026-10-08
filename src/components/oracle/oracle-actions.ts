@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Action Engine Library (Phase 3 — Agent Engine™)
+// VEYRO AI™ — Action Engine Library (Phase 3 — Agent Engine™)
 //
 // Oracle does not just answer — it executes. Every response ends with 3 large
 // glass Action Cards. Clicking a card spawns an Oracle Task that runs through

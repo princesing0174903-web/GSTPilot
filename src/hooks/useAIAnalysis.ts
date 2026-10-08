@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — useAIAnalysis() Hook
+// VEYRO AI Oracle™ & AI CFO™ — useAIAnalysis() Hook
 //
 // Trigger an on-demand AI analysis of the business or a specific module.
 //   • `analyze()` → POST /api/ai/analyze with { organizationId, module? }.

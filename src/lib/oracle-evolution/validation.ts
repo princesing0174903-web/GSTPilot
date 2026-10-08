@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Upgrade Phase 1 · Upgrade 6: AI Accuracy
+// VEYRO AI™ — Upgrade Phase 1 · Upgrade 6: AI Accuracy
 //
 // Validation layer that runs AFTER Oracle generates an answer. Catches:
 //   • Hallucinated numbers (claimed figures not present in source data)

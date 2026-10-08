@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Premium Enterprise DataTable
+// VEYRO — Premium Enterprise DataTable
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Enterprise-grade table inspired by Stripe / Linear / Notion data tables.

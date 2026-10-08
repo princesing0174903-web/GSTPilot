@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Voice Client Utilities (Phase 2 — Human Intelligence™)
+// VEYRO AI™ — Voice Client Utilities (Phase 2 — Human Intelligence™)
 //
 // Browser-side helpers for Voice Mode:
 //   • useOracleVoice() — MediaRecorder hook for capturing speech → ASR

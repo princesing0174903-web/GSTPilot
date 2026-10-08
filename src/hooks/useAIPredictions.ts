@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — useAIPredictions() Hook
+// VEYRO AI Oracle™ & AI CFO™ — useAIPredictions() Hook
 //
 // Generate a forecast for revenue or cashflow.
 //   • `predict(metric, months=3)` → POST /api/ai/predict with

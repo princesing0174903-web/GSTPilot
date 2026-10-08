@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Service — Provider Interface
+// VEYRO Banking Service — Provider Interface
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The provider-agnostic contract. Today this is implemented by

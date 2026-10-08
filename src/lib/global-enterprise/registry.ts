@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL ENTERPRISE OPERATING SYSTEM™
+// VEYRO™ — GLOBAL ENTERPRISE OPERATING SYSTEM™
 // Country Registry — 50+ major economies with full tax/currency/fiscal/banking metadata.
 // Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -655,7 +655,7 @@ export function getPayrollStructure(countryIso: string): PayrollStructureRecord 
 
 // ─── Base currency & defaults ────────────────────────────────────────────────
 
-export const BASE_CURRENCY = 'INR'; // GSTPilot is India-rooted; consolidation converts to INR first
+export const BASE_CURRENCY = 'INR'; // VEYRO is India-rooted; consolidation converts to INR first
 
 // Canonical FX rates (used when no live rate cached yet — bootstrap values from public data).
 // Will be overwritten by live rates fetched by currency.ts on first API call.

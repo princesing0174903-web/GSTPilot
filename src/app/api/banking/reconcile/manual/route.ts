@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Manual Reconciliation Match API (TASK 12)
+// VEYRO Banking Module™ — Manual Reconciliation Match API (TASK 12)
 //
 // POST /api/banking/reconcile/manual?organizationId=...
 //   body: { transactionId, invoiceId }

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Cloud™ — Module 5: Cash Flow Engine
+// VEYRO Banking Cloud™ — Module 5: Cash Flow Engine
 // THE flagship. Bank Data → Receivables → Payables → Upcoming GST → Expenses →
 // Forecast → Cash Runway. Deterministic. No LLM.
 // ═══════════════════════════════════════════════════════════════════════════════

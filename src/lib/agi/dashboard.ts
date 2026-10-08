@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — DASHBOARD ORCHESTRATOR
+// VEYRO Infinity™ — INFINITY AGI™ — DASHBOARD ORCHESTRATOR
 //
 // Single entry point that bundles all AGI subsystems into one AGIDashboard
 // for the Executive API: /api/agi/dashboard

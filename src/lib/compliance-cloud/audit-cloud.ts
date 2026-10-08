@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 5: AUDIT CLOUD™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 5: AUDIT CLOUD™
 // Immutable, replay-able audit store. Every compliance action is signed,
 // tokenised, and reconstructable. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════

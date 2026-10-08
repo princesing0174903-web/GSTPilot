@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — BankingConsentManager
+// VEYRO Banking Module™ — BankingConsentManager
 //
 // Displays the Account Aggregator consent lifecycle:
 //   - Active consents (with expiry countdown)

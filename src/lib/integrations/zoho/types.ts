@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Zoho Books Integration: Type Definitions (server-only)
+// VEYRO™ — Zoho Books Integration: Type Definitions (server-only)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Centralized types for the Zoho Books OAuth + API surface. Kept separate from
 // `oauth.ts` so client hooks can import just the type shapes (when needed) without

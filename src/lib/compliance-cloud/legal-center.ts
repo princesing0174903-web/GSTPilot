@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 9: LEGAL CENTER™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 9: LEGAL CENTER™
 // AI Legal Command Center — reviews contracts, open obligations, filing status,
 // litigation risks, director responsibilities. Derives from real filings +
 // regulations. Executive summary = Oracle narrative. Founder & Owner: Prince Singh.

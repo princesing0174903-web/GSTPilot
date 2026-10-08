@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GSP (GST Suvidha Provider) Interface for GSTR-2B
+// VEYRO — GSP (GST Suvidha Provider) Interface for GSTR-2B
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // IGSPProvider is the SINGLE contract every GSP backend must implement.

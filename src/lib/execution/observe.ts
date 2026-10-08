@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Execution Engine™ — MODULE 1: Observation Engine™
+// VEYRO Execution Engine™ — MODULE 1: Observation Engine™
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // ═══════════════════════════════════════════════════════════════════════════════
 // Monitors 9 business-signal classes for Indian SMEs / CA firms:

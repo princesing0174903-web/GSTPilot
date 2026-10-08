@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Intelligence Simulate Engine — POST /api/intelligence/simulate
+// VEYRO Intelligence Simulate Engine — POST /api/intelligence/simulate
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // What-if simulator that uses Digital Twin™ modeling + industry benchmark deltas

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Available Reports Catalog (TASK 12)
+// VEYRO Banking Module™ — Available Reports Catalog (TASK 12)
 //
 // GET /api/banking/reports/available?organizationId=...
 //   → listAvailableReports(orgId)

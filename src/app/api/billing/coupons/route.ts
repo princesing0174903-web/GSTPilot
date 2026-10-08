@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Coupons API
+// VEYRO Billing™ — Coupons API
 //
 // GET /api/billing/coupons?code=LAUNCH50&planId=professional&amount=299900
 //   Returns: { ok: true, coupon: Coupon, discount: number }

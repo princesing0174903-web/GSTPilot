@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Credential Encryption (SERVER-ONLY)
+// VEYRO ERP & Accounting Integrations™ — Credential Encryption (SERVER-ONLY)
 //
 // AES-256-GCM authenticated encryption for ERP access/refresh tokens + company
 // credentials.

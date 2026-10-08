@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Structured Recommendations Engine (PROMPT 5)
+// VEYRO AI™ — Structured Recommendations Engine (PROMPT 5)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Every recommendation includes the full explain-why structure:

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Setu SDK — API Types (mirrors verified Setu AA V2 spec)
+// VEYRO Setu SDK — API Types (mirrors verified Setu AA V2 spec)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Verified against docs.setu.co/data/account-aggregator/* (see worklog SETU-RESEARCH).

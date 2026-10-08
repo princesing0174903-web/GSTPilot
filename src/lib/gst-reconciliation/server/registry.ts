@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GSP Provider Registry v2 (SERVER-ONLY)
+// VEYRO — GSP Provider Registry v2 (SERVER-ONLY)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The SINGLE place where GSP providers are resolved. Supports TWO modes:

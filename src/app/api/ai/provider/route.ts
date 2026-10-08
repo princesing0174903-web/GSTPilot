@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Provider Diagnostics API
+// VEYRO AI Oracle™ & AI CFO™ — Provider Diagnostics API
 //
 // GET /api/ai/provider
 //

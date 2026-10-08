@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™
+// VEYRO Infinity™ — Global Data Intelligence Cloud™
 // Predictive Data Engine™ — forecasts from historical production data.
 // Deterministic, explainable methods (linear least-squares trend + seasonality).
 // No random numbers. No mock values. Every figure derived from real Prisma data.

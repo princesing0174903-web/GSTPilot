@@ -1,13 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPILOT ENTERPRISE AI PLATFORM™ (ECOSYSTEM EDITION) — TYPE SYSTEM
-// Turns GSTPilot from an enterprise application into a platform developers &
+// Turns VEYRO from an enterprise application into a platform developers &
 // partners can build on. Real extensions/apps, real webhooks, real low-code
 // studio, real api-gateway usage analytics, real developer registry.
 // Tagline: One Platform. Unlimited Enterprise Intelligence.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const ECOSYSTEM_TAGLINE =
-  'GSTPilot Enterprise AI Platform™ — One Platform. Unlimited Enterprise Intelligence.';
+  'VEYRO Enterprise AI Platform™ — One Platform. Unlimited Enterprise Intelligence.';
 
 // ─── Subsystem identifiers (the 12 specified, all extended on real data) ──────
 export const ECOSYSTEM_SUBSYSTEMS = [

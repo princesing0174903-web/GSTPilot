@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Invoice Communication Service
+// VEYRO AI CFO™ — Invoice Communication Service
 //
 // Handles email + WhatsApp delivery for invoices.
 // REAL behavior:

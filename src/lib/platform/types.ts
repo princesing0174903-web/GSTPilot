@@ -7,7 +7,7 @@
 // Tagline: Build Once. Deploy Globally. Scale Infinitely.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const PLATFORM_TAGLINE = 'GSTPilot Enterprise Cloud Platform™ — Build Once. Deploy Globally. Scale Infinitely.';
+export const PLATFORM_TAGLINE = 'VEYRO Enterprise Cloud Platform™ — Build Once. Deploy Globally. Scale Infinitely.';
 
 // ─── Plan definitions ──────────────────────────────────────────────────────────
 

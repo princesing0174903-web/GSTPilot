@@ -96,7 +96,7 @@ function currentPeriod(): string {
 export function buildPersonality(): RmbPersonality {
   return {
     roles: ['COO', 'Operations Manager', 'Executive Assistant', 'AI Employees Team'],
-    tagline: 'GSTPilot Run My Business™ — Ask Anything. Delegate Everything.',
+    tagline: 'VEYRO Run My Business™ — Ask Anything. Delegate Everything.',
     spokenBehaviours: [
       "I've created the task.",
       "I've scheduled the report.",

@@ -217,7 +217,7 @@ export default function CommandPalette() {
   const effectiveClients = clients.length > 0 ? clients : localClients;
   const effectiveInvoices = invoices.length > 0 ? invoices : localInvoices;
 
-  // ── GSTPilot live registry (organizations/GSTpilot_SAAS/*) ──
+  // ── VEYRO live registry (organizations/GSTpilot_SAAS/*) ──
   const { customers: gstCustomers } = useGSTpilotCustomers();
   const { products: gstProducts } = useGSTpilotProducts();
   const { invoices: gstInvoices } = useGSTpilotInvoices();
@@ -732,7 +732,7 @@ export default function CommandPalette() {
       {
         id: 'cmd-open-ai-global-advisor',
         label: 'Open AI Global Advisor™',
-        description: 'Oracle AI for country regulations, international taxation, currency risks, cross-border finance',
+        description: 'VEYRO AI for country regulations, international taxation, currency risks, cross-border finance',
         icon: Brain,
         action: () => {
           setCurrentView('ai-global-advisor');
@@ -1032,7 +1032,7 @@ export default function CommandPalette() {
       )
       .slice(0, 5);
 
-    // ── GSTPilot live registry (organizations/GSTpilot_SAAS/*) ──
+    // ── VEYRO live registry (organizations/GSTpilot_SAAS/*) ──
     const matchedGstCustomers = gstCustomers
       .filter(
         (c) =>
@@ -1064,7 +1064,7 @@ export default function CommandPalette() {
       )
       .slice(0, 5);
 
-    // ── GSTPilot live registry: Vendors / Expenses / Payments ──
+    // ── VEYRO live registry: Vendors / Expenses / Payments ──
     const matchedGstVendors = gstVendors
       .filter(
         (v) =>
@@ -1337,7 +1337,7 @@ export default function CommandPalette() {
                   </div>
                 )}
 
-                {/* ─── Search Results: GSTPilot Customers ─────────────────── */}
+                {/* ─── Search Results: VEYRO Customers ─────────────────── */}
                 {isSearching && searchResults.gstCustomers.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
@@ -1364,7 +1364,7 @@ export default function CommandPalette() {
                   </div>
                 )}
 
-                {/* ─── Search Results: GSTPilot Products ──────────────────── */}
+                {/* ─── Search Results: VEYRO Products ──────────────────── */}
                 {isSearching && searchResults.gstProducts.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
@@ -1391,7 +1391,7 @@ export default function CommandPalette() {
                   </div>
                 )}
 
-                {/* ─── Search Results: GSTPilot Invoices ──────────────────── */}
+                {/* ─── Search Results: VEYRO Invoices ──────────────────── */}
                 {isSearching && searchResults.gstInvoices.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
@@ -1418,7 +1418,7 @@ export default function CommandPalette() {
                   </div>
                 )}
 
-                {/* ─── Search Results: GSTPilot Vendors ───────────────────── */}
+                {/* ─── Search Results: VEYRO Vendors ───────────────────── */}
                 {isSearching && searchResults.gstVendors.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
@@ -1445,7 +1445,7 @@ export default function CommandPalette() {
                   </div>
                 )}
 
-                {/* ─── Search Results: GSTPilot Expenses ─────────────────── */}
+                {/* ─── Search Results: VEYRO Expenses ─────────────────── */}
                 {isSearching && searchResults.gstExpenses.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
@@ -1472,7 +1472,7 @@ export default function CommandPalette() {
                   </div>
                 )}
 
-                {/* ─── Search Results: GSTPilot Payments ─────────────────── */}
+                {/* ─── Search Results: VEYRO Payments ─────────────────── */}
                 {isSearching && searchResults.gstPayments.length > 0 && (
                   <div className="p-2">
                     <div className="flex items-center gap-1.5 px-2 py-1.5">

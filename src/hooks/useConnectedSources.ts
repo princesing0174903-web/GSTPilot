@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useConnectedSources() Hook
+// VEYRO — useConnectedSources() Hook
 //
 // Returns the list of data sources the current organization has ACTUALLY
 // connected — to be used in the Reconciliation "Source" dropdown (and

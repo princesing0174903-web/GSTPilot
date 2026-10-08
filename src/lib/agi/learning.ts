@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — SELF-IMPROVEMENT SYSTEM™
+// VEYRO Infinity™ — INFINITY AGI™ — SELF-IMPROVEMENT SYSTEM™
 //
 // Oracle improves itself. Learn from successful decisions, failed decisions,
 // customer feedback, revenue, AI accuracy, execution success, compliance

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GST Reconciliation Engine (public API)
+// VEYRO — GST Reconciliation Engine (public API)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export type {

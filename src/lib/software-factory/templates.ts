@@ -9,7 +9,7 @@
 
 import type { AppTemplate, AppType, GenerateRequest, TechStack, GeneratedModules, ProjectSpec, DatabaseTable } from './types';
 
-// ─── Default production stack (follows GSTPilot architecture) ─────────────────
+// ─── Default production stack (follows VEYRO architecture) ─────────────────
 
 export const DEFAULT_STACK: TechStack = {
   frontend: 'Next.js 16 + React + TypeScript + Tailwind + shadcn/ui',
@@ -464,7 +464,7 @@ export function tailorModules(
   template: AppTemplate,
   ctx: { clientCount: number; invoiceCount: number; returnCount: number },
 ): GeneratedModules {
-  // Inject real row counts into tables that correspond to live GSTPilot entities
+  // Inject real row counts into tables that correspond to live VEYRO entities
   const tables = template.modules.tables.map((t) => {
     let rowCount = 0;
     if (t.name === 'Lead' || t.name === 'Client' || t.name === 'Patient' || t.name === 'Vendor' || t.name === 'Customer') {
@@ -497,7 +497,7 @@ export function buildSpec(template: AppTemplate): ProjectSpec {
         benefit: `${p.components.join(', ')} are available`,
       })),
     },
-    architecture: template.spec.architecture || 'Modular monolith following GSTPilot architecture standards.',
+    architecture: template.spec.architecture || 'Modular monolith following VEYRO architecture standards.',
     database: {
       tables: template.modules.tables,
       relationships: template.modules.tables

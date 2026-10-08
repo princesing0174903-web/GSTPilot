@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Communication Cloud™ — Type Definitions
+// VEYRO Communication Cloud™ — Type Definitions
 // Phase 8 Step 4 — Shared types for WhatsApp + Email + SMS + Notification Center +
 // Collection Recovery + Report Distribution + AI Communication Engine.
 //

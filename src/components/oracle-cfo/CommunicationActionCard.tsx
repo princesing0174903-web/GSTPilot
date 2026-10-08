@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Communication Action Card (Production)
+// VEYRO AI CFO™ — Communication Action Card (Production)
 //
 // Renders inline below an Oracle assistant message when the user asks to send
 // an email or WhatsApp message. This is the REAL production flow:
@@ -152,7 +152,7 @@ export function CommunicationActionCard({
   firmId,
   userId,
   userEmail,
-  sellerName = 'GSTPilot',
+  sellerName = 'VEYRO',
   sellerEmail,
 }: CommunicationActionCardProps) {
   const [phase, setPhase] = useState<Phase>('analyzing');

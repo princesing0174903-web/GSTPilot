@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — /api/analytics/production
+// VEYRO™ — /api/analytics/production
 //
 // GET /api/analytics/production
 //   Admin-gated production report combining DAU, org, revenue, usage, billing

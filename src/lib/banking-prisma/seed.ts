@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Seed Data (TASK 12)
+// VEYRO Banking Module™ — Seed Data (TASK 12)
 //
 // Seeds the local database with realistic banking data so the module feels
 // completely real on first load. Creates 4 bank accounts (HDFC current, ICICI
@@ -32,7 +32,7 @@ const SEED_ACCOUNTS: SeedAccountInput[] = [
     accountNumber: '50100123456789',
     ifsc: 'HDFC0001234',
     branch: 'Bandra West, Mumbai',
-    owner: 'GSTPilot Technologies Pvt Ltd',
+    owner: 'VEYRO Technologies Pvt Ltd',
     accountType: 'current',
     upiHandle: 'gstpilot@hdfcbank',
     openingBalance: 845000,
@@ -42,7 +42,7 @@ const SEED_ACCOUNTS: SeedAccountInput[] = [
     accountNumber: '0123456789012',
     ifsc: 'ICIC0000123',
     branch: 'Connaught Place, New Delhi',
-    owner: 'GSTPilot Technologies Pvt Ltd',
+    owner: 'VEYRO Technologies Pvt Ltd',
     accountType: 'savings',
     upiHandle: 'gstpilot@icici',
     openingBalance: 320000,
@@ -52,7 +52,7 @@ const SEED_ACCOUNTS: SeedAccountInput[] = [
     accountNumber: '920010012345678',
     ifsc: 'UTIB0000456',
     branch: 'MG Road, Bengaluru',
-    owner: 'GSTPilot Technologies Pvt Ltd',
+    owner: 'VEYRO Technologies Pvt Ltd',
     accountType: 'od',
     openingBalance: 1500000,
   },
@@ -61,7 +61,7 @@ const SEED_ACCOUNTS: SeedAccountInput[] = [
     accountNumber: 'CASH-001',
     ifsc: 'CASH',
     branch: 'Office',
-    owner: 'GSTPilot Technologies Pvt Ltd',
+    owner: 'VEYRO Technologies Pvt Ltd',
     accountType: 'cash_wallet',
     openingBalance: 45000,
   },

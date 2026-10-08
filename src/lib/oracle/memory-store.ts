@@ -1,13 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Long-Term Memory Store
+// VEYRO AI™ — Long-Term Memory Store
 //
 // Permanent, cross-session memory of: firm profile, GSTIN, industry, user
 // preferences, reports generated, previous conversations (topics), connected
-// services, and business history. Backed by the OracleMemory Prisma table.
+// services, and business history. Backed by VEYRO AIMemory Prisma table.
 //
 // Two responsibilities:
 //   1. loadMemorySnapshot() — read everything into a compact object injected
-//      into the Oracle system prompt on every chat request.
+//      into VEYRO AI system prompt on every chat request.
 //   2. extractAndPersistFacts() — scan the latest user/oracle exchange and
 //      persist any durable facts (GSTIN, industry, preferences, …) so Oracle
 //      "remembers" them forever.
@@ -100,7 +100,7 @@ export async function loadMemorySnapshot(orgId: string): Promise<MemorySnapshot>
     orderBy: { updatedAt: 'asc' },
   });
 
-  // The OracleMemory schema uses entityId/summary (not key/value). Map them.
+  // VEYRO AIMemory schema uses entityId/summary (not key/value). Map them.
   const facts = rows.map((r) => ({ category: r.category, key: r.entityId ?? r.title, value: r.summary ?? r.payload }));
   const get = (cat: MemoryCategory, key: string) =>
     rows.find((r) => r.category === cat && (r.entityId ?? r.title) === key)?.summary;

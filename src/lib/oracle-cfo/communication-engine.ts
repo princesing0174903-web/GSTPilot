@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Production Communication Engine
+// VEYRO AI CFO™ — Production Communication Engine
 //
 // The REAL email + WhatsApp execution engine. No simulations. No placeholders.
 //
@@ -1012,7 +1012,7 @@ function buildBrandedEmailHtml(params: {
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
         <p style="color:#9ca3af;font-size:11px;margin:0;">
           Sent by ${sellerName} · <a href="mailto:${sellerEmail}" style="color:#10b981;">${sellerEmail}</a><br>
-          Powered by GSTPilot Oracle™
+          Powered by VEYRO AI™
         </p>
       </div>
     </div>`;
@@ -1218,7 +1218,7 @@ export async function sendEmailReal(params: {
     };
   }
 
-  const fromName = provider.fromName ?? 'GSTPilot';
+  const fromName = provider.fromName ?? 'VEYRO';
   const fromEmail = provider.fromEmail ?? '';
   if (!fromEmail) {
     return {

@@ -1,4 +1,4 @@
-﻿// GSTPilot Infinity™ — Local Workspace Helpers
+﻿// VEYRO™ — Local Workspace Helpers
 export const LOCAL_ORG_PREFIX = 'local-';
 
 export function buildLocalOrgId(userId: string | null | undefined): string {

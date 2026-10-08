@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™
+// VEYRO Infinity™ — Global Data Intelligence Cloud™
 // Enterprise Analytics Engine™ — computes REAL analytics snapshots from production data.
 // Every metric is derived from live Prisma queries. No mock values. Append-only snapshots.
 // ═══════════════════════════════════════════════════════════════════════════════

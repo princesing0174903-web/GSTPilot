@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Firebase Auth Action Wrappers
+// VEYRO — Firebase Auth Action Wrappers
 //
 // Thin wrappers around Firebase Auth methods. Each function:
 //   - Returns `{ user, error }` (never throws raw Firebase errors)

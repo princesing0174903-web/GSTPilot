@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Document Intelligence API
+// VEYRO AI™ — Document Intelligence API
 // POST /api/oracle/documents  → multipart upload (field: "file"); extracts text +
 //   summary via direct read (text-like) or VLM (PDF/image/DOCX/XLSX) and returns
 //   an ExtractedDocument the chat client attaches to the next prompt.

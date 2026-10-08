@@ -5,7 +5,7 @@
 // connected business data. The Software Factory designs, generates, tests,
 // deploys, monitors & continuously improves enterprise applications.
 //
-// Tagline: "GSTPilot AI Software Factory™ — Think it. Build it. Deploy it. Scale it."
+// Tagline: "VEYRO AI Software Factory™ — Think it. Build it. Deploy it. Scale it."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── Project Lifecycle ───────────────────────────────────────────────────────
@@ -479,4 +479,4 @@ export interface RollbackRequest {
   releaseId: string;
 }
 
-export const FACTORY_TAGLINE = 'GSTPilot AI Software Factory™ — Think it. Build it. Deploy it. Scale it.';
+export const FACTORY_TAGLINE = 'VEYRO AI Software Factory™ — Think it. Build it. Deploy it. Scale it.';

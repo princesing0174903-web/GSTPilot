@@ -1,10 +1,10 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Connect Data Dialog (Real Data Activation · Phase B1)
+// VEYRO™ — Connect Data Dialog (Real Data Activation · Phase B1)
 //
 // A polished, full-featured modal that lets the user connect their GSTN and
-// Bank accounts to GSTPilot. Rendered via `createPortal(..., document.body)` to
+// Bank accounts to VEYRO. Rendered via `createPortal(..., document.body)` to
 // escape every ancestor stacking context (same pattern as OracleWorkspace).
 //
 // Cross-component integration: any CTA anywhere on the page can open this dialog

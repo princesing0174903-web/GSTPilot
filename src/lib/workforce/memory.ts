@@ -6,7 +6,7 @@
 // All memories derive from REAL connected business data (timeline events,
 // CEO decisions, CFO recommendations, Twin anomalies, etc.).
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { EmployeeRole, EmployeeMemoryEntry, EmployeeMemoryType } from './types';

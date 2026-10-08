@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Operations Map™
+// VEYRO Infinity™ — Global Operations Map™
 //
 // Visualize the live enterprise: countries, offices, factories, warehouses,
 // teams, departments, organizations, AI executives, connectors, workers,

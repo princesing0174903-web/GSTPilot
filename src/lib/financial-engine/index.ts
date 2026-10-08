@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Financial Engine (Barrel Export)
+// VEYRO — Financial Engine (Barrel Export)
 //
 // This is the ONLY module any page or component should import for financial
 // calculations. Import from '@/lib/financial-engine' — never from individual

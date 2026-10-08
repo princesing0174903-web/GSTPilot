@@ -60,7 +60,7 @@ interface FirmSettingsData {
 type DomainStatus = 'not_configured' | 'pending' | 'active';
 
 const DEFAULT_SETTINGS: FirmSettingsData = {
-  firmName: 'GSTPilot Firm',
+  firmName: 'VEYRO Firm',
   logoUrl: null,
   primaryColor: '#1D4ED8',
   accentColor: '#7c3aed',

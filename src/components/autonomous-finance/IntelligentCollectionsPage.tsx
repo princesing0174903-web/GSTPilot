@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Intelligent Collections Page (Phase Delta · 6)
+// VEYRO — Intelligent Collections Page (Phase Delta · 6)
 // AI-scored customer payment behavior with smart escalation + analytics.
 // ═══════════════════════════════════════════════════════════════════════════════
 

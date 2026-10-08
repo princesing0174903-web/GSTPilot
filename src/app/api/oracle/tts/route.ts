@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Text-to-Speech API (Phase 2 — Human Intelligence™)
+// VEYRO AI™ — Text-to-Speech API (Phase 2 — Human Intelligence™)
 //
 // Converts Oracle's text response into natural-sounding speech so the user
 // can *listen* to Oracle — like ChatGPT Voice / Claude Voice.

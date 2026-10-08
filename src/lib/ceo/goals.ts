@@ -17,7 +17,7 @@
 //
 // Every value flows from the REAL CFO + Twin snapshot. No fabrication.
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type {

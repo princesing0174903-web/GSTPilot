@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Business Graph™ (Phase 3)
+// VEYRO AI™ — Business Graph™ (Phase 3)
 //
 // Full-screen overlay that renders the entire business as a living network
 // graph. Every client, invoice, payment, GST return, employee, task, document,
@@ -15,7 +15,7 @@
 //   • Business Health Engine → 6 risk metrics with live scores
 //   • Real data only. Empty state → "Connect your data sources" buttons.
 //
-// Triggered from the OracleChat top bar via the Share2/Network icon.
+// Triggered from VEYRO AIChat top bar via the Share2/Network icon.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

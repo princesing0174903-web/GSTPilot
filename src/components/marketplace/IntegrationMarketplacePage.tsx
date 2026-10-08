@@ -178,7 +178,7 @@ export default function IntegrationMarketplacePage() {
         </Tabs>
 
         <footer className="mt-12 border-t border-border pt-6 text-center text-xs text-muted-foreground">
-          <p>GSTPilot Global Integration Marketplace™ — 2,000+ connectors · 10M+ connected accounts · Universal Data Sync™ · Event Bus™</p>
+          <p>VEYRO Global Integration Marketplace™ — 2,000+ connectors · 10M+ connected accounts · Universal Data Sync™ · Event Bus™</p>
           <p className="mt-1">Founded, developed and owned by Prince Singh.</p>
         </footer>
       </div>
@@ -770,7 +770,7 @@ function DeveloperTab() {
             <div>
               <div className="flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-emerald-400" />
-                <h2 className="text-lg font-semibold">GSTPilot Connector SDK v{data?.sdk.version ?? '2.1.0'}</h2>
+                <h2 className="text-lg font-semibold">VEYRO Connector SDK v{data?.sdk.version ?? '2.1.0'}</h2>
                 <Badge variant="outline" className="bg-emerald-500/15 text-emerald-300 border-emerald-500/20">stable</Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">Build & publish connectors for 2,000+ platforms. SDK, REST API, Webhook SDK, OAuth templates, sandbox, certification, revenue sharing.</p>

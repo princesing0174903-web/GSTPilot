@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — PHASE 2B · MODULE 6 — Observability Dashboard™
+// VEYRO AI™ — PHASE 2B · MODULE 6 — Observability Dashboard™
 //
 // System Health™ screen. Shows connector health, sync metrics, queue depth,
 // error logs, data quality, and auto-sync status. Auto-refreshes every 30s.

@@ -368,7 +368,7 @@ export default function AIOperatingRoomPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <Brain className="h-5 w-5 text-emerald-600" />
-              Activate GSTPilot Oracle
+              Activate VEYRO AI
             </DialogTitle>
             <DialogDescription>
               Oracle is your firm's autonomous analytics brain. When activated, it runs a

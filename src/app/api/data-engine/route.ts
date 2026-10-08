@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2A · Data Engine API
+// VEYRO™ — PHASE 2A · Data Engine API
 //
 // GET /api/data-engine → 8-card payload for the Real Data Platform dashboard.
 //   • Cards: revenue, cashPosition, itcAvailable, complianceScore, collections,

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — /api/scaling/ai-stats
+// VEYRO™ — /api/scaling/ai-stats
 //
 // GET /api/scaling/ai-stats
 //   Returns combined AI scaling stats:

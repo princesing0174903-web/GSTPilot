@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Compass, ArrowLeft } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — branded 404 page
+// VEYRO — branded 404 page
 //
 // Replaces Next.js's default unbranded 404 with an on-brand page matching
 // the app's dark theme. Single primary CTA (Back to dashboard) + secondary
@@ -31,7 +31,7 @@ export default function NotFound() {
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to GSTPilot
+            Back to VEYRO
           </Link>
         </div>
       </div>

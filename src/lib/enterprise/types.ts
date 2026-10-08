@@ -1,5 +1,5 @@
 /**
- * GSTPilot Enterprise Cloud™ — Shared Types
+ * VEYRO Enterprise Cloud™ — Shared Types
  * Phase 7 · Enterprise Multi-Tenant SaaS Platform
  *
  * Every type here is tenant-scoped. Zero cross-tenant data leakage is enforced

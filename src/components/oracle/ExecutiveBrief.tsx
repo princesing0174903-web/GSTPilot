@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Executive Brief (Phase Beta-1)
+// VEYRO AI™ — Executive Brief (Phase Beta-1)
 //
 // Renders the 8-section executive brief whenever Oracle opens with no
 // conversation history. Every number is computed from REAL Firestore data via
@@ -1109,7 +1109,7 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
               <div className="flex items-center gap-2 rounded-lg bg-[#2563EB]/[0.06] p-3">
                 <CheckCircle2 className="h-4 w-4 text-[#60A5FA]" />
                 <p className="text-xs text-white/60">
-                  No immediate actions needed — your business is in good shape. Ask Oracle for strategic guidance.
+                  No immediate actions needed — your business is in good shape. Ask VEYRO AI for strategic guidance.
                 </p>
               </div>
             ) : (
@@ -1161,7 +1161,7 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
             </BriefCard>
           </div>
 
-          {/* ─── Footer: Ask Oracle anything ─── */}
+          {/* ─── Footer: Ask VEYRO AI anything ─── */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1178,7 +1178,7 @@ export function ExecutiveBrief({ onNavigate, onAskOracle, userName }: ExecutiveB
                 className="inline-flex items-center gap-1.5 rounded-full border border-[#2563EB]/30 bg-[#2563EB]/10 px-3 py-1.5 text-[11px] font-medium text-[#60A5FA] transition-colors hover:bg-[#2563EB]/15"
               >
                 <Sparkles className="h-3 w-3" />
-                Ask Oracle to summarize
+                Ask VEYRO AI to summarize
               </button>
             )}
           </motion.div>

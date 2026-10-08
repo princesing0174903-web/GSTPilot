@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Upgrade API
+// VEYRO Billing™ — Upgrade API
 // POST /api/billing/upgrade
 //   Body: { organizationId, subscriptionId, newPlanId, newBillingCycle?, applyImmediately? }
 // ═══════════════════════════════════════════════════════════════════════════════

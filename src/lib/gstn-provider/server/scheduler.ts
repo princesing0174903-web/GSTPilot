@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Sync Scheduler (SERVER-ONLY)
+// VEYRO Real GSTN Integration™ — Sync Scheduler (SERVER-ONLY)
 //
 // Manages GST sync jobs with four trigger types:
 //   • manual     — user clicked "Sync Now"

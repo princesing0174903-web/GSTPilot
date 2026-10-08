@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // POST /api/gst-reconciliation/[id]/explain
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI explains a single mismatch and recommends the best action.
+// VEYRO AI explains a single mismatch and recommends the best action.
 //
 // Body: { matchId }
 // Returns: {
@@ -68,7 +68,7 @@ export async function POST(
     const recommendation = buildRecommendation(match, mismatches);
     const action = buildAction(match);
 
-    // ── Generate full Oracle AI suggestion set (primary + alternatives) ──
+    // ── Generate full VEYRO AI suggestion set (primary + alternatives) ──
     const suggestionContext = {
       status: match.status as never,
       confidence: match.confidence,

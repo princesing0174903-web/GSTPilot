@@ -487,8 +487,8 @@ export default function GSTNLivePage() {
             </div>
             <Separator className="my-3 bg-white/[0.06]" />
             <p className="text-center text-xs text-muted-foreground">
-              <span className="accent-text font-semibold">GSTPilot Execution Cloud™</span> — Connect. Execute. Automate. Scale.{' '}
-              <span className="text-muted-foreground/70">The Financial Brain of India™</span>
+              <span className="accent-text font-semibold">VEYRO Execution Cloud™</span> — Connect. Execute. Automate. Scale.{' '}
+              <span className="text-muted-foreground/70">The AI Operating System for Business™</span>
             </p>
           </CardContent>
         </Card>

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Welcome / Empty State
+// VEYRO AI™ — Welcome / Empty State
 //
 // Shown when the active conversation has no messages. Centered, premium,
 // Perplexity/Claude-style. Four capability cards + six suggestion prompts.
@@ -107,7 +107,7 @@ export function OracleWelcome({ onPickSuggestion }: OracleWelcomeProps) {
         transition={{ duration: 0.5, delay: 0.1, ease: [0.4, 0, 0.2, 1] as const }}
         className="text-center text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
       >
-        GSTPilot <span className="accent-text">Oracle</span>
+        VEYRO <span className="accent-text">VEYRO AI</span>
         <span className="ml-1 align-super text-xs font-medium text-muted-foreground">™</span>
       </motion.h1>
 

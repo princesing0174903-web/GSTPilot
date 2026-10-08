@@ -18,7 +18,7 @@ import { CheckCircle2, Clock, Sparkles, type LucideIcon } from 'lucide-react';
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * Stabilization directive: "Do NOT show features that are not actually
- * implemented. GSTPilot must never pretend to support an integration that
+ * implemented. VEYRO must never pretend to support an integration that
  * does not exist."
  *
  * This modal is shown whenever the user clicks Connect on an integration

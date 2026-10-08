@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — GST Collector
+// VEYRO AI Intelligence Engine — GST Collector
 //
 // Reads real GST data from Prisma: GSTProfile, GSTReturn, GSTRFiling,
 // GSTR2BInvoice, and Notice (GST notices). Computes aggregate liability,

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot WhatsApp Connector™ — Business API Framework
+// VEYRO WhatsApp Connector™ — Business API Framework
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // In production, WhatsApp Business API requires:

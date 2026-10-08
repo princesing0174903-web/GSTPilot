@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — Plugin Engine™
+// VEYRO Global AI App Marketplace™ — Plugin Engine™
 // Plugins extend the platform WITHOUT modifying core: navigation, dashboards,
 // reports, AI agents, widgets, commands, automation, notifications, menus,
 // pages, settings, search.

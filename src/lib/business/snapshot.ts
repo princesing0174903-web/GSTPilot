@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Business Snapshot Service (SINGLE SOURCE OF TRUTH)
+// VEYRO Infinity™ — Business Snapshot Service (SINGLE SOURCE OF TRUTH)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // This is THE one centralized service that computes every business metric.
@@ -827,7 +827,7 @@ export async function getBusinessSnapshot(
   ]);
 
   // ── Extract values (all default to 0 if null — honest empty state) ──
-  // Native GSTPilot data
+  // Native VEYRO data
   const nativeRevenue = invoiceAgg._sum.totalAmount ?? 0;
   const nativeOutputTax =
     (invoiceAgg._sum.cgst ?? 0) +

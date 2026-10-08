@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Sources API
+// VEYRO AI™ — Sources API
 // GET /api/oracle/sources?q=<query>&k=<topK>  → relevant GST law/circular sources
 // GET /api/oracle/sources  → list all seeded sources (for browsing)
 // ═══════════════════════════════════════════════════════════════════════════════

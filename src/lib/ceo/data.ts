@@ -6,7 +6,7 @@
 // engine reads from. Never touches Prisma directly — only reuses existing
 // engines (no mock data, no duplication).
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { computeFinancialIntelligence } from '@/lib/cfo/phase1/orchestrator';
@@ -109,7 +109,7 @@ const EMPTY_CFO = {
   generatedAt: new Date().toISOString(),
   hasLiveData: false, dataSources: [],
   clientCount: 0, invoiceCount: 0,
-  tagline: 'GSTPilot AI CFO™ — Every business deserves a world-class CFO.',
+  tagline: 'VEYRO AI CFO™ — Every business deserves a world-class CFO.',
 } as unknown as FinancialIntelligenceBundle;
 
 const EMPTY_TWIN = {

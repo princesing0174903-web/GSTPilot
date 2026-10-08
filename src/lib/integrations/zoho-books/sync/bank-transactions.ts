@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Bank Transactions → BankTransaction
+// VEYRO — Zoho Books Sync · Bank Transactions → BankTransaction
 //
 // Syncs Zoho Books banktransactions into the existing `BankTransaction` Prisma
-// model. Oracle Memory Engine reads db.bankTransaction.findMany — so synced
+// model. VEYRO AI Memory Engine reads db.bankTransaction.findMany — so synced
 // Zoho bank transactions appear in Oracle's memory snapshot ("What is my
 // current cash balance?").
 //

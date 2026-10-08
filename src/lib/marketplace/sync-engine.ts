@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Integration Marketplace™ — Universal Data Sync™
+// VEYRO Global Integration Marketplace™ — Universal Data Sync™
 // Real-time, scheduled, incremental sync. Conflict resolution, retry engine,
 // offline queue, change detection, version tracking, bidirectional sync.
 // ═══════════════════════════════════════════════════════════════════════════════

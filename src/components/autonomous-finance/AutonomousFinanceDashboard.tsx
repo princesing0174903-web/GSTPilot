@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Autonomous Finance Dashboard (Phase Delta flagship)
+// VEYRO — Autonomous Finance Dashboard (Phase Delta flagship)
 // The "AI Finance Operations Team" command center. Surfaces live intelligence,
 // predictive alerts, pending approvals, auto-executed actions, active workflows,
 // and collections status — all from real Firestore data.
@@ -330,7 +330,7 @@ export function AutonomousFinanceDashboard() {
           </SectionCard>
 
           <p className="pb-4 text-center text-xs text-muted-foreground">
-            GSTPilot Autonomous Finance executes approved workflows only. All actions are audit-logged.
+            VEYRO Autonomous Finance executes approved workflows only. All actions are audit-logged.
           </p>
         </div>
       </div>

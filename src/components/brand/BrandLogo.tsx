@@ -1,10 +1,10 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot™ Brand Identity System — Official Logo Component
+// VEYRO™ Brand Identity System — Official Logo Component
 // ═══════════════════════════════════════════════════════════════════════════════
-// Brand:      GSTPilot™
-// Tagline:    The Financial Brain of India™
+// Brand:      VEYRO™
+// Tagline:    The AI Operating System for Business™
 // Variants:   full · horizontal · icon · iconText
 // Themes:     dark (default, for black bg) · white (for light bg)
 // Motion:     hover scale(1.05) + blue-purple glow + 300ms transition
@@ -31,9 +31,9 @@ export interface BrandLogoProps {
   animated?: boolean;
   /** Show tagline under wordmark (horizontal variant) or below (full variant). */
   showTagline?: boolean;
-  /** Wordmark text override. Default: "GSTPilot" */
+  /** Wordmark text override. Default: "VEYRO" */
   wordmark?: string;
-  /** Tagline text override. Default: "The Financial Brain of India" */
+  /** Tagline text override. Default: "The AI Operating System for Business" */
   tagline?: string;
   className?: string;
   /** Disable the premium glow filter (use in dense UI like collapsed sidebars). */
@@ -42,8 +42,8 @@ export interface BrandLogoProps {
 
 // Brand tokens (kept here for single-source-of-truth, also mirrored in globals.css)
 export const BRAND = {
-  name: 'GSTPilot',
-  tagline: 'The Financial Brain of India',
+  name: 'VEYRO',
+  tagline: 'The AI Operating System for Business',
   colors: {
     blue: '#3B82F6',
     purple: '#8B5CF6',
@@ -57,13 +57,13 @@ export const BRAND = {
     body: 'var(--font-geist-sans), Inter, ui-sans-serif, system-ui, sans-serif',
   },
   assets: {
-    iconTransparent: '/brand/gstpilot-icon-transparent.png',
-    iconWhite: '/brand/gstpilot-icon-white.png',
-    iconBlack: '/brand/gstpilot-icon.png',
-    iconSvg: '/brand/gstpilot-icon.svg',
-    fullLogo: '/brand/gstpilot-logo-full.png',
-    fullLogoTransparent: '/brand/gstpilot-logo-full-transparent.png',
-    splash: '/brand/gstpilot-splash.png',
+    iconSrc: '/icon.png',
+    iconWhite: '/icon.png',
+    iconBlack: '/icon.png',
+    iconSvg: '/icon.png',
+    fullLogo: '/logo.png',
+    fullLogoTransparent: '/logo.png',
+    splash: '/logo.png',
   },
 } as const;
 
@@ -76,13 +76,13 @@ export function BrandLogo({
   onNavigate,
   animated = true,
   showTagline = false,
-  wordmark = 'GSTPilot',
-  tagline = 'The Financial Brain of India',
+  wordmark = 'VEYRO',
+  tagline = 'The AI Operating System for Business',
   className,
   disableGlow = false,
 }: BrandLogoProps) {
   const isWhite = theme === 'white';
-  const iconSrc = isWhite ? BRAND.assets.iconWhite : BRAND.assets.iconTransparent;
+  const iconSrc = isWhite ? BRAND.assets.iconWhite : BRAND.assets.iconSrc;
 
   // ── Motion wrapper ────────────────────────────────────────────────────────
   const MotionTag = animated ? motion.a : 'a';
@@ -105,7 +105,7 @@ export function BrandLogo({
     const content = (
       <Image
         src={iconSrc}
-        alt="GSTPilot logo"
+        alt="VEYRO logo"
         width={size}
         height={size}
         priority
@@ -117,7 +117,7 @@ export function BrandLogo({
         <MotionTag
           href={href}
           onClick={onNavigate}
-          aria-label="GSTPilot home"
+          aria-label="VEYRO home"
           {...motionProps}
           className="inline-flex"
         >
@@ -136,7 +136,7 @@ export function BrandLogo({
     const content = (
       <Image
         src={fullSrc}
-        alt="GSTPilot — The Financial Brain of India"
+        alt="VEYRO — The AI Operating System for Business"
         width={Math.round(fullHeight * 1.06)}
         height={fullHeight}
         priority
@@ -148,7 +148,7 @@ export function BrandLogo({
         <MotionTag
           href={href}
           onClick={onNavigate}
-          aria-label="GSTPilot home"
+          aria-label="VEYRO home"
           {...motionProps}
           className="inline-flex"
         >
@@ -169,7 +169,7 @@ export function BrandLogo({
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       <Image
         src={iconSrc}
-        alt="GSTPilot logo"
+        alt="VEYRO logo"
         width={size}
         height={size}
         priority
@@ -218,7 +218,7 @@ export function BrandLogo({
       <MotionTag
         href={href}
         onClick={onNavigate}
-        aria-label="GSTPilot — The Financial Brain of India"
+        aria-label="VEYRO — The AI Operating System for Business"
         {...motionProps}
         className={cn('inline-flex cursor-pointer', glowClass)}
       >
@@ -309,7 +309,7 @@ export function BrandLogoPulse({
         >
           <Image
             src={BRAND.assets.iconWhite}
-            alt="GSTPilot"
+            alt="VEYRO"
             width={iconSize}
             height={iconSize}
             priority
@@ -355,7 +355,7 @@ export function BrandLogoPulse({
 }
 
 // ─── Sidebar brand (collapse-aware) ───────────────────────────────────────────
-// Expanded: icon + "GSTPilot" wordmark. Collapsed: icon only. Hover: glow.
+// Expanded: icon + "VEYRO" wordmark. Collapsed: icon only. Hover: glow.
 export function SidebarBrand({
   collapsed = false,
   size = 32,
@@ -373,7 +373,7 @@ export function SidebarBrand({
       whileTap={{ scale: 0.98 }}
       transition={{ duration: 0.3 }}
       className="group relative flex w-full items-center justify-center gap-2.5 rounded-2xl px-2 py-2 transition-all duration-300 hover:bg-white/[0.04] xl:justify-start"
-      aria-label="GSTPilot home"
+      aria-label="VEYRO home"
     >
       <motion.div
         animate={{
@@ -387,8 +387,8 @@ export function SidebarBrand({
         className="shrink-0"
       >
         <Image
-          src={BRAND.assets.iconTransparent}
-          alt="GSTPilot"
+          src={BRAND.assets.iconSrc}
+          alt="VEYRO"
           width={size}
           height={size}
           priority
@@ -400,7 +400,7 @@ export function SidebarBrand({
             className="font-semibold tracking-tight text-foreground"
             style={{ fontFamily: BRAND.fonts.wordmark, fontSize: `${wordmarkSize}px`, lineHeight: 1 }}
           >
-            GSTPilot
+            VEYRO
             <span className="ml-0.5" style={{ color: '#22D3EE', fontSize: `${Math.round(wordmarkSize * 0.4)}px` }}>
               ™
             </span>

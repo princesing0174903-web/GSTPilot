@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Full Sync Engine (Phase 5)
+// VEYRO — Zoho Books Full Sync Engine (Phase 5)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Orchestrates synchronization of ALL 13 Zoho Books modules into Prisma:
@@ -305,7 +305,7 @@ async function mirrorBillToPurchaseBill(orgId: string, zohoOrgId: string, zohoBi
   // Ensure the Firm exists (the customer mirror does the same).
   await db.firm.upsert({
     where: { id: firmId },
-    create: { id: firmId, name: 'GSTPilot Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
+    create: { id: firmId, name: 'VEYRO Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
     update: { isActive: true },
   }).catch(() => {});
   const clientGstin = (vendorGstin && vendorGstin.trim()) || `ZOHO-VENDOR-${vendorContactId || zohoBillId}`;
@@ -439,7 +439,7 @@ async function mirrorInvoiceToNativeInvoice(orgId: string, zohoOrgId: string, zo
     const clientGstin = buyerGstin?.trim() || `ZOHO-CONTACT-${zohoCustomerId}`;
     await db.firm.upsert({
       where: { id: orgId },
-      create: { id: orgId, name: 'GSTPilot Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
+      create: { id: orgId, name: 'VEYRO Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
       update: { isActive: true },
     }).catch(() => {});
     clientRow = await db.client.upsert({
@@ -1324,7 +1324,7 @@ export async function runZohoFullSync(opts: {
           // Ensure the Firm bridge exists
           await db.firm.upsert({
             where: { id: opts.organizationId },
-            create: { id: opts.organizationId, name: zc.companyName || zc.contactName || 'GSTPilot Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
+            create: { id: opts.organizationId, name: zc.companyName || zc.contactName || 'VEYRO Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
             update: { isActive: true },
           }).catch(() => {});
           const gstin = zc.gstNumber?.trim() || `ZOHO-CONTACT-${zc.zohoContactId}`;
@@ -1593,7 +1593,7 @@ export interface UnifiedSyncStatus {
 /**
  * Read the current sync status in the frontend's expected shape.
  *
- * @param organizationId — GSTPilot org id
+ * @param organizationId — VEYRO org id
  * @param zohoOrgId — Zoho Books numeric org id (required to scope the log query)
  */
 export async function getSyncStatusUnified(
@@ -1748,7 +1748,7 @@ export async function backfillMirrors(
       try {
         await db.firm.upsert({
           where: { id: organizationId },
-          create: { id: organizationId, name: zc.companyName || zc.contactName || 'GSTPilot Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
+          create: { id: organizationId, name: zc.companyName || zc.contactName || 'VEYRO Org', subscriptionPlan: 'enterprise', maxClients: 100000, isActive: true },
           update: { isActive: true },
         }).catch(() => {});
         const gstin = zc.gstNumber?.trim() || `ZOHO-CONTACT-${zc.zohoContactId}`;

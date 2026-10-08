@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Type Definitions
+// VEYRO Gmail & WhatsApp Business Automation™ — Type Definitions
 //
 // The single source of truth for the communication data model. Every field maps
 // 1:1 to a Firestore collection. All types are PURE (no Firebase imports) so

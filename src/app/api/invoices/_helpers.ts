@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Invoice API shared helpers
+// VEYRO — Invoice API shared helpers
 //
 // `assertInvoiceTenantAccess` — single source of truth for the "is this caller
 // allowed to read/mutate this invoice?" check. Returns `null` when access is

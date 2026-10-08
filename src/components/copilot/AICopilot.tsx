@@ -74,7 +74,7 @@ function getAIResponse(input: string): string {
     return AI_RESPONSES['generate compliance summary'];
   }
   if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
-    return 'Hello! I\'m GSTPilot AI, your GST compliance assistant. I can help you with:\n\n• Checking pending filings\n• Identifying client issues\n• Finding invoices\n• Explaining GST mismatches\n• Generating compliance summaries\n\nWhat would you like to know?';
+    return 'Hello! I\'m VEYRO AI, your GST compliance assistant. I can help you with:\n\n• Checking pending filings\n• Identifying client issues\n• Finding invoices\n• Explaining GST mismatches\n• Generating compliance summaries\n\nWhat would you like to know?';
   }
   if (lower.includes('thank')) {
     return 'You\'re welcome! Let me know if you need anything else regarding GST compliance. I\'m always here to help! 🙏';
@@ -128,7 +128,7 @@ export default function AICopilot() {
     id: 'welcome',
     role: 'assistant',
     content:
-      '👋 Hello! I\'m **GSTPilot AI**, your GST compliance assistant.\n\nI can help you with:\n• Checking pending filings\n• Identifying client issues\n• Finding invoices\n• Explaining GST mismatches\n• Generating compliance summaries\n\nHow can I help you today?',
+      '👋 Hello! I\'m **VEYRO AI**, your GST compliance assistant.\n\nI can help you with:\n• Checking pending filings\n• Identifying client issues\n• Finding invoices\n• Explaining GST mismatches\n• Generating compliance summaries\n\nHow can I help you today?',
     timestamp: new Date(),
   };
 
@@ -237,7 +237,7 @@ export default function AICopilot() {
                   <Bot className="h-4 w-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-white">GSTPilot AI</h3>
+                  <h3 className="text-sm font-semibold text-white">VEYRO AI</h3>
                   <div className="flex items-center gap-1">
                     <div className="h-1.5 w-1.5 rounded-full bg-emerald-200 animate-pulse" />
                     <span className="text-[10px] text-emerald-100">Online</span>

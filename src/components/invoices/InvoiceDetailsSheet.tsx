@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — InvoiceDetailsSheet
+// VEYRO™ — InvoiceDetailsSheet
 //
 // A premium right-side slide-over Sheet that opens when the user clicks an
 // invoice row in the Invoice Workspace. Contains 6 tabs and a sticky bottom
@@ -1061,7 +1061,7 @@ export function InvoiceDetailsSheet({
 }: InvoiceDetailsSheetProps) {
   const [activeTab, setActiveTab] = useState<string>('overview');
 
-  // The fetchInsights prop is reserved for parent wiring of the Oracle panel.
+  // The fetchInsights prop is reserved for parent wiring of VEYRO AI panel.
   // We accept it here so the parent can pass the same hook surface; the panel
   // itself lives in <InvoiceOraclePanel> outside this Sheet.
   void _fetchInsights;

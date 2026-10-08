@@ -198,7 +198,7 @@ export function OracleLeftSidebar({ open, onClose, onNavigate }: SidebarProps) {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_0_16px_-2px_rgba(245,158,11,0.4)]">
             <Sparkles className="h-3.5 w-3.5 text-white" />
           </div>
-          <span className="text-sm font-semibold tracking-tight text-white">Oracle</span>
+          <span className="text-sm font-semibold tracking-tight text-white">VEYRO AI</span>
         </div>
         {onClose && (
           <button

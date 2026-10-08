@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Subscribe API
+// VEYRO Billing™ — Subscribe API
 //
 // POST /api/billing/subscribe
 //   Body: { organizationId, planId, billingCycle, couponCode?, createdBy,

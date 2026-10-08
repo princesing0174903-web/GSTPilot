@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Page · Shared Types
+// VEYRO — Zoho Books Page · Shared Types
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Pure type module — no runtime code. Imported by every ZohoBooks* component

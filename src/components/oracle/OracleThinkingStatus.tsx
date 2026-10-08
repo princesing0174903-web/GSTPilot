@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Intelligent Thinking Status (Premium AI Experience)
+// VEYRO AI™ — Intelligent Thinking Status (Premium AI Experience)
 //
 // Instead of freezing while Oracle thinks, we show a rotating sequence of
 // intelligent, contextual status messages that adapt to the user's question:
@@ -157,7 +157,7 @@ export function OracleThinkingStatus({ prompt, compact = false }: OracleThinking
       aria-live="polite"
       aria-label={`Oracle is working: ${current?.label ?? 'thinking'}`}
     >
-      {/* Header: gold avatar + "Oracle is thinking" + animated dots */}
+      {/* Header: gold avatar + "VEYRO AI is thinking" + animated dots */}
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
@@ -166,7 +166,7 @@ export function OracleThinkingStatus({ prompt, compact = false }: OracleThinking
         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/15 ring-1 ring-amber-500/25">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-400" />
         </div>
-        <span className="text-sm font-semibold tracking-tight text-amber-300">Oracle is thinking</span>
+        <span className="text-sm font-semibold tracking-tight text-amber-300">VEYRO AI is thinking</span>
         <motion.span
           animate={{ opacity: [0.25, 1, 0.25] }}
           transition={{ duration: 1.3, repeat: Infinity, ease: 'easeInOut' }}

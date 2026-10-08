@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Embedding Engine (PROMPT 6)
+// VEYRO AI™ — Embedding Engine (PROMPT 6)
 //
 // A dependency-free, deterministic text embedding system using feature hashing
 // (the "hashing trick") into a fixed-dimensional vector. No external API call

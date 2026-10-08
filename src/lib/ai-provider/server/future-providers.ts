@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Future AI Providers (SERVER-ONLY placeholders)
+// VEYRO AI Oracle™ & AI CFO™ — Future AI Providers (SERVER-ONLY placeholders)
 //
 // Three production AI provider placeholders. Each throws NotImplementedError
 // for every method until the production integration is built. They exist so

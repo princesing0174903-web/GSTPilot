@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Environment Badge (Freshness Pill)
+// VEYRO AI™ — Environment Badge (Freshness Pill)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Small pill that labels a number / data point with the source environment

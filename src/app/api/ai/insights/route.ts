@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Insights API
+// VEYRO AI Oracle™ & AI CFO™ — Insights API
 //
 // GET  /api/ai/insights?orgId=         — read insights (regenerates live + persists)
 // POST /api/ai/insights                — regenerate

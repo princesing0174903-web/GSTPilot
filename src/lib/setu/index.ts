@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Setu SDK — Barrel Export
+// VEYRO Setu SDK — Barrel Export
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Single import surface for the Setu SDK. Internal modules import from each

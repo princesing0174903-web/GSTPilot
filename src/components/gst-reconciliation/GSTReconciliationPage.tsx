@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GST Reconciliation Engine Dashboard (Premium)
+// VEYRO — GST Reconciliation Engine Dashboard (Premium)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Production-grade GSTR-2B vs Books reconciliation dashboard.
@@ -19,7 +19,7 @@
 //      • Advanced filters (status, resolved, search, vendor, amount, confidence)
 //      • Bulk actions bar (resolve/export/email/review)
 //      • Virtualized table (50k rows via react-window)
-//      • Oracle AI Drawer (auto-fix panel, alternatives, score breakdown)
+//      • VEYRO AI Drawer (auto-fix panel, alternatives, score breakdown)
 //
 // Quality: Stripe + Linear + Vercel grade.
 // ═══════════════════════════════════════════════════════════════════════════════

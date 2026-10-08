@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Client-Safe Firestore Service
+// VEYRO ERP & Accounting Integrations™ — Client-Safe Firestore Service
 //
 // The single entry point for all ERP Firestore operations on the CLIENT side.
 // Mirrors the banking-provider + communication-provider service pattern:

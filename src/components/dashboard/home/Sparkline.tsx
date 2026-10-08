@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Sparkline (pure SVG, no external chart deps)
+// VEYRO — Sparkline (pure SVG, no external chart deps)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A tiny inline SVG sparkline (80×30 by default) that renders a smooth

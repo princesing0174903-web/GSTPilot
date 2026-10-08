@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Conflict Resolution Engine (SERVER)
+// VEYRO ERP & Accounting Integrations™ — Conflict Resolution Engine (SERVER)
 //
 // Handles the conflicts that arise during ERP sync:
-//   • Duplicate customers (same GSTIN/name in ERP and GSTPilot)
+//   • Duplicate customers (same GSTIN/name in ERP and VEYRO)
 //   • Duplicate invoices (same invoice number)
-//   • Deleted records (in ERP but marked active in GSTPilot)
+//   • Deleted records (in ERP but marked active in VEYRO)
 //   • Modified records (different amount/date on re-sync)
 //   • Version conflicts (concurrent edits)
 //   • Sync failures (partial data)
@@ -34,7 +34,7 @@ export type ResolutionStrategy =
   | 'skip'           // keep existing, ignore ERP record
   | 'overwrite'      // replace existing with ERP record
   | 'merge'          // combine fields (ERP wins on financials)
-  | 'create_new'     // create a new GSTPilot record
+  | 'create_new'     // create a new VEYRO record
   | 'flag_manual'    // flag for manual review
   | 'retry';         // retry the sync
 
@@ -46,7 +46,7 @@ export interface Conflict {
   resolution: ResolutionStrategy;
   /** The ERP record (if applicable). */
   erpRecord?: unknown;
-  /** The existing GSTPilot record (if applicable). */
+  /** The existing VEYRO record (if applicable). */
   existingRecord?: unknown;
   /** Fields that differ (for modified records). */
   diff?: Array<{ field: string; erpValue: unknown; existingValue: unknown }>;
@@ -165,7 +165,7 @@ export function resolveDuplicateInvoice(
 // ─── Deleted record detection ─────────────────────────────────────────────────
 
 /**
- * Detect records that exist in GSTPilot but not in the latest ERP sync.
+ * Detect records that exist in VEYRO but not in the latest ERP sync.
  * These were likely deleted in the ERP — flag for manual review (don't auto-delete).
  */
 export function detectDeletedRecords<T extends { id: string; erpCustomerId?: string; erpInvoiceNumber?: string; erpItemId?: string; erpLedgerId?: string }>(

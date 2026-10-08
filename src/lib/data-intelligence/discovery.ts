@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™
+// VEYRO Infinity™ — Global Data Intelligence Cloud™
 // Subsystem 7: AI Data Discovery™ — auto-detect patterns from REAL data.
 // Scans production records and writes DataDiscoveryInsight rows for each
 // detected pattern (revenue trend, cost anomaly, cashflow risk, customer

@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Human Experience Types
-// Shared type definitions for the Oracle conversational brain.
+// VEYRO AI™ — Human Experience Types
+// Shared type definitions for VEYRO AI conversational brain.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { StructuredQueryResult } from '@/lib/oracle/structured-query-types';
@@ -160,7 +160,7 @@ export interface OracleMessage {
   language?: OracleLanguageId;
   /** Detected emotion for oracle responses. */
   emotion?: OracleEmotionId;
-  /** True while the oracle response is still streaming tokens. */
+  /** True while VEYRO AI response is still streaming tokens. */
   streaming?: boolean;
   /** ISO timestamp. */
   createdAt: string;

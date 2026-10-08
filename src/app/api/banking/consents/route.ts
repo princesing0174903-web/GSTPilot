@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Banking Consents API
+// VEYRO — Banking Consents API
 //
 // GET /api/banking/consents?organizationId=...
 //   Returns the consent management state for the org:

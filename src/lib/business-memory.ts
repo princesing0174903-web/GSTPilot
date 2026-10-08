@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Business Memory™ Service
+// VEYRO AI™ — Business Memory™ Service
 //
 // Persistent memory system keyed by userEmail. Oracle calls buildMemoryContext()
 // before every response to inject "what Oracle remembers about this user" into

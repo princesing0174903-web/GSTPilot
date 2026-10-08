@@ -84,13 +84,13 @@ function ProvidersLoadError() {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px', fontWeight: 700 }}>
         <Zap size={18} style={{ color: '#3B82F6' }} />
-        <span>GSTPilot™</span>
+        <span>VEYRO™</span>
       </div>
       <AlertTriangle size={32} style={{ color: '#f59e0b' }} />
       <div style={{ maxWidth: '360px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
         <div style={{ fontSize: '15px', fontWeight: 600 }}>Couldn’t load the app</div>
         <div style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.5 }}>
-          A required part of GSTPilot failed to load. This is usually a brief network
+          A required part of VEYRO failed to load. This is usually a brief network
           hiccup or a background update — reloading should fix it.
         </div>
       </div>
@@ -191,7 +191,7 @@ export function ProvidersLazy({ children }: { children: ReactNode }) {
         }
       })
       .catch((err) => {
-        console.error('[GSTPilot] Providers load failed:', err)
+        console.error('[VEYRO] Providers load failed:', err)
         if (!cancelled) setLoadFailed(true)
       })
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — /api/scaling/signed-upload
+// VEYRO™ — /api/scaling/signed-upload
 //
 // POST /api/scaling/signed-upload
 //   Body: { path: string, contentType?: string, maxSizeBytes?: number }

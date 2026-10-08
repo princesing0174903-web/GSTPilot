@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI™ API — Auth helper
+// VEYRO AI™ API — Auth helper
 //
-// Resolves the Oracle AI context for a request. Tries proper Firebase Auth
+// Resolves the VEYRO AI context for a request. Tries proper Firebase Auth
 // verification first (Bearer token → requireAuth). If no token is present,
 // falls back to a demo context using NEXT_PUBLIC_FIRM_ID — this matches the
 // existing /api/oracle/* routes' pattern so the workspace is usable in
@@ -23,7 +23,7 @@ export interface OracleAICtx {
 }
 
 /**
- * Resolve the Oracle AI context for a request.
+ * Resolve the VEYRO AI context for a request.
  *
  * Strategy:
  *   1. If a Bearer token is present → verify it via Firebase Admin and return

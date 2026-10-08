@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useEnterpriseOrg Hook
+// VEYRO — useEnterpriseOrg Hook
 //
 // Client-side data + actions layer for the Enterprise Organization Console.
 // Reads the current org + membership from OrgContext, fetches the org activity

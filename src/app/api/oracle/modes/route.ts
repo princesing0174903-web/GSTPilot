@@ -23,6 +23,6 @@ export async function GET(req: NextRequest) {
     const modes = listModes();
     return NextResponse.json({ ok: true, modes });
   } catch (err) {
-    return friendlyApiError(err, 'We could not load the Oracle modes right now.');
+    return friendlyApiError(err, 'We could not load VEYRO AI modes right now.');
   }
 }

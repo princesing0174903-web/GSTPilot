@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Execution Engine™ — MODULE 4: Approval Engine™
+// VEYRO Execution Engine™ — MODULE 4: Approval Engine™
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // ═══════════════════════════════════════════════════════════════════════════════
 // Workflow:  Task → Risk Score → Need Approval? → Yes (ask user) / No (execute)

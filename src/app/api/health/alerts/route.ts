@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — /api/health/alerts — Alert List + Acknowledge/Resolve
+// VEYRO™ — /api/health/alerts — Alert List + Acknowledge/Resolve
 //
 // GET  /api/health/alerts?level=critical&activeOnly=true&limit=50
 //   Requires auth (any org member). Lists alerts from the in-memory store

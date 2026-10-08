@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — Barrel
+// VEYRO Infinity™ — INFINITY AGI™ — Barrel
 // One Intelligence. Every Decision. Entire Enterprise. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════
 

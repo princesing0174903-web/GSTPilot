@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     let userPrompt = ''
 
     if (mode === 'explain') {
-      systemPrompt = `You are the GSTPilot Oracle™ Business Graph™ analyst — a fusion of Palantir-grade graph reasoning and a senior CFO/CA. You are given a live snapshot of a company's business graph (clients, invoices, payments, GST returns, employees, tasks, documents, bank accounts, notices, emails, WhatsApp messages and the relationships between them).
+      systemPrompt = `You are the VEYRO AI™ Business Graph™ analyst — a fusion of Palantir-grade graph reasoning and a senior CFO/CA. You are given a live snapshot of a company's business graph (clients, invoices, payments, GST returns, employees, tasks, documents, bank accounts, notices, emails, WhatsApp messages and the relationships between them).
 
 Your job: explain the business graph to the founder in plain, confident language. Answer three questions:
 1. WHAT happened? — the current state of the business in one paragraph.
@@ -69,7 +69,7 @@ Rules:
       if (!question) {
         return NextResponse.json({ error: 'Question is required for ask mode.' }, { status: 400 })
       }
-      systemPrompt = `You are the GSTPilot Oracle™ Business Graph™ analyst. You answer questions about a company's business graph by reasoning over the real relationships between clients, invoices, payments, GST returns, employees, tasks, documents, bank accounts, notices, emails and WhatsApp messages.
+      systemPrompt = `You are the VEYRO AI™ Business Graph™ analyst. You answer questions about a company's business graph by reasoning over the real relationships between clients, invoices, payments, GST returns, employees, tasks, documents, bank accounts, notices, emails and WhatsApp messages.
 
 Rules:
 - Use ONLY the real data in the snapshot. Never invent numbers, client names, or relationships.
@@ -95,7 +95,7 @@ Rules:
           const other = graph.nodes.find((n) => n.id === otherId)
           return other ? `${e.type} → ${other.type}: "${other.label}"` : e.type
         })
-      systemPrompt = `You are the GSTPilot Oracle™ Business Graph™ analyst. The user has clicked on a single node in their business graph. Generate a deep, specific insight for THIS node based on its real data and its real connections to other nodes.
+      systemPrompt = `You are the VEYRO AI™ Business Graph™ analyst. The user has clicked on a single node in their business graph. Generate a deep, specific insight for THIS node based on its real data and its real connections to other nodes.
 
 Rules:
 - Use ONLY the real data provided for this node and its connections. Never invent.

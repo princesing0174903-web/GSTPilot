@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Context Engine™
+// VEYRO AI Intelligence Core™ — Context Engine™
 //
 // BEFORE every AI call, automatically gather business context from all 17
 // connected systems (AI CEO, AI CFO, Autonomous Enterprise, Connectivity

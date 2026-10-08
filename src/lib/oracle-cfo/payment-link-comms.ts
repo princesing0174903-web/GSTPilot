@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Payment Link Communication Service
+// VEYRO AI CFO™ — Payment Link Communication Service
 //
 // Handles email + WhatsApp delivery for payment links.
 // REAL behavior:
@@ -150,7 +150,7 @@ export async function sendPaymentLinkEmail(
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
         <p style="color: #9ca3af; font-size: 11px; margin: 0;">
           Payment ID: ${paymentId}<br>
-          Powered by GSTPilot Oracle™
+          Powered by VEYRO AI™
         </p>
       </div>
     </div>
@@ -219,7 +219,7 @@ export async function sendPaymentLinkWhatsApp(
   }
 
   const currencySymbol = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '';
-  const message = `*Payment Request*\n\nHello ${clientName},\n\nA payment of *${currencySymbol}${amount.toLocaleString('en-IN')}* is due for invoice *${invoiceNumber}*.\n\nPay securely via the link below:\n${linkUrl}\n\nThis link expires in 30 days. For help, reply to this message.\n\n— GSTPilot Oracle™`;
+  const message = `*Payment Request*\n\nHello ${clientName},\n\nA payment of *${currencySymbol}${amount.toLocaleString('en-IN')}* is due for invoice *${invoiceNumber}*.\n\nPay securely via the link below:\n${linkUrl}\n\nThis link expires in 30 days. For help, reply to this message.\n\n— VEYRO AI™`;
 
   const notificationId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   try {

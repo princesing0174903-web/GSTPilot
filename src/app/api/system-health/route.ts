@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 6 — Observability Dashboard API
+// VEYRO™ — PHASE 2B · MODULE 6 — Observability Dashboard API
 //
 // GET /api/system-health → full System Health™ payload for the observability screen
 // ═══════════════════════════════════════════════════════════════════════════════

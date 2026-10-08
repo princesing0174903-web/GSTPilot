@@ -257,7 +257,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900/50 px-3 py-1 text-xs font-medium text-zinc-400 backdrop-blur-md w-fit"
             >
               <Zap className="mr-2 h-3 w-3 text-emerald-500" />
-              GSTPilot Infinity™
+              VEYRO™
             </motion.div>
           </div>
         </div>
@@ -269,7 +269,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             transition={{ delay: 0.4, duration: 0.8 }}
             className="text-4xl sm:text-5xl font-semibold tracking-tight text-white mb-6 leading-[1.1]"
           >
-            The Financial Brain<br />
+            The AI Operating System<br />
             <span className="text-zinc-500">of India.</span>
           </motion.h1>
           <motion.p 
@@ -306,8 +306,8 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 {mode === 'forgot' && 'Reset password'}
               </h2>
               <p className="text-sm text-zinc-500">
-                {mode === 'login' && 'Sign in to access your GSTPilot workspace.'}
-                {mode === 'signup' && 'Get started with GSTPilot Infinity.'}
+                {mode === 'login' && 'Sign in to access your VEYRO workspace.'}
+                {mode === 'signup' && 'Get started with VEYRO.'}
                 {mode === 'forgot' && 'Enter your email to receive a reset link.'}
               </p>
             </div>
@@ -571,7 +571,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
                 Connect your Google Account
               </h3>
               <p className="text-sm text-zinc-400 text-center mb-6 leading-relaxed">
-                The Google account <strong className="text-zinc-200">{linkingEmail}</strong> already has a GSTPilot account. Please enter your existing password to securely link them.
+                The Google account <strong className="text-zinc-200">{linkingEmail}</strong> already has a VEYRO account. Please enter your existing password to securely link them.
               </p>
 
               {displayError && !linkSuccess && (

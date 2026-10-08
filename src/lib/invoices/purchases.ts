@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Purchase Bill Cloud™
+// VEYRO Real Invoice Engine™ — Purchase Bill Cloud™
 // Vendor invoices, ITC matching, GST split totals. Prisma-backed server module.
 // ═══════════════════════════════════════════════════════════════════════════════
 

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Data Connections™ (Real-Time Sync Center)
+// VEYRO™ — Data Connections™ (Real-Time Sync Center)
 // PHASE 2A · MODULE 6 + PHASE 2B · MODULE 1 (Auto Sync Engine)
 //
 // The command center for live GSTN + Banking data. Shows every connected

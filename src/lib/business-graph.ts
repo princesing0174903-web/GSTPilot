@@ -231,7 +231,7 @@ export async function buildBusinessGraph(): Promise<BusinessGraph> {
     id: businessId,
     type: 'business',
     label: businessName,
-    sublabel: firm?.gstin ?? 'GSTPilot Firm',
+    sublabel: firm?.gstin ?? 'VEYRO Firm',
     weight: 10,
     detail: {
       kind: 'Business',

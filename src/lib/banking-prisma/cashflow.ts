@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Cash Flow Analytics Engine (TASK 12)
+// VEYRO Banking Module™ — Cash Flow Analytics Engine (TASK 12)
 //
 // Daily/period cash-flow aggregation + snapshot persistence. SERVER-ONLY.
 //

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — App Permissions Engine
+// VEYRO Global AI App Marketplace™ — App Permissions Engine
 // Every app declares permissions. Every install requires approval.
 // Permission approval is required before an app can access tenant data.
 // ═══════════════════════════════════════════════════════════════════════════════

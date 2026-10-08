@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Centralized Zustand Store with Persistence
+// VEYRO — Centralized Zustand Store with Persistence
 // Starts empty — all data comes from the API via React Query hooks.
 // Only used by legacy components pending migration (ClientDetailPage, GlobalSearch).
 // ═══════════════════════════════════════════════════════════════════════════════

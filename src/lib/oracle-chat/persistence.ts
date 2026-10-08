@@ -5,7 +5,7 @@
 // memory records are persisted to Prisma — NOT browser memory. A page refresh
 // loads the full conversation history back from OracleAISession / OracleAIMessage.
 //
-// Single-tenant note: the Oracle Chat surface has no auth gate (the page mounts
+// Single-tenant note: VEYRO AI Chat surface has no auth gate (the page mounts
 // directly). All persistence is scoped to DEFAULT_FIRM_ID. The schema supports
 // multi-tenant (firmId + userId are indexed); the wiring defaults to one tenant
 // for this preview. Every row is REAL Prisma data — never fabricated.

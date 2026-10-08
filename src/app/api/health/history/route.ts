@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — /api/health/history — Historical Health Readings
+// VEYRO™ — /api/health/history — Historical Health Readings
 //
 // GET /api/health/history?hours=24
 //   Requires authentication (any org member). Returns the historical

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ — What-If Simulator (Phase 3, Module 12)
+// VEYRO AI CFO™ — What-If Simulator (Phase 3, Module 12)
 // Projects the financial impact of business changes:
 //   • Revenue change (e.g. "what if revenue falls 20%?")
 //   • Expense change (e.g. "what if expenses increase 15%?")

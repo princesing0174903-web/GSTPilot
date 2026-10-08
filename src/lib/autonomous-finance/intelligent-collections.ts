@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Intelligent Collections Engine (Phase Delta · 6)
+// VEYRO — Intelligent Collections Engine (Phase Delta · 6)
 // Customer payment scoring, smart escalation, payment prediction, analytics.
 // ═══════════════════════════════════════════════════════════════════════════════
 

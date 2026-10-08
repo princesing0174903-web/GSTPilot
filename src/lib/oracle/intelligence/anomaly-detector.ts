@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Intelligence Module: Anomaly Detector
+// VEYRO AI™ — Intelligence Module: Anomaly Detector
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Detects business anomalies using STATISTICAL + BUSINESS RULES — NOT the LLM.
-// The Oracle brain never invents anomaly detection; it only reasons about
+// VEYRO AI brain never invents anomaly detection; it only reasons about
 // anomalies this module has already flagged.
 //
 // PRINCIPLES:

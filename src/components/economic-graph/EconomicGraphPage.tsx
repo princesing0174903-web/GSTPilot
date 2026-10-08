@@ -1944,7 +1944,7 @@ export default function EconomicGraphPage() {
                 <Globe className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">GSTPilot Economic Graph</h1>
+                <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">VEYRO Economic Graph</h1>
                 <p className="text-xs text-slate-500">Real-Time Business Ecosystem Map of India</p>
               </div>
             </div>

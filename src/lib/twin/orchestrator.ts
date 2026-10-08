@@ -13,7 +13,7 @@
 // partial bundle with empty states so the API never breaks. Every value comes
 // from REAL connected business data.
 //
-// Tagline: "GSTPilot Digital Twin™ — Remember Everything. Understand Everything.
+// Tagline: "VEYRO Digital Twin™ — Remember Everything. Understand Everything.
 //           Simulate Everything. Predict Everything."
 // ═══════════════════════════════════════════════════════════════════════════════
 

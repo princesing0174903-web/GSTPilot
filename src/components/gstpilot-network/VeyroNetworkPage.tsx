@@ -98,9 +98,9 @@ const COMMISSION_TIERS = [
 
 const PARTNER_TYPES = [
   { type: 'CA Firms', icon: Building2, count: 4235, commission: '20-30%', desc: 'Tax & compliance partners who bring clients onto the platform' },
-  { type: 'Technology Partners', icon: Link2, count: 189, commission: '15-25%', desc: 'SaaS companies integrating GSTPilot APIs into their products' },
-  { type: 'Resellers', icon: Share2, count: 567, commission: '25-35%', desc: 'Distribution partners selling GSTPilot licenses' },
-  { type: 'API Partners', icon: Globe, count: 312, commission: '10-20%', desc: 'Developers building on the GSTPilot API platform' },
+  { type: 'Technology Partners', icon: Link2, count: 189, commission: '15-25%', desc: 'SaaS companies integrating VEYRO APIs into their products' },
+  { type: 'Resellers', icon: Share2, count: 567, commission: '25-35%', desc: 'Distribution partners selling VEYRO licenses' },
+  { type: 'API Partners', icon: Globe, count: 312, commission: '10-20%', desc: 'Developers building on the VEYRO API platform' },
   { type: 'Government Bodies', icon: Award, count: 34, commission: 'N/A', desc: 'GSTN integration and compliance partnerships' },
   { type: 'NBFCs', icon: IndianRupee, count: 78, commission: '15-25%', desc: 'Embedded lending and working capital distribution' },
 ]
@@ -111,21 +111,21 @@ const PARTNER_STORIES = [
     type: 'CA Firm',
     revenue: '₹24,50,000',
     growth: '+340%',
-    quote: 'GSTPilot Network transformed our practice. We went from 50 clients to 500+ in 18 months.',
+    quote: 'VEYRO Network transformed our practice. We went from 50 clients to 500+ in 18 months.',
   },
   {
     name: 'TaxTech Solutions',
     type: 'Technology Partner',
     revenue: '₹18,75,000',
     growth: '+280%',
-    quote: 'Our API integration drives 2,000+ new businesses to GSTPilot every month.',
+    quote: 'Our API integration drives 2,000+ new businesses to VEYRO every month.',
   },
   {
     name: 'FinServe Capital',
     type: 'NBFC Partner',
     revenue: '₹45,00,000',
     growth: '+190%',
-    quote: 'Embedded lending through GSTPilot has become our fastest-growing channel.',
+    quote: 'Embedded lending through VEYRO has become our fastest-growing channel.',
   },
 ]
 
@@ -516,7 +516,7 @@ function PartnerCard({ partner }: { partner: typeof PARTNER_TYPES[0] }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
-export default function GSTPilotNetworkPage() {
+export default function VEYRONetworkPage() {
   const [activeTab, setActiveTab] = useState('overview')
   const [activeLoopStep, setActiveLoopStep] = useState(0)
 
@@ -1088,9 +1088,9 @@ export default function GSTPilotNetworkPage() {
                     <Rocket className="h-7 w-7 text-white" />
                   </div>
                   <div className="flex-1 text-center sm:text-left">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Become a GSTPilot Partner</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Become a VEYRO Partner</h3>
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                      Join 5,400+ partners earning through the GSTPilot Network. Get up to 80% revenue share.
+                      Join 5,400+ partners earning through the VEYRO Network. Get up to 80% revenue share.
                     </p>
                   </div>
                   <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20 h-11 px-6">

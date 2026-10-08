@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Firestore Schema Types & Collection Definitions
+// VEYRO — Firestore Schema Types & Collection Definitions
 // All 10 collections with relationships and workflow state machines
 // ═══════════════════════════════════════════════════════════════════════════════
 

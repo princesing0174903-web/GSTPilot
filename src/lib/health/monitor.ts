@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Health, Monitoring & Alerting — Monitor
+// VEYRO™ — Health, Monitoring & Alerting — Monitor
 //
 // The monitor orchestrates the individual checks:
 //   • runAllHealthChecks()    — runs every check in parallel, aggregates.

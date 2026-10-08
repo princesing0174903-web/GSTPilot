@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Execution Engine™ — MODULE 7: AI Agents™
+// VEYRO Execution Engine™ — MODULE 7: AI Agents™
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // ═══════════════════════════════════════════════════════════════════════════════
 // The 5 specialised agents that carry out the Execution Engine's tasks. Each
@@ -31,9 +31,9 @@ import type {
 } from './types';
 
 // ─── AGENT_CAPABILITIES — lookup of what each agent can do ────────────────────
-// Used by the Oracle to route natural-language commands to the right agent.
+// Used by VEYRO AI to route natural-language commands to the right agent.
 // Mirrors the `capabilities` field on each AIAgent in AI_AGENTS below; kept as a
-// separate Record so the Oracle can introspect capabilities by agent id without
+// separate Record so VEYRO AI can introspect capabilities by agent id without
 // scanning the full roster.
 export const AGENT_CAPABILITIES: Record<AgentName, string[]> = {
   gst_agent: [
@@ -150,7 +150,7 @@ export const AI_AGENTS: AIAgent[] = [
 ];
 
 // ─── getAgentForTask — routing function: ExecutionTaskType → owning AgentName ─
-// Maps each of the 11 task types to the agent that owns its execution. The Oracle
+// Maps each of the 11 task types to the agent that owns its execution. VEYRO AI
 // uses this to route natural-language commands: "file GSTR-3B" → gst_prepare →
 // gst_agent. Mirrors the agent assignments in execute.ts SEED_TASK_RECIPE.
 export function getAgentForTask(taskType: ExecutionTaskType): AgentName {
@@ -239,7 +239,7 @@ export function getAgentRoster(tasks: ExecutionTask[]): AgentRoster {
 
 // ─── formatAgentStatus — one-line status string for UI / Oracle responses ─────
 // Example output: "GST Agent — 142 tasks executed · 97.2% success rate · Active"
-// Used by the Oracle when responding to "what are your agents doing?" queries
+// Used by VEYRO AI when responding to "what are your agents doing?" queries
 // and by the dashboard's agent roster card.
 export function formatAgentStatus(agent: AIAgent): string {
   const statusLabel =

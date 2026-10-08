@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Action Engine (barrel + auto-registration)
+// VEYRO AI™ — Action Engine (barrel + auto-registration)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Importing from this barrel automatically registers all built-in actions.

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Production Payment Link Engine
+// VEYRO AI CFO™ — Production Payment Link Engine
 //
 // The REAL payment link creation engine. No simulations. No placeholders.
 // When a CA types "Create a payment link for Invoice INV-2026-000231", this

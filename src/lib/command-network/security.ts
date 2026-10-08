@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Security™ (Command Audit + RBAC + Zero-Trust)
+// VEYRO Infinity™ — Security™ (Command Audit + RBAC + Zero-Trust)
 //
 // Every command requires: RBAC, organization isolation, approval workflows,
 // zero-trust validation, command signatures, encrypted payloads, audit logging,

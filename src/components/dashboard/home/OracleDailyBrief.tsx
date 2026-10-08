@@ -1,18 +1,18 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle — OracleDailyBrief
+// VEYRO AI — OracleDailyBrief
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Replaces the old "Activate Oracle AI CFO" banner on the Home dashboard.
+// Replaces the old "Activate VEYRO AI CFO" banner on the Home dashboard.
 // Oracle is positioned as the intelligence layer of the platform — NOT an
 // advertised feature. This card surfaces real, data-driven insight lines
 // derived from the live business snapshot, GST returns, AI recommendations,
 // dashboard metrics, and Oracle insights. The entire card is clickable and
-// opens the Oracle page (router.push('/oracle')).
+// opens VEYRO AI page (router.push('/oracle')).
 //
 // DESIGN
-//   • Premium card with the Oracle amber/gold accent (Brain icon, amber ring).
+//   • Premium card with VEYRO AI amber/gold accent (Brain icon, amber ring).
 //   • Subtle framer-motion fade-in. Single column on mobile, two columns on
 //     lg+ (insights list on the left, key metrics strip on the right).
 //   • Every value derives from a real hook. If a value is zero / unavailable,

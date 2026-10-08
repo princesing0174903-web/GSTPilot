@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — MockGmailProvider (SERVER-ONLY)
+// VEYRO Gmail & WhatsApp Business Automation™ — MockGmailProvider (SERVER-ONLY)
 //
 // The default Gmail provider. Produces DETERMINISTIC, realistic-looking email
 // data seeded by the connected email address — the same mailbox always returns
@@ -132,7 +132,7 @@ const VENDOR_INVOICE_SUBJECTS = [
 const CUSTOMER_INVOICE_SUBJECTS = [
   'Invoice {num} — Sales invoice copy',
   'Tax Invoice {num} from Bharat Tech Solutions',
-  'Invoice {num} sent via GSTPilot',
+  'Invoice {num} sent via VEYRO',
 ];
 
 const PAYMENT_CONFIRM_SUBJECTS = [
@@ -165,7 +165,7 @@ const STATEMENT_SUBJECTS = [
 const GENERAL_SUBJECTS = [
   'Welcome to Tally Prime 2026 — New features',
   'Your monthly portfolio statement',
-  'GSTPilot: Weekly digest',
+  'VEYRO: Weekly digest',
   'Important: Verify your business details',
 ];
 

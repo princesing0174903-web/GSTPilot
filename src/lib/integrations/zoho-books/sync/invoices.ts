@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Invoices → Invoice
+// VEYRO — Zoho Books Sync · Invoices → Invoice
 //
 // Syncs Zoho Books invoices into the existing `Invoice` Prisma model.
-// Oracle Memory Engine + Oracle Chat read db.invoice.findMany — so synced Zoho
+// VEYRO AI Memory Engine + Oracle Chat read db.invoice.findMany — so synced Zoho
 // invoices appear in Oracle's memory snapshot, search_invoices tool, and the
 // financial aggregations ("Which invoices are overdue?", "Who owes me money?",
 // "Which customer generated the highest revenue?").

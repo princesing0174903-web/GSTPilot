@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — Shared Helpers
+// VEYRO Infinity™ — INFINITY AGI™ — Shared Helpers
 // Safe DB access, JSON parsing, in-memory cache, FNV-1a decision signatures,
 // replay tokens, payload hashing, memory search scoring.
 // One Intelligence. Every Decision. Entire Enterprise. Founder & Owner: Prince Singh.

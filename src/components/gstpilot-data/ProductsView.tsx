@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Products View (Inventory)
+// VEYRO™ — Products View (Inventory)
 //
 // Real-time product list backed by Firestore onSnapshot:
 //   organizations/GSTpilot_SAAS/products

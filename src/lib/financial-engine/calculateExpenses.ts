@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Expenses Calculator
+// VEYRO — Expenses Calculator
 //
 // Total Expenses = Purchase Bills (cost of goods) + Operating Expenses
 // (rent, salaries, software, travel, etc.). This is the single source of

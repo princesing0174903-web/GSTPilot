@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Zoho Books Token Crypto (server-only)
+// VEYRO™ — Zoho Books Token Crypto (server-only)
 // ═══════════════════════════════════════════════════════════════════════════════
 // AES-256-GCM encryption for Zoho OAuth tokens at rest.
 //

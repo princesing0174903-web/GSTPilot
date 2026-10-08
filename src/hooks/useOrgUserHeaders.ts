@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — useOrgUserHeaders()
+// VEYRO Infinity™ — useOrgUserHeaders()
 // ═══════════════════════════════════════════════════════════════════════════════
 // SINGLE canonical React hook that builds the `x-gstpilot-orgid` +
 // `x-gstpilot-actor` JSON header pair every authenticated API route expects.

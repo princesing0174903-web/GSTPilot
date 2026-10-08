@@ -1,4 +1,4 @@
-// GSTPilot™ Brand Identity System — barrel export
+// VEYRO™ Brand Identity System — barrel export
 export { BrandLogo, BrandLogoPulse, SidebarBrand, BRAND } from './BrandLogo';
 export type {
   BrandLogoProps,

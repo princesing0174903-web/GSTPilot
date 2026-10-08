@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Barrel Export (CLIENT-SAFE)
+// VEYRO ERP & Accounting Integrations™ — Barrel Export (CLIENT-SAFE)
 //
 // The single import surface for ERP functionality. This file is CLIENT-SAFE —
 // it only re-exports types, errors, the provider interface, and the client-side

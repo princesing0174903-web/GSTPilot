@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Dynamic Avatar (Phase 2 — Human Intelligence™)
+// VEYRO AI™ — Dynamic Avatar (Phase 2 — Human Intelligence™)
 //
 // An animated SVG face that makes Oracle feel alive — like Claude, Apple
 // Intelligence, and Perplexity Assistant. The avatar expresses six states

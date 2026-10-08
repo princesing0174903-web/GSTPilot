@@ -2,9 +2,9 @@
 import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useGSTTransactions() Hook
+// VEYRO — useGSTTransactions() Hook
 //
-// The single hook every GSTPilot component uses to:
+// The single hook every VEYRO component uses to:
 //   • LIST GST transactions for the current organization (real-time, org-scoped)
 //   • SYNC an invoice to a GST transaction (auto-create/update via calculations)
 //   • DELETE all GST transactions for an invoice (e.g. when the invoice is cancelled)

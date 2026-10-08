@@ -297,7 +297,7 @@ export default function GlobalFinancialCloudHub() {
         <div className="mt-6 flex items-center justify-center gap-2 text-center">
           <TrendingUp className="h-3.5 w-3.5 text-white/30" />
           <p className="text-[11px] text-white/40">
-            One Cloud. Every System. Every Developer. One Platform. — GSTPilot Infinity™
+            One Cloud. Every System. Every Developer. One Platform. — VEYRO™
           </p>
         </div>
       </div>

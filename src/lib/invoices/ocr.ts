@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Module 9: PDF & OCR Engine
+// VEYRO Real Invoice Engine™ — Module 9: PDF & OCR Engine
 // Upload bills → OCR extraction → auto-categorisation → GST extraction →
 // vendor detection → ITC eligibility.
 // Deterministic. Reads/writes Prisma. No LLM, no external OCR API.

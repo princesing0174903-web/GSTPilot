@@ -1,9 +1,9 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — BankingOraclePanel
+// VEYRO™ — BankingOraclePanel
 //
-// A premium Oracle AI panel for the Banking module. Surfaces 10 deterministic
+// A premium VEYRO AI panel for the Banking module. Surfaces 10 deterministic
 // "AI" insights derived from the organization's bank accounts and transactions:
 //
 //   1.  Cash Flow Analysis      — health pill + score gauge + burn/runway
@@ -18,7 +18,7 @@
 //   10. Recommendations         — prioritized action / impact pairs
 //
 // Design language mirrors InvoiceOraclePanel:
-//   • Amber/gold Sparkles chip + "Oracle AI" + amber "Live" badge
+//   • Amber/gold Sparkles chip + "VEYRO AI" + amber "Live" badge
 //   • Green pulsing dot indicating live insights
 //   • `glass-surface rounded-2xl border border-white/[0.06] p-4` cards
 //   • Oracle wrapper carries the amber gradient wash
@@ -272,7 +272,7 @@ function OracleHeader() {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-bold text-white">Oracle AI</h3>
+          <h3 className="text-sm font-bold text-white">VEYRO AI</h3>
           <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-300">
             Live
           </span>
@@ -1056,7 +1056,7 @@ function Footer() {
   return (
     <div className="px-1 pb-1 pt-2 text-center">
       <p className="text-[11px] leading-relaxed text-zinc-600">
-        Powered by <span className="font-semibold text-amber-300/80">Oracle AI™</span> —
+        Powered by <span className="font-semibold text-amber-300/80">VEYRO AI™</span> —
         deterministic heuristics, not financial advice.
       </p>
     </div>
@@ -1130,7 +1130,7 @@ function BankingOraclePanelContent({
             Select data to analyze
           </p>
           <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-            Oracle AI will analyse your banking activity and surface cash flow
+            VEYRO AI will analyse your banking activity and surface cash flow
             predictions, anomalies, and prioritized recommendations.
           </p>
         </div>

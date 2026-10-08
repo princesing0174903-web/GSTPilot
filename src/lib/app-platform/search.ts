@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — Marketplace Search™
+// VEYRO Global AI App Marketplace™ — Marketplace Search™
 // Global AI Search across: Apps · AI Employees · Developers · Integrations
 // Templates · Workflows · Widgets · Reports · Plugins. Instant semantic search.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -43,7 +43,7 @@ export async function searchMarketplace(query: string, tenantId?: string): Promi
   ).map((e) => ({
     id: `ai-emp-${e.slug}`,
     slug: e.slug, name: e.name, tagline: e.role, description: e.description,
-    developerId: 'gstpilot-labs', developerName: 'GSTPilot Labs', developerVerified: true,
+    developerId: 'gstpilot-labs', developerName: 'VEYRO Labs', developerVerified: true,
     type: 'ai_employee' as AppType, category: e.industry, version: '1.0.0',
     logo: null, color: e.color,
     screenshots: [], pricingModel: 'subscription' as const, priceAmount: 999,

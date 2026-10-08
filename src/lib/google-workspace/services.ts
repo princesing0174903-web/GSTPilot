@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Google Workspace Service Library
+// VEYRO — Google Workspace Service Library
 //
 // Thin wrappers around Google's REST APIs for Gmail, Drive, Docs, Sheets, and
 // Calendar. Every function takes a pre-resolved `accessToken` (from

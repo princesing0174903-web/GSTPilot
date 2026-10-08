@@ -1,11 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Memory Engine (PROMPT 6)
+// VEYRO AI™ — Memory Engine (PROMPT 6)
 //
-// The core persistent-memory CRUD + retrieval layer for the Oracle Business
+// The core persistent-memory CRUD + retrieval layer for VEYRO AI Business
 // Brain. Wraps the `OracleBrainMemory` Prisma model and provides typed
 // create / read / update / delete / list / pin / archive operations, plus
 // higher-level helpers for conversation memory, recent/pinned views, keyword
-// search, and the context snapshot that is injected into the Oracle system
+// search, and the context snapshot that is injected into VEYRO AI system
 // prompt.
 //
 // All JSON-shaped columns (tags, metadata) are stringified before write and
@@ -434,7 +434,7 @@ export async function getPinnedMemories(firmId: string): Promise<BrainMemory[]> 
 // ─── Context snapshot ─────────────────────────────────────────────────────────
 
 /**
- * Build the BrainContextSnapshot injected into the Oracle system prompt:
+ * Build the BrainContextSnapshot injected into VEYRO AI system prompt:
  * business facts, user prefs, open decisions, active tasks, semantically
  * relevant memories (or recent conversations), and behavioural learnings.
  * All sub-queries run in parallel via Promise.all.

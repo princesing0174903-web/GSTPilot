@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Workflow Engine: Pre-built Templates
+// VEYRO AI™ — Workflow Engine: Pre-built Templates
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Pre-built workflow templates that chain existing Action Engine actions into

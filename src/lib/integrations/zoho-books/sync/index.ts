@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Barrel Export
+// VEYRO — Zoho Books Sync · Barrel Export
 //
 // Single import surface for the Phase 2 data-sync module:
 //   import { runSync, getSyncStatus } from '@/lib/integrations/zoho-books/sync';

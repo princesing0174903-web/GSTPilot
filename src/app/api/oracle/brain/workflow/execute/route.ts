@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Workflow Execute API (SSE stream)
+// VEYRO AI™ — Workflow Execute API (SSE stream)
 // POST /api/oracle/brain/workflow/execute
 //
 // Executes a WorkflowPlan step-by-step, streaming per-step progress back to the

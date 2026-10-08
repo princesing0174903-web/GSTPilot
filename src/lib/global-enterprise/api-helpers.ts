@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO Infinity™ — Global Enterprise Operating System™
 // API Helpers — Shared wrapper for all 13 Enterprise APIs:
 //   - Audit logging (every call to GlobalAuditLog)
 //   - Rate limiting (120 req/min per actor+endpoint)

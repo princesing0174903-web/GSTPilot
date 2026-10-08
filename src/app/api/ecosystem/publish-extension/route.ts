@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       name,
       displayName: body.displayName ?? name,
       description: body.description ?? '',
-      publisher: body.publisher ?? 'GSTPilot Labs',
+      publisher: body.publisher ?? 'VEYRO Labs',
       kind: body.kind ?? 'app',
       category: body.category ?? 'ai',
       version: body.version ?? '1.0.0',

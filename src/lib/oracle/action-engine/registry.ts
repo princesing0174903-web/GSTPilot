@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Action Engine: Registry
+// VEYRO AI™ — Action Engine: Registry
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The generic, reusable registry that powers Oracle's ability to perform real
 // business actions. Every action (Create Invoice, Create Customer, Record
 // Payment, Record Expense, Send Reminder, and future actions like GST Filing,
 // Zoho Sync, Banking, Reports, WhatsApp, Email) plugs into this registry by
-// implementing the OracleAction interface — Oracle's core logic never needs to
+// implementing VEYRO AIAction interface — Oracle's core logic never needs to
 // change when a new action is added.
 //
 // Flow (handled by engine.ts):

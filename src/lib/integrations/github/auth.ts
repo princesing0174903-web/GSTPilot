@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GitHub OAuth Helpers (server-only)
+// VEYRO™ — GitHub OAuth Helpers (server-only)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Implements the canonical GitHub OAuth web authorization flow:

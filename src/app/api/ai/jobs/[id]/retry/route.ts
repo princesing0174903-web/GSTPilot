@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Retry Job
+// VEYRO AI Production Pipeline™ — Retry Job
 //
 // POST /api/ai/jobs/[id]/retry  { organizationId, freshAttempt? }
 //

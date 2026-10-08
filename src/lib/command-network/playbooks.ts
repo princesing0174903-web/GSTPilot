@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Enterprise Playbooks™
+// VEYRO Infinity™ — Enterprise Playbooks™
 //
 // Reusable command playbooks. Oracle selects the correct playbook automatically.
 // Examples: Quarter End, GST Filing, Audit, Funding Round, International

@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const NETWORK_TAGLINE =
-  'GSTPilot Global Enterprise Network™ — One Network. Every Enterprise. Infinite Intelligence.';
+  'VEYRO Global Enterprise Network™ — One Network. Every Enterprise. Infinite Intelligence.';
 
 // ─── Subsystem identifiers (the 13 specified, all extended on real data) ──────
 export const NETWORK_SUBSYSTEMS = [
@@ -673,7 +673,7 @@ export function timeAgo(iso: string): string {
 // ─── Engine UI constants (re-exported by engine.ts for UI consumers) ──────────
 //
 // `engine.ts` imports these three maps from this types module and uses them
-// to render the Oracle context block (e.g. `TIER_GLYPH[state.myBusiness.networkTier]`
+// to render VEYRO AI context block (e.g. `TIER_GLYPH[state.myBusiness.networkTier]`
 // at line ~1352). The engine also re-exports them at the bottom of its file
 // for UI consumers, so they MUST live here.
 //

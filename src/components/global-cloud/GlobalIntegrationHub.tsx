@@ -5,7 +5,7 @@
 // GLOBAL INTEGRATION HUB™ — 23 Native Integrations · 20 Connected ·
 //                              3.4M Records Synced
 //
-// Centralized control plane for every native GSTPilot integration: ERP, CRM,
+// Centralized control plane for every native VEYRO integration: ERP, CRM,
 // Payments, Banking, Communication, Productivity, Government and Commerce.
 // Includes category filtering, per-integration cards with sync telemetry, a
 // connection-status breakdown and a live sync-activity timeline.

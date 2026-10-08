@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ORACLE CHAT — Type System
 // ═══════════════════════════════════════════════════════════════════════════════
-// The Oracle Chat agent. Every response is grounded in REAL business data.
+// VEYRO AI Chat agent. Every response is grounded in REAL business data.
 // No fabrication. Every conclusion cites real database records via SourceRef.
 // ═══════════════════════════════════════════════════════════════════════════════
 

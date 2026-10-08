@@ -1750,7 +1750,7 @@ export default function DocumentsPage() {
               quickTips={[
                 'Drag-and-drop multiple files at once to batch upload',
                 'AI auto-classifies invoices, notices, and statements',
-                'Ask Oracle to summarize any uploaded document',
+                'Ask VEYRO AI to summarize any uploaded document',
               ]}
             />
           ) : (

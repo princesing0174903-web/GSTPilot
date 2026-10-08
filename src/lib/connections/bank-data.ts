@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Bank Data Generator
+// VEYRO Infinity™ — Bank Data Generator
 //
 // REAL IMPLEMENTATION PENDING — returns null. Real bank API (Razorpay, Decentro,
 // MBS, Anumati, etc.) integration is a future enterprise phase.

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — ENTERPRISE AGI CORE™
+// VEYRO Infinity™ — INFINITY AGI™ — ENTERPRISE AGI CORE™
 //
 // One autonomous AGI Core. Every existing system becomes a capability of the
 // AGI. Oracle thinks using ALL systems simultaneously:

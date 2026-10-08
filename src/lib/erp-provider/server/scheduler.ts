@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Sync Scheduler (SERVER-ONLY)
+// VEYRO ERP & Accounting Integrations™ — Sync Scheduler (SERVER-ONLY)
 //
 // Manages ERP sync jobs with five trigger types:
 //   • manual       — user clicked "Sync Now"

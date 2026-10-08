@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Connect API
+// VEYRO ERP & Accounting Integrations™ — Connect API
 //
 // POST /api/erp/connect
 //   Body: { organizationId, provider, companyName, companyId?, companyGstin?,

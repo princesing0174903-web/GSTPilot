@@ -62,7 +62,7 @@ import { CHART_COLORS } from '@/lib/chart-theme';
 
 // ─── Color Palette ────────────────────────────────────────────────────────
 // Sourced from @/lib/chart-theme so every chart in this module stays aligned
-// with the GSTPilot Infinity™ brand system (blue primary, violet secondary,
+// with the VEYRO™ brand system (blue primary, violet secondary,
 // amber for warning, red for danger, green reserved for success only).
 // The COLORS keys are kept (legacy compatibility) but every value now points
 // at a chart-theme constant — no raw hexes here.

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Explainable AI
+// VEYRO AI Intelligence Core™ — Explainable AI
 // Every Oracle recommendation answers the seven executive questions:
 //   Why?  How?  Based on what?  What if ignored?  What happens next?
 //   Expected benefit?  Risk?  Confidence?

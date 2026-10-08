@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO Infinity™ — Global Enterprise Operating System™
 // Performance™ — In-memory TTL cache with scale presets (100M orgs, 1B tx/day).
 // Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -8,7 +8,7 @@
 // learnings, self-healing + execution stats. Cached 45s in-memory.
 //
 // Everything flows from REAL connected business data. No mock values.
-// Tagline: GSTPilot Infinity™ — Think. Decide. Execute. Learn. Grow.
+// Tagline: VEYRO™ — Think. Decide. Execute. Learn. Grow.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';

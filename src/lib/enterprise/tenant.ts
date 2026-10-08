@@ -88,7 +88,7 @@ export async function ensurePlatformTenant(): Promise<ResolvedTenant> {
   }
   const created = await db.tenant.create({
     data: {
-      name: 'GSTPilot Platform',
+      name: 'VEYRO Platform',
       slug: PLATFORM_TENANT_SLUG,
       status: 'active',
       plan: 'enterprise',

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Friendly Error Recovery
+// VEYRO AI™ — Friendly Error Recovery
 //
 // Converts raw technical errors into friendly, actionable user messages.
 // Detects network issues (for auto-retry) vs. permanent failures (for manual

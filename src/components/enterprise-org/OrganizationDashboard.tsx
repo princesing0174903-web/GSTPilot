@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — OrganizationDashboard
+// VEYRO — OrganizationDashboard
 //
 // The premium "Organization Management" landing view. Owners / Admins land here
 // to see their company workspace at a glance: profile, plan, members, recent
@@ -1350,7 +1350,7 @@ function OrganizationDashboardInner() {
                 />
                 <NotificationToggle
                   label="AI insights"
-                  description="Recommendations from Oracle AI"
+                  description="Recommendations from VEYRO AI"
                   enabled={!!notifications?.aiInsights}
                 />
                 <NotificationToggle

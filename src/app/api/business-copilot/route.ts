@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     const ZAI = (await import('z-ai-web-dev-sdk')).default
     const zai = await ZAI.create()
 
-    const systemPrompt = `You are GSTPilot AI Business Copilot — an expert financial advisor for Indian CA firms and businesses.
+    const systemPrompt = `You are VEYRO AI Business Copilot — an expert financial advisor for Indian CA firms and businesses.
 Answer questions about GST, compliance, invoices, payments, cash flow, and business operations.
 Use the provided live data context to give accurate, data-driven answers.
 Always use Indian number formatting (₹1,23,456) and DD/MM/YYYY dates.

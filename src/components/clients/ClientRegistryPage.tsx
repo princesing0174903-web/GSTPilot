@@ -1,14 +1,14 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Client Registry (Premium Enterprise CRM Redesign · Task 9)
+// VEYRO — Client Registry (Premium Enterprise CRM Redesign · Task 9)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Transforms the customer registry into a world-class enterprise CRM experience
 // inspired by Linear / Stripe / Vercel / Notion.
 //
 // Design pillars:
 //   1. Executive Header — page title, subtitle, and right-aligned action
-//      cluster (Ask Oracle + Add Client). Sticky on scroll.
+//      cluster (Ask VEYRO AI + Add Client). Sticky on scroll.
 //   2. Premium Search Bar — wide, tall, large icon, animated focus ring.
 //   3. Premium Filter Dropdowns — Status + State, with icons + smooth motion.
 //   4. Premium Table — sticky header, generous row height, row-hover gradient,
@@ -27,7 +27,7 @@
 //   • Create/Edit/Delete via POST/PATCH/DELETE /api/clients
 //   • GSTIN validation + auto state-code lookup
 //   • Navigation to Client Workspace + Returns
-//   • Ask Oracle button (smart default prompt)
+//   • Ask VEYRO AI button (smart default prompt)
 //   • Compliance/health badges
 //   • invalidateBusinessSnapshot() on every mutation
 //

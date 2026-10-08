@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Enterprise Command Network™ (GLOBAL COMMAND CENTER)
+// VEYRO Infinity™ — Enterprise Command Network™ (GLOBAL COMMAND CENTER)
 // Public barrel. One Command. Every Team. Entire Enterprise.
 // Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════

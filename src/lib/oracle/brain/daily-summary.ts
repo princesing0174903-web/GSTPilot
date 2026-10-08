@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Daily Summary (PROMPT 6)
+// VEYRO AI™ — Daily Summary (PROMPT 6)
 //
 // The "good morning" summary shown when Oracle opens. Combines yesterday's
 // conversations, today's priorities, pending tasks, upcoming GST deadlines,

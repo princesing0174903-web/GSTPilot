@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Run My Business™ — Real Agent Execution API (PT-1-b)
+// VEYRO Run My Business™ — Real Agent Execution API (PT-1-b)
 // POST /api/rmb/run-agent
 //
 // Body: { agent: 'collections'|'compliance'|'finance'|'reporting'|'gst', userId?: string }

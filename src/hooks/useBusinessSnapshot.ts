@@ -1,9 +1,9 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useBusinessSnapshot() Hook
+// VEYRO — useBusinessSnapshot() Hook
 //
-// The single hook every GSTPilot component uses to read the business snapshot.
+// The single hook every VEYRO component uses to read the business snapshot.
 // Auto-refreshes every 60 seconds and on window focus.
 //
 // Reliability (Task 2):

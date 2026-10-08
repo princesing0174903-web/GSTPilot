@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — FORECAST ENGINE
+// VEYRO AI CFO™ Phase 1 — FORECAST ENGINE
 //
 // Predicts 6 metrics across 4 horizons (7d, 30d, 90d, 365d) with confidence:
 //   • Revenue

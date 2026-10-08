@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Runway & Forecast Calculator
+// VEYRO — Runway & Forecast Calculator
 //
 // Runway = Cash / Monthly Burn Rate
 // Forecast = Linear projection from 6-month revenue trend

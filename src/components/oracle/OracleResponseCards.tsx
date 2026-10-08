@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — AI Response Cards (Premium Inline Detection)
+// VEYRO AI™ — AI Response Cards (Premium Inline Detection)
 //
 // When Oracle returns text that contains structured financial data, this module
 // detects the pattern and renders a beautiful premium card INSTEAD of (or above)

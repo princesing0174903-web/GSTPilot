@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 11: DASHBOARD™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 11: DASHBOARD™
 // Unified Compliance Dashboard aggregator — overall score, totals, by-regulation,
 // by-country, recentFilings, topRisks, upcomingDeadlineFeed, recentAuditEntries,
 // recentRegulationUpdates, scoreBreakdown, oracleNarrative. Cached 60s.

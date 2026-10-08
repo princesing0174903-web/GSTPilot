@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Real Data Activation + Auto Sync Engine
+// VEYRO™ — Real Data Activation + Auto Sync Engine
 //
 // DELETE /api/connections/[id] → disconnect a connection (soft-delete)
 // PATCH  /api/connections/[id] → update sync schedule (autoSync, syncIntervalMins)

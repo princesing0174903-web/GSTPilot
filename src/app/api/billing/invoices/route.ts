@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Invoices API
+// VEYRO Billing™ — Invoices API
 //
 // GET /api/billing/invoices?organizationId=...
 //   Returns the org's billing invoices (newest first, up to 100).

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — AI Bridge (SERVER-ONLY)
+// VEYRO ERP & Accounting Integrations™ — AI Bridge (SERVER-ONLY)
 //
 // Connects the ERP Provider to the AI Oracle:
 //   1. Reads ERP-synced data from Firestore (org-scoped): connections, customers,

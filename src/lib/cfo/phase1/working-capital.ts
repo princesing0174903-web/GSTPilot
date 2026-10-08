@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — WORKING CAPITAL ENGINE
+// VEYRO AI CFO™ Phase 1 — WORKING CAPITAL ENGINE
 //
 // Real working capital analytics:
 //   • Current Assets = Cash + AR + Inventory + Prepaid
@@ -39,7 +39,7 @@ export function computeWorkingCapital(data: RawCFOData): WorkingCapitalAnalytics
     .filter((i) => i.paymentStatus !== 'paid')
     .reduce((s, i) => s + (i.balanceAmount || i.totalAmount || 0), 0);
 
-  // Inventory: GSTPilot is services-first, so inventory ≈ 0 unless purchaseBills
+  // Inventory: VEYRO is services-first, so inventory ≈ 0 unless purchaseBills
   // have category 'inventory' or 'stock'
   const inventoryValue = purchaseBills
     .filter((p) => {

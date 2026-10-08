@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Firestore Data Layer (barrel)
+// VEYRO™ — Firestore Data Layer (barrel)
 //
 // One import surface for Customers / Products / Invoices:
 //   import { subscribeCustomers, createCustomer, ... } from '@/lib/gstpilot-data'

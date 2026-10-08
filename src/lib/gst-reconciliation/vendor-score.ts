@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Vendor (Supplier) Compliance Score Engine
+// VEYRO — Vendor (Supplier) Compliance Score Engine
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // For every unique supplier GSTIN in a reconciliation run, compute a

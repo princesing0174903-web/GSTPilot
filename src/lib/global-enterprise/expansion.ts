@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO™ — Global Enterprise Operating System™
 // Expansion Opportunities Engine — Identifies and ranks target countries for
 // expansion using market attractiveness, regulatory complexity, tax burden, and
 // ease of doing business. Recommendations grounded in REAL enterprise state.
@@ -156,7 +156,7 @@ export async function getExpansionOpportunities(
     if (s.easeOfDoingBusiness >= 70) reasonsFor.push(`Easy business environment (${s.easeOfDoingBusiness}/100) — ${country.bankingStandard} banking, ${country.accountingStandard.toUpperCase()} accounting`);
     if (s.taxBurden <= 40) reasonsFor.push(`Competitive tax burden (${s.taxBurden}/100)`);
     if (s.regulatoryComplexity <= 40) reasonsFor.push(`Light regulatory load (${s.regulatoryComplexity}/100)`);
-    if (country.taxSystem === 'gst' || country.taxSystem === 'vat') reasonsFor.push(`Modern ${country.taxSystem.toUpperCase()} tax system — familiar to GSTPilot`);
+    if (country.taxSystem === 'gst' || country.taxSystem === 'vat') reasonsFor.push(`Modern ${country.taxSystem.toUpperCase()} tax system — familiar to VEYRO`);
 
     if (s.regulatoryComplexity >= 70) reasonsAgainst.push(`Heavy regulatory complexity (${s.regulatoryComplexity}/100)`);
     if (s.taxBurden >= 70) reasonsAgainst.push(`High tax burden (${s.taxBurden}/100)`);

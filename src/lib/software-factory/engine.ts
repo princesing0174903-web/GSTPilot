@@ -10,7 +10,7 @@
 //   AI Frontend → AI Backend → AI QA → AI Security → AI DevOps →
 //   AI Release Manager → (AI CEO approval) → Production
 //
-// Tagline: "GSTPilot AI Software Factory™ — Think it. Build it. Deploy it. Scale it."
+// Tagline: "VEYRO AI Software Factory™ — Think it. Build it. Deploy it. Scale it."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { db } from '@/lib/db';

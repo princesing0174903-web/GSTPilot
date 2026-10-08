@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Cloud™ — Module 2: Bank Statement Engine
+// VEYRO Banking Cloud™ — Module 2: Bank Statement Engine
 // Daily sync, statement import, CSV upload, PDF parsing, transaction categorisation.
 // Deterministic engine. No LLM.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Observability Barrel Export + Init
+// VEYRO™ — Observability Barrel Export + Init
 //
 // Single import surface for the centralized logging, audit, error-tracking,
 // and performance infrastructure:

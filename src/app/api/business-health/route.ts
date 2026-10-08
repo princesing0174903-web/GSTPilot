@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Business Health API
+// VEYRO™ — Business Health API
 //
 // GET /api/business-health → returns the canonical Business Health Score and
 //                             Risk Score (with per-factor breakdowns) from the

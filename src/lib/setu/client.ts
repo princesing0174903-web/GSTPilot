@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Setu SDK — Centralized HTTP Client (retry, rate-limit, logging)
+// VEYRO Setu SDK — Centralized HTTP Client (retry, rate-limit, logging)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // All Setu AA gateway traffic flows through `SetuClient.request()`. This gives

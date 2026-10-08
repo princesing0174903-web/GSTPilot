@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Server Orchestrator (SERVER-ONLY)
+// VEYRO AI Oracle™ & AI CFO™ — Server Orchestrator (SERVER-ONLY)
 //
 // The thin server-side layer that:
 //   1. Gathers REAL business data from Firestore (org-scoped):

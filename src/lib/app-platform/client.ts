@@ -1,4 +1,4 @@
-/** GSTPilot Global AI App Marketplace™ — Client-safe barrel (Prisma-free).
+/** VEYRO Global AI App Marketplace™ — Client-safe barrel (Prisma-free).
  *
  * Explicit re-exports of ONLY the Prisma-free modules in this package:
  *   types, catalog, permissions, sdk, ai-builder.

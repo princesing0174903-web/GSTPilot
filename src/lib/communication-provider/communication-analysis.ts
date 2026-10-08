@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Communication Analysis Engine
+// VEYRO Gmail & WhatsApp Business Automation™ — Communication Analysis Engine
 //
 // PURE functions — safe to import from both client and server. Used by:
 //   • MockGmailProvider / MockWhatsAppProvider (to stamp categories on generated

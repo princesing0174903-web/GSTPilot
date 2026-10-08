@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Knowledge Synthesis
+// VEYRO AI Intelligence Core™ — Knowledge Synthesis
 // Every day Oracle publishes eight executive briefings, automatically:
 //   1. business_insight    2. risk_summary       3. growth_opportunity
 //   4. cost_saving          5. compliance_warning 6. revenue_forecast

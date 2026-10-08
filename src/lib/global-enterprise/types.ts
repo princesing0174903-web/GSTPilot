@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL ENTERPRISE OPERATING SYSTEM™
+// VEYRO™ — GLOBAL ENTERPRISE OPERATING SYSTEM™
 // Type System — Multi-country / multi-entity / multi-currency / multi-tax.
 // Founder & Owner: Prince Singh. All values derived from REAL production data.
 // ═══════════════════════════════════════════════════════════════════════════════

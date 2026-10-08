@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Invoice Builder · Pure GST math + helpers
+// VEYRO™ — Invoice Builder · Pure GST math + helpers
 //
 // All math is pure (no React, no side effects) so the components can memoize
 // aggressively. The inter-state decision is the only thing that varies the

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Briefing Assembler
+// VEYRO AI Intelligence Engine — Briefing Assembler
 //
 // Turns a collected dataset + ranked signals into the final OracleBriefing
 // JSON: headline, executive summary, health score, metrics panel, top actions,
@@ -32,7 +32,7 @@ const ENGINE_VERSION = '1.0.0';
  * The CANONICAL Health Score lives in `src/lib/business/snapshot.ts` →
  * `computeHealthScore()` and is exposed via `getBusinessSnapshot(orgId).healthScore`.
  * `assembleBriefing` accepts an optional `canonicalHealthScore` input that, when
- * provided, OVERRIDES this signal-based fallback so the Oracle briefing always
+ * provided, OVERRIDES this signal-based fallback so VEYRO AI briefing always
  * shows the same Health Score as the Home Dashboard / AI CFO / Run Business.
  *
  * Starts at 100 and subtracts based on problem severity; adds a small bonus

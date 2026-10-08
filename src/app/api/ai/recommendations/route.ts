@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Recommendations API
+// VEYRO AI Oracle™ & AI CFO™ — Recommendations API
 //
 // GET  /api/ai/recommendations?orgId=   — read recommendations (regenerates + persists)
 // POST /api/ai/recommendations          — regenerate

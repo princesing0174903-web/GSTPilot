@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Copilot Mode Selector
+// VEYRO AI™ — Copilot Mode Selector
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A dropdown that lets the user switch Oracle into one of 11 specialized copilot
@@ -15,7 +15,7 @@
 //   - Selecting a mode calls `onChange(mode)` — the parent is responsible for
 //     persisting to localStorage and sending `mode` in the brain POST body.
 //
-// Dark-themed to match the Oracle chat panel. Uses a hand-rolled dropdown
+// Dark-themed to match VEYRO AI chat panel. Uses a hand-rolled dropdown
 // (radix DropdownMenu's portal styling clashes with the black Oracle theme),
 // with click-outside-to-close + keyboard escape support.
 // ═══════════════════════════════════════════════════════════════════════════════

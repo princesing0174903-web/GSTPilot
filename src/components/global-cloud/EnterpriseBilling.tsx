@@ -361,9 +361,9 @@ export default function EnterpriseBilling() {
                       <TableHead className="text-white/50">App</TableHead>
                       <TableHead className="text-white/50">Publisher</TableHead>
                       <TableHead className="text-right text-white/50">Total Revenue</TableHead>
-                      <TableHead className="text-right text-white/50">GSTPilot Share</TableHead>
+                      <TableHead className="text-right text-white/50">VEYRO Share</TableHead>
                       <TableHead className="text-right text-white/50">Publisher Share</TableHead>
-                      <TableHead className="text-white/50">Split (GSTPilot / Publisher)</TableHead>
+                      <TableHead className="text-white/50">Split (VEYRO / Publisher)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -555,7 +555,7 @@ export default function EnterpriseBilling() {
         <div className="mt-6 flex items-center justify-center gap-2 text-center">
           <CreditCard className="h-3.5 w-3.5 text-white/30" />
           <p className="text-[11px] text-white/40">
-            Every dollar. Every contract. Every metered call. — GSTPilot Infinity™
+            Every dollar. Every contract. Every metered call. — VEYRO™
           </p>
         </div>
       </div>

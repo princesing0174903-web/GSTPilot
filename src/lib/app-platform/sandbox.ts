@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — App Sandbox™
+// VEYRO Global AI App Marketplace™ — App Sandbox™
 // Every application runs inside an isolated sandbox.
 // Memory limits · CPU limits · Storage quotas · API quotas · Permission boundaries
 // Network restrictions · Execution monitoring · Automatic shutdown

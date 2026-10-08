@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Financial Engine: Shared Types
+// VEYRO — Financial Engine: Shared Types
 //
-// Every metric in GSTPilot flows through these types. No page or component
+// Every metric in VEYRO flows through these types. No page or component
 // should ever define its own financial shape — import from here.
 //
 // GOLDEN RULE: When the database has no data, every field returns zero or

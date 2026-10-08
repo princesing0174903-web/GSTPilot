@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Payroll Utilities (Prisma-free, client-safe)
+// VEYRO Real Invoice Engine™ — Payroll Utilities (Prisma-free, client-safe)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pure utility functions extracted from payroll.ts so client components can
 // import them WITHOUT pulling @prisma/client into the browser bundle.

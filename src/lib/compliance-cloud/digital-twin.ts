@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 4: DIGITAL TWIN™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 4: DIGITAL TWIN™
 // Predict impact before execution: GST/tax/penalty/interest/cash-flow/audit
 // probability/compliance-score delta/regulatory risk. Persists snapshot to
 // db.complianceTwinSnapshot. Oracle narrative picks the safest path.

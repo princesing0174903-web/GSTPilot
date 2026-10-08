@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Account Sync API (TASK 12)
+// VEYRO Banking Module™ — Account Sync API (TASK 12)
 //
 // POST /api/banking/accounts/:id/sync?organizationId=...   → syncAccount(id, orgId, uid)
 //

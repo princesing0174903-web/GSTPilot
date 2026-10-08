@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Execution Engine™ — Shared Type Contracts
+// VEYRO Execution Engine™ — Shared Type Contracts
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // ═══════════════════════════════════════════════════════════════════════════════
 // All 8 engine files import from here. Mirrors the Prisma models but stays

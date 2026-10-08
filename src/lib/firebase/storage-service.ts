@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Storage Service (Multi-Tenant) — Supabase Storage
+// VEYRO — Storage Service (Multi-Tenant) — Supabase Storage
 //
-// The single source of truth for every file operation in GSTPilot.
+// The single source of truth for every file operation in VEYRO.
 //
 // Backed by Supabase Storage (bucket: "gstpilot-files"). Firebase
 // Authentication, Firestore, and Firebase Functions are NOT touched — only the
@@ -85,7 +85,7 @@ export interface UploadOptions {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** 100 MB — the maximum file size accepted by GSTPilot uploads. */
+/** 100 MB — the maximum file size accepted by VEYRO uploads. */
 export const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
 export const MAX_FILE_SIZE_LABEL = '100 MB';
@@ -476,7 +476,7 @@ export async function deleteFile(storagePath: string): Promise<void> {
  *
  * Note: Supabase `list()` returns up to 1,000 items per call. For very large
  * orgs a follow-up token would be needed, but this is more than enough for the
- * typical GSTPilot workspace.
+ * typical VEYRO workspace.
  */
 export async function listFiles(
   organizationId: string,

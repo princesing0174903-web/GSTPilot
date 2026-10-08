@@ -1145,7 +1145,7 @@ function SellTab({ items, onProductClick, onInstall }: { items: MarketplaceItem[
             <div className="inline-flex items-center justify-center rounded-2xl bg-white/20 p-4 mb-4">
               <Store size={40} className="text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Become a GSTPilot Seller</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">Become a VEYRO Seller</h2>
             <p className="text-emerald-100 max-w-md mx-auto text-sm">
               List your templates, automations, AI agents, and compliance tools. Reach thousands of GST professionals across India.
             </p>
@@ -1174,7 +1174,7 @@ function SellTab({ items, onProductClick, onInstall }: { items: MarketplaceItem[
 
         {/* Seller Types */}
         <div>
-          <h3 className="text-sm font-semibold text-slate-700 mb-3">Who can sell on GSTPilot?</h3>
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">Who can sell on VEYRO?</h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {(Object.entries(SELLER_TYPE_CONFIG) as [SellerType, typeof SELLER_TYPE_CONFIG[SellerType]][]).map(([type, config]) => {
               return (
@@ -1622,7 +1622,7 @@ export default function MarketplacePage() {
                 <Store size={20} className="text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-slate-800">GSTPilot Marketplace</h1>
+                <h1 className="text-lg font-bold text-slate-800">VEYRO Marketplace</h1>
                 <p className="text-[10px] text-slate-400">Discover tools built by India&apos;s top GST professionals</p>
               </div>
             </div>

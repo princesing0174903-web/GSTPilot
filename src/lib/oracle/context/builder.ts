@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Unified Financial Context: Builder
+// VEYRO AI™ — Unified Financial Context: Builder
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // THE single entry point. Every Oracle surface (brain route, daily briefing,

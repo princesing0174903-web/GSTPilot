@@ -21,7 +21,7 @@
 //  10.  Autonomous Workflow Engine™ (workflow templates)
 //  11.  Board Meeting Mode™ (collapsible board report)
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useEffect, useState, useCallback } from 'react';
@@ -1099,7 +1099,7 @@ export default function AICEOSections() {
       {/* Footer tagline */}
       <div className="text-center pt-2">
         <p className="text-[11px] text-slate-500 italic">
-          GSTPilot AI CEO™ — Run Your Business. Not Your Software. · Founded by Prince Singh
+          VEYRO AI CEO™ — Run Your Business. Not Your Software. · Founded by Prince Singh
         </p>
       </div>
     </div>

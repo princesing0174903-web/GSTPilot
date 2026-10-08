@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — ZohoModulesGrid
+// VEYRO — ZohoModulesGrid
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // 8 module cards (Customers / Invoices / Bills / Payments / Expenses /

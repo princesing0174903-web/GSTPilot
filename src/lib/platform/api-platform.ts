@@ -14,7 +14,7 @@ function parseJSON<T>(raw: unknown, fallback: T): T {
   try { return JSON.parse(raw) as T; } catch { return fallback; }
 }
 
-// ─── Canonical API endpoint inventory (the Executive APIs GSTPilot ships) ─────
+// ─── Canonical API endpoint inventory (the Executive APIs VEYRO ships) ─────
 export const PLATFORM_API_ENDPOINTS: ApiEndpointSpec[] = [
   { method: 'GET', path: '/api/platform/dashboard', description: 'Platform-wide SaaS dashboard — all 14 subsystems', category: 'Platform', auth: 'api_key', rateLimited: true },
   { method: 'GET', path: '/api/platform/organizations', description: 'List all customer organisations', category: 'Organizations', auth: 'api_key', rateLimited: true },

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Create Invoice API
+// VEYRO Billing™ — Create Invoice API
 // POST /api/billing/invoice
 //   Body: CreateInvoiceInput
 // ═══════════════════════════════════════════════════════════════════════════════

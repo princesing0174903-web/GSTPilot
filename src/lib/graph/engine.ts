@@ -2,7 +2,7 @@
 // GSTPILOT BUSINESS GRAPH™ — Core Engine (Phase 6 LIVE)
 // Real Business Knowledge Graph — self-building, real-time, root-cause aware.
 //
-// Tagline: "GSTPilot Business Graph™ — Understand Everything. Connect Everything.
+// Tagline: "VEYRO Business Graph™ — Understand Everything. Connect Everything.
 //           Predict Everything."
 //
 // Modules implemented here:
@@ -2091,7 +2091,7 @@ export function formatGraphContextBlock(state: GraphState): string {
   const rg = state.riskGraph;
   lines.push('── LIVE BUSINESS GRAPH STATE ──');
   lines.push(`Generated: ${state.generatedAt}`);
-  lines.push(`Tagline: GSTPilot Business Graph™ — Understand Everything. Connect Everything. Predict Everything.`);
+  lines.push(`Tagline: VEYRO Business Graph™ — Understand Everything. Connect Everything. Predict Everything.`);
   lines.push(`Nodes: ${kg.nodes.length} (${Object.entries(kg.nodeCountByType).map(([t, c]) => `${t}:${c}`).join(', ')})`);
   lines.push(`Edges: ${kg.edges.length} (${Object.entries(kg.edgeCountByType).map(([t, c]) => `${t}:${c}`).join(', ')})`);
   lines.push(`Connected sources: ${state.sourceCount ?? 0}`);

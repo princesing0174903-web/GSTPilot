@@ -23,7 +23,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Status Pills (Premium Edition)
+// VEYRO Banking Module™ — Status Pills (Premium Edition)
 //
 // Beautiful color-coded badges for account status, transaction type,
 // reconciliation match type, and transaction status. Each maps to a semantic

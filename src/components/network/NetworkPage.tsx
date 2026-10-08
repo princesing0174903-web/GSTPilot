@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Network Page (Obsidian Infinity™)
+// VEYRO™ — Network Page (Obsidian Infinity™)
 //
 // A calm, premium "business network" view. The living graph of clients,
 // partners, and connections that Oracle orchestrates.
@@ -264,7 +264,7 @@ export function NetworkPage() {
                   className="glass-surface hover-lift inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-foreground"
                 >
                   <Sparkles className="h-4 w-4 text-[#00F5D4]" />
-                  Ask Oracle to map my network
+                  Ask VEYRO AI to map my network
                 </button>
               </div>
 

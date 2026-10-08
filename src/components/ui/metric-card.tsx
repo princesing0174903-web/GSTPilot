@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Premium MetricCard
+// VEYRO — Premium MetricCard
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Enterprise-grade KPI card inspired by Stripe / Linear / Vercel dashboards.

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — AI CFO RECOMMENDATIONS
+// VEYRO AI CFO™ Phase 1 — AI CFO RECOMMENDATIONS
 //
 // Generates executive advice based on real business data. Every recommendation
 // includes:

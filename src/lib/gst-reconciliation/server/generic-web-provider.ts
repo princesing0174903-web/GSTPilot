@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Generic Web GSP Provider (SERVER-ONLY)
+// VEYRO — Generic Web GSP Provider (SERVER-ONLY)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A generic GSP provider that connects to ANY standards-compliant GSP gateway
-// via a base URL + bearer token. The expected response shape is the GSTPilot
+// via a base URL + bearer token. The expected response shape is the VEYRO
 // canonical GSTR2B JSON (documented in /docs/gsp-contract.md), which mirrors
 // the fields returned by MastersIndia/ClearTax after normalization.
 //

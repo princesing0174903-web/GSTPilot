@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Reconciliation API (TASK 12)
+// VEYRO Banking Module™ — Reconciliation API (TASK 12)
 //
 // GET  /api/banking/reconcile?organizationId=...&matchType=...&status=...&limit=...
 //   → { summary: ReconciliationSummary, records: BankReconciliationRecord[] }

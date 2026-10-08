@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Oracle Autonomous Actions Registry (Phase Delta · 2)
+// VEYRO — Oracle Autonomous Actions Registry (Phase Delta · 2)
 // Oracle can now EXECUTE finance operations, not just answer questions.
 // Every action is permission-gated, audit-logged, and supports dry-run.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Analyze API (the THINK step)
+// VEYRO AI CFO™ — Analyze API (the THINK step)
 //
 // POST /api/oracle/cfo/analyze
 //
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     organizationId: String(body.organizationId ?? 'preview-org'),
     firmId: body.firmId ? String(body.firmId) : null,
     userId: String(body.userId ?? 'preview-user'),
-    userEmail: String(body.userEmail ?? 'preview@gstpilot.in'),
+    userEmail: String(body.userEmail ?? 'preview@veyro.com'),
     userRole: (body.userRole as ToolContext['userRole']) ?? 'manager',
   };
 

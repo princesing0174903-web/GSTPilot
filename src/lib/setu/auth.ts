@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Setu SDK — OAuth2 Token Manager (single-flight refresh)
+// VEYRO Setu SDK — OAuth2 Token Manager (single-flight refresh)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Setu uses OAuth2 client_credentials. Tokens are RS256-signed JWTs valid for

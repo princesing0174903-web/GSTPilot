@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Autonomous Insights Engine (PROMPT 5)
+// VEYRO AI™ — Autonomous Insights Engine (PROMPT 5)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Oracle proactively notices things — WITHOUT the user asking. Each insight is

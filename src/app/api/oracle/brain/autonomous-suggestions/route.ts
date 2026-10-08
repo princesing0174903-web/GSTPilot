@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Autonomous Suggestions API
+// VEYRO AI™ — Autonomous Suggestions API
 // GET /api/oracle/brain/autonomous-suggestions?orgId=xxx
 //
 // Proactively analyzes the business snapshot and generates actionable

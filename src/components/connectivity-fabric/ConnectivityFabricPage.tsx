@@ -796,7 +796,7 @@ export default function ConnectivityFabricPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <KPICard icon={Star} label="Listings" value={fmt(dashboard.marketplaceListings)} accent="text-violet-400" />
             <KPICard icon={Download} label="Total Installs" value={fmt(dashboard.marketplaceInstalls)} accent="text-emerald-400" />
-            <KPICard icon={CheckCircle2} label="Certified" value={fmt(dashboard.marketplaceListings)} sub="GSTPilot verified" accent="text-sky-400" />
+            <KPICard icon={CheckCircle2} label="Certified" value={fmt(dashboard.marketplaceListings)} sub="VEYRO verified" accent="text-sky-400" />
             <KPICard icon={Users} label="Developers" value="—" sub="publishing" accent="text-amber-400" />
           </div>
 

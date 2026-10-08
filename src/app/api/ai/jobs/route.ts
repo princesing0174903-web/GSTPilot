@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Jobs API
+// VEYRO AI Production Pipeline™ — Jobs API
 //
 // POST /api/ai/jobs          — queue a new job (server-side, then trigger process)
 // GET  /api/ai/jobs?orgId=   — list jobs for an org

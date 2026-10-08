@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Live Business Context Builder
+// VEYRO AI™ — Live Business Context Builder
 //
 // The SINGLE source of truth for every Oracle prompt. Builds a compact, fully
 // grounded context block from ONLY these live, tenant-scoped sources — in this

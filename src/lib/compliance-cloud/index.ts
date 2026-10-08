@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Public barrel
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Public barrel
 // Re-exports all 13 subsystems + shared types. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════
 

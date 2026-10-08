@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseAppBuilderIntent, generateAppSpec } from '@/lib/app-platform/ai-builder';
 
-/** POST /api/app-platform/ai-builder — Oracle AI App Builder generates an app spec from natural language.
+/** POST /api/app-platform/ai-builder — VEYRO AI App Builder generates an app spec from natural language.
  *  Body: { command: "Build a CRM extension" } → returns parsed intent + generated app spec. */
 export async function POST(request: NextRequest) {
   try {

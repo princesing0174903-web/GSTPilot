@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Client-Safe Firestore Service
+// VEYRO AI Production Pipeline™ — Client-Safe Firestore Service
 //
 // The single entry point for all AI pipeline Firestore operations on the
 // CLIENT side. Mirrors the invoice-engine + GSTN service patterns:

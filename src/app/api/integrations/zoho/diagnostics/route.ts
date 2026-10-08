@@ -11,7 +11,7 @@
 //     dataCenter: "in"|"com"|...,
 //     accountsUrl: string,              // e.g. https://accounts.zoho.in
 //     apiBaseUrl: string,               // e.g. https://www.zohoapis.in/books/v3
-//     redirectUri: string,              // the EXACT redirect_uri GSTPilot will use
+//     redirectUri: string,              // the EXACT redirect_uri VEYRO will use
 //     redirectUriSource: "env"|"dynamic",
 //     clientIdPrefix: string,           // first 20 chars only — NEVER the full secret
 //     scope: string,

@@ -104,7 +104,7 @@ export function OracleAI() {
   return (
     <div className="space-y-4">
       <SectionHeader
-        title="Oracle AI"
+        title="VEYRO AI"
         subtitle="Conversational AI for any business question"
         icon={Sparkles}
         accent="violet"
@@ -167,7 +167,7 @@ export function OracleAI() {
                 <Sparkles className="h-4 w-4" />
               </span>
               <div>
-                <CardTitle className="text-sm font-semibold text-foreground">Oracle</CardTitle>
+                <CardTitle className="text-sm font-semibold text-foreground">VEYRO AI</CardTitle>
                 <p className="text-[11px] text-muted-foreground">AI CFO · Aurum Industries</p>
               </div>
             </div>
@@ -203,7 +203,7 @@ export function OracleAI() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKeyDown}
                 rows={1}
-                placeholder="Ask Oracle anything… (Enter to send, Shift+Enter for newline)"
+                placeholder="Ask VEYRO AI anything… (Enter to send, Shift+Enter for newline)"
                 className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-lg border border-border/60 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/30"
               />
               <Button

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Mock Zoho Books Provider (SERVER)
+// VEYRO ERP & Accounting Integrations™ — Mock Zoho Books Provider (SERVER)
 //
 // Deterministic simulated Zoho Books responses. Seeded by company name.
 //

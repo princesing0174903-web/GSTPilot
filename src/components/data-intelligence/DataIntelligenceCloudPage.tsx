@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL DATA INTELLIGENCE CLOUD™ (UNIFIED ENTERPRISE DATA BRAIN)
+// VEYRO™ — GLOBAL DATA INTELLIGENCE CLOUD™ (UNIFIED ENTERPRISE DATA BRAIN)
 // Every Data Point. One Enterprise Brain. Founder & Owner: Prince Singh.
 // One connected enterprise dataset powering every Oracle™ + AI Executive decision.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Shared Service Layer (barrel)
+// VEYRO — Shared Service Layer (barrel)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The canonical business-logic layer. Both the REST API routes (in /api/...)
-// AND the Oracle Action Engine import from here so writes, audit logs, graph
+// AND VEYRO AI Action Engine import from here so writes, audit logs, graph
 // events, timeline events, and activity logs are identical regardless of
 // whether the action originated from a button click or a natural-language
 // command to Oracle.

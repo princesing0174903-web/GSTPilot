@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO™ — Global Enterprise Operating System™
 // Multi-Currency Engine™ — Live + historical FX rates, multi-currency conversion,
-// consolidated multi-currency reporting. Base currency = INR (GSTPilot is India-rooted).
+// consolidated multi-currency reporting. Base currency = INR (VEYRO is India-rooted).
 // Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════
 

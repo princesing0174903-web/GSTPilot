@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Reminder Engine (PROMPT 6)
+// VEYRO AI™ — Reminder Engine (PROMPT 6)
 //
 // Smart proactive reminders. Oracle watches the business snapshot and creates
 // reminders autonomously: GST due, customer overdue, low bank balance, cash

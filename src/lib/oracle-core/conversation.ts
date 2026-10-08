@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Executive Conversation™ Engine
+// VEYRO AI Intelligence Core™ — Executive Conversation™ Engine
 // All AI executives continuously communicate. CEO asks CFO, CFO requests cash
 // forecast, COO checks operations, Legal checks compliance, HR checks hiring,
 // Marketing predicts demand, Oracle creates final strategy. The entire
@@ -216,7 +216,7 @@ export async function runExecutiveConversation(
   return serialize(updated);
 }
 
-/** Conversation stats for the Oracle dashboard (last 24h). */
+/** Conversation stats for VEYRO AI dashboard (last 24h). */
 export async function getConversationStats(): Promise<{
   total: number;
   active: number;

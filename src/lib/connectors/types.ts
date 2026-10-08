@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Data Engine™ — Connector Type System
+// VEYRO Real Data Engine™ — Connector Type System
 // Shared types for all data connectors (GSTN, Bank, Gmail, WhatsApp, Accounting)
 // ═══════════════════════════════════════════════════════════════════════════════
 

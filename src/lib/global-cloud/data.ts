@@ -8,7 +8,7 @@
 //
 // ── PRODUCTION SAFETY ─────────────────────────────────────────────────────────
 // Previously this module shipped ~1140 lines of curated STATIC data designed
-// to "look like a real billion-dollar SaaS platform (GSTPilot scale: ~2.4M
+// to "look like a real billion-dollar SaaS platform (VEYRO scale: ~2.4M
 // developers, ~180K enterprises, ~$4.8Bn API revenue)". REST_ENDPOINTS,
 // EVENT_TYPES (with fabricated dailyVolume / subscribers / p99LatencyMs),
 // WEBHOOK_ENDPOINTS, plus curated fake platform stats across 100+ exports.

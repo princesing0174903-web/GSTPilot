@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Analytics Dashboard™ — Data Layer
+// VEYRO Global Analytics Dashboard™ — Data Layer
 // Phase 7 — Subsystem 8
 // ═══════════════════════════════════════════════════════════════════════════════
 //

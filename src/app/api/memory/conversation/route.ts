@@ -3,7 +3,7 @@
 //
 //   POST { email, userMessage, oracleResponse, role?, fn? }
 //
-// Called by the Oracle chat route AFTER the stream completes (fire-and-forget).
+// Called by VEYRO AI chat route AFTER the stream completes (fire-and-forget).
 // Stores the turn so Oracle can reference past conversations in future sessions.
 // ═══════════════════════════════════════════════════════════════════════════════
 

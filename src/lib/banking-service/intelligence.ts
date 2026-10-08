@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Service — Oracle Banking Intelligence: Question Matching
+// VEYRO Banking Service — Oracle Banking Intelligence: Question Matching
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Pure helper that classifies a free-text banking question into one of eight

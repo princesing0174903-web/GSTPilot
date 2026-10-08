@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Revenue Calculator
+// VEYRO — Revenue Calculator
 //
 // Revenue = sum of totalAmount for all issued/sent/paid invoices (excludes
 // drafts and cancelled). This is the single source of truth for "Revenue"

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Status Bar (Phase 3 — Agent Engine™)
+// VEYRO AI™ — Status Bar (Phase 3 — Agent Engine™)
 //
 // A slim status indicator reflecting Oracle's current operational state.
 // Like Claude Code's status line / Cursor Agent's status pill.

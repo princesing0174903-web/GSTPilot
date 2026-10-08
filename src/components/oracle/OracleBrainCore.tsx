@@ -1,10 +1,10 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Premium AI CFO Experience
+// VEYRO AI™ — Premium AI CFO Experience
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Oracle is the AI CFO of GSTPilot. The first screen answers the question:
+// Oracle is the AI CFO of VEYRO. The first screen answers the question:
 //   "What does the business owner need to know in the next 30 seconds?"
 //
 // Layout (progressive disclosure, single scrollable column):
@@ -15,8 +15,8 @@
 //   │    1. CFO Hero — greeting + business health score           │
 //   │    2. Today's Top Priority — single CTA card                │
 //   │    3. Metrics Row — Revenue / Cash / GST (with sparklines)  │
-//   │    4. Oracle Intelligence — insight cards with actions      │
-//   │    5. Ask Oracle — quick action chips                       │
+//   │    4. VEYRO AI Intelligence — insight cards with actions      │
+//   │    5. Ask VEYRO AI — quick action chips                       │
 //   │    6. Timeline — recent business events                     │
 //   │    7. Conversation — chat thread (only when messages exist) │
 //   ├─────────────────────────────────────────────────────────────┤
@@ -76,11 +76,11 @@ export interface OracleBrainCoreProps {
   isPreviewMode?: boolean;
   /** Navigation callback — when Oracle calls `navigate`, this moves the user
    * to the requested page (e.g. invoices, customers, reports). Wired to the
-   * dashboard's setCurrentView by the OracleBrain wrapper. */
+   * dashboard's setCurrentView by VEYRO AIBrain wrapper. */
   onNavigate?: (view: string, entityId?: string) => void;
   /** Async function that returns the auth headers for the current user.
    *
-   * REQUIRED for production. The Oracle routes (`/api/oracle/brain`,
+   * REQUIRED for production. VEYRO AI routes (`/api/oracle/brain`,
    * `/api/oracle/brain/confirm`, `/api/oracle/brain/sessions`, etc.) all use
    * `requireAuth` + `requireOrgMembership` which expect EITHER:
    *   - `Authorization: Bearer <Firebase ID token>` (preferred — verified via
@@ -621,7 +621,7 @@ function useCountUp(target: number, durationMs = 800, deps: any[] = []): number 
 
 export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getAuthHeaders }: OracleBrainCoreProps) {
   // ─── Auth-aware fetch wrapper ─────────────────────────────────────────────────
-  // The Oracle routes (/api/oracle/brain, /api/oracle/brain/confirm,
+  // VEYRO AI routes (/api/oracle/brain, /api/oracle/brain/confirm,
   // /api/oracle/brain/sessions, /api/oracle/brain/memory, etc.) all use
   // requireAuth() + requireOrgMembership(). Without auth headers, every call
   // returns HTTP 401 AUTH_REQUIRED.
@@ -716,7 +716,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
   // when the user navigates Dashboard → Oracle view, we get an instant cache
   // hit and skip the duplicate `/api/business/snapshot` fetch entirely. We
   // only fall back to a fresh fetch on cache miss (e.g. user lands directly
-  // on the Oracle view). On a successful fetch, we write back to the cache so
+  // on VEYRO AI view). On a successful fetch, we write back to the cache so
   // the dashboard hydrates instantly if it mounts later.
   useEffect(() => {
     let cancelled = false;
@@ -1452,7 +1452,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-base font-semibold text-white tracking-tight">Oracle</span>
+              <span className="text-base font-semibold text-white tracking-tight">VEYRO AI</span>
               <span className="hidden sm:inline-flex gst-status gst-status-info">AI CFO</span>
             </div>
             <div className="text-[11px] text-zinc-500 flex items-center gap-1.5">
@@ -1475,7 +1475,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
             <button
               onClick={() => { setMemoryOpen(v => !v); setSessionsOpen(false); }}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-[13px] text-zinc-300 hover:text-white hover:bg-[#0F0F0F] border border-transparent hover:border-[#1F1F1F] transition-colors"
-              title="Oracle Memory"
+              title="VEYRO AI Memory"
             >
               <Brain className="h-4 w-4 text-[#60A5FA]" />
               <span className="hidden sm:inline">Memory</span>
@@ -1493,7 +1493,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
                   <div className="px-4 py-3 border-b border-[#1F1F1F] flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Brain className="h-4 w-4 text-[#60A5FA]" />
-                      <span className="text-sm font-semibold text-white">Oracle Memory</span>
+                      <span className="text-sm font-semibold text-white">VEYRO AI Memory</span>
                     </div>
                     <span className="text-[11px] text-zinc-500">{memory.length} facts</span>
                   </div>
@@ -1568,7 +1568,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
                       {sessions.length === 0 ? (
                         <div className="px-2 py-6 text-center">
                           <MessageSquare className="h-6 w-6 text-zinc-700 mx-auto mb-2" />
-                          <p className="text-[12px] text-zinc-500">No conversations yet. Ask Oracle anything below.</p>
+                          <p className="text-[12px] text-zinc-500">No conversations yet. Ask VEYRO AI anything below.</p>
                         </div>
                       ) : (
                         <div className="space-y-0.5">
@@ -1621,7 +1621,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
           {/* ORACLE-UI-UPGRADE: Today's Briefing — collapsible 8-section executive
               briefing panel (above the chat). Defaults expanded on desktop,
               collapsed on mobile. Fetches /api/oracle/executive-briefing on
-              expand; never crashes the Oracle view (errors are isolated). */}
+              expand; never crashes VEYRO AI view (errors are isolated). */}
           <ExecutiveBriefingPanel
             orgId={orgId}
             onNavigate={onNavigate}
@@ -1647,7 +1647,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
           {/* 3. Metrics row */}
           <MetricsGrid snapshot={snapshot} loading={snapshotLoading} />
 
-          {/* 4. Oracle Intelligence — insight cards */}
+          {/* 4. VEYRO AI Intelligence — insight cards */}
           <OracleIntelligence
             insights={insights}
             loading={snapshotLoading}
@@ -1655,7 +1655,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
             disabled={isStreaming}
           />
 
-          {/* 5. Ask Oracle — mode-aware quick action chips */}
+          {/* 5. Ask VEYRO AI — mode-aware quick action chips */}
           <AskOracleChips
             onPrompt={sendMessage}
             disabled={isStreaming}
@@ -1752,7 +1752,7 @@ export function OracleBrainCore({ orgId, isPreviewMode = false, onNavigate, getA
                     sendMessage(input);
                   }
                 }}
-                placeholder={`Ask Oracle in ${activeMode.label} mode…`}
+                placeholder={`Ask VEYRO AI in ${activeMode.label} mode…`}
                 disabled={isStreaming}
                 className="h-12 pr-4 pl-4 bg-[#0A0A0A] border-[#1F1F1F] text-white placeholder:text-zinc-600 rounded-xl text-[15px] focus-visible:ring-1 focus-visible:ring-[#2563EB]/40 focus-visible:border-[#2563EB]/40"
               />
@@ -2232,7 +2232,7 @@ function SecondaryMetric({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 4. Oracle Intelligence — insight cards with one-click actions
+// 4. VEYRO AI Intelligence — insight cards with one-click actions
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function OracleIntelligence({
@@ -2251,7 +2251,7 @@ function OracleIntelligence({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkle className="h-5 w-5 text-[#60A5FA]" />
-          <h2 className="gst-section-title text-white">Oracle Intelligence</h2>
+          <h2 className="gst-section-title text-white">VEYRO AI Intelligence</h2>
         </div>
         <span className="gst-caption">{loading ? 'Analyzing…' : `${insights.length} insight${insights.length === 1 ? '' : 's'}`}</span>
       </div>
@@ -2344,7 +2344,7 @@ function InsightCard({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 5. Ask Oracle — mode-aware quick action chips
+// 5. Ask VEYRO AI — mode-aware quick action chips
 //    (ORACLE-UI-UPGRADE: now renders COPILOT_MODES[mode].suggestedPrompts
 //     instead of the static QUICK_ACTIONS list. The first prompt is treated
 //     as "primary" so users have a clear default.)
@@ -2366,7 +2366,7 @@ function AskOracleChips({
     <section className="space-y-4">
       <div className="flex items-center gap-2">
         <BrainCircuit className="h-5 w-5 text-[#60A5FA]" />
-        <h2 className="gst-section-title text-white">Ask Oracle</h2>
+        <h2 className="gst-section-title text-white">Ask VEYRO AI</h2>
         <span className="text-[11px] text-zinc-500 ml-1">· {modeMeta.label} mode</span>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -2604,7 +2604,7 @@ function MessageBubble({
               <span className="h-2 w-2 rounded-full bg-[#60A5FA] animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="h-2 w-2 rounded-full bg-[#60A5FA] animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
-            <span className="text-[13px] text-zinc-500">Oracle is thinking…</span>
+            <span className="text-[13px] text-zinc-500">VEYRO AI is thinking…</span>
           </div>
         )}
 

@@ -119,7 +119,7 @@ export function DashboardContent() {
     if (typeof window === 'undefined') return
     const onOpenNotifications = () => setNotificationsOpen(true)
     const onOpenCopilot = () => {
-      // Copilot lives at /oracle?view=oracle — navigate there. The Oracle
+      // Copilot lives at /oracle?view=oracle — navigate there. VEYRO AI
       // page itself focuses its input on mount, so a simple view switch is
       // enough to "open" it.
       setCurrentView('oracle')
@@ -163,7 +163,7 @@ export function DashboardContent() {
         </button>
 
         {/* Breadcrumb — content area starts directly here.
-            NOTE (Task 9): The duplicate GSTPilot brand mark that used to live
+            NOTE (Task 9): The duplicate VEYRO brand mark that used to live
             in the top bar has been removed. Branding now appears ONLY inside
             the sidebar (LeftNav.tsx), so the content area begins cleanly with
             the breadcrumb. On the dashboard view the breadcrumb shows just

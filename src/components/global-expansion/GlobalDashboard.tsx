@@ -4,7 +4,7 @@
 // GSTPILOT INFINITY™ — PHASE 14: GLOBAL DASHBOARD™ (Billion-Dollar Grade)
 //
 // A single-pane executive view of every country, currency, and tax jurisdiction
-// GSTPilot operates in. Real data from /lib/global/data.ts — no mocks, no API
+// VEYRO operates in. Real data from /lib/global/data.ts — no mocks, no API
 // calls, no Math.random.
 //
 //   • Executive Scorecard    — 8 compact KPIs with sparkline indicators
@@ -1814,7 +1814,7 @@ export default function GlobalDashboard() {
                 consolidated revenue and a compliance posture of{' '}
                 <span className="text-emerald-300 font-medium">{GLOBAL_KPIS.complianceScore}%</span>. FX revaluation
                 contributed <span className="text-emerald-300 font-medium">{fmtUSD(GLOBAL_KPIS.exchangeGainLossUSD)}</span> to
-                the bottom line. The Oracle recommends prioritising transfer-pricing realignment in APAC and accelerating
+                the bottom line. VEYRO AI recommends prioritising transfer-pricing realignment in APAC and accelerating
                 EU OSS registration ahead of the next filing window.
               </p>
 

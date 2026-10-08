@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Setu SDK — Webhook Verification + Parsing
+// VEYRO Setu SDK — Webhook Verification + Parsing
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Setu posts three event types to your webhook URL:

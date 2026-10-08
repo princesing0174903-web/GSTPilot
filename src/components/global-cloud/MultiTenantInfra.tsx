@@ -545,7 +545,7 @@ export default function MultiTenantInfra() {
         <div className="mt-6 flex items-center justify-center gap-2 text-center">
           <TrendingUp className="h-3.5 w-3.5 text-white/30" />
           <p className="text-[11px] text-white/40">
-            One Cloud. Ten Regions. 142 Edges. Infinite Scale. — GSTPilot Infinity™
+            One Cloud. Ten Regions. 142 Edges. Infinite Scale. — VEYRO™
           </p>
         </div>
       </div>

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Upgrade Phase 1 · Upgrade 8: AI Workspace Enhancements
+// VEYRO AI™ — Upgrade Phase 1 · Upgrade 8: AI Workspace Enhancements
 //
 // Client-side workspace store for: pinned chats, saved prompts, drafts,
 // favorites, recent actions, and shared conversations. Uses localStorage for

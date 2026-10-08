@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Google Workspace Token Encryption
+// VEYRO — Google Workspace Token Encryption
 //
 // AES-256-GCM encryption for OAuth tokens (access + refresh) stored in the
 // `GoogleWorkspaceToken` Prisma table. The encryption key is derived from

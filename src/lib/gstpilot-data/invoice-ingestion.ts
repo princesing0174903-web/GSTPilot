@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Phase 3: Invoice Ingestion (CLIENT-SIDE)
+// VEYRO™ — Phase 3: Invoice Ingestion (CLIENT-SIDE)
 //
 // Orchestrates the full upload → extract → match → save pipeline. Everything
 // Firestore/Storage here uses the CLIENT Firebase SDK so it runs under the
@@ -327,7 +327,7 @@ export interface CustomerMatch {
 /**
  * Find an existing customer matching the extracted vendor/buyer.
  * The extraction pipeline treats the vendor (seller) as the customer of
- * GSTPilot's registry when ingesting a purchase invoice. The UI lets the
+ * VEYRO's registry when ingesting a purchase invoice. The UI lets the
  * user pick which party to register.
  */
 export function matchCustomer(

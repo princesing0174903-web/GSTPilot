@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Evidence Card (Source Citation)
+// VEYRO AI™ — Evidence Card (Source Citation)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Renders a clickable "source citation" card BELOW a tool-result block. This is

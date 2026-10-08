@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Client-Safe Firestore Service
+// VEYRO Real Banking Foundation™ — Client-Safe Firestore Service
 //
 // The single entry point for all banking Firestore operations on the CLIENT side.
 // Mirrors the gstn-provider service pattern:

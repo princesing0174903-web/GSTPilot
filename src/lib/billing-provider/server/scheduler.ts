@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Background Scheduler (SERVER-ONLY)
+// VEYRO Billing™ — Background Scheduler (SERVER-ONLY)
 //
 // Manages billing background operations:
 //   • Renewals due: subscriptions past their period end + auto-renew=true

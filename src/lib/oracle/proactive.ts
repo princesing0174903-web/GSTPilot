@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Proactive Insights Engine (Daily Briefing)
+// VEYRO AI™ — Proactive Insights Engine (Daily Briefing)
 //
 // Computes "Today's Briefing" — a single, executive-grade summary that tells the
 // user what matters *right now*: overdue returns, available ITC, collection risks,

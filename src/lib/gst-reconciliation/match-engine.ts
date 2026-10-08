@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GST Reconciliation Match Engine v2
+// VEYRO — GST Reconciliation Match Engine v2
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Smart Match Engine v2 — Weighted Confidence Scoring

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Oracle Autonomous Actions Panel (Phase Delta · 2)
+// VEYRO — Oracle Autonomous Actions Panel (Phase Delta · 2)
 // Grid of permission-gated AI actions: create invoice, generate report,
 // schedule reminder, prepare GST return, etc. With dry-run + audit.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -73,7 +73,7 @@ export function OracleActionsPanel() {
           dryRun,
           organizationId: organization?.id ?? 'preview-org',
           userId: user?.id ?? 'preview-user',
-          userEmail: user?.email ?? 'preview@gstpilot.in',
+          userEmail: user?.email ?? 'preview@veyro.com',
         }),
       });
       const data = await res.json();

@@ -39,11 +39,11 @@ import {
 } from 'lucide-react'
 
 /* ════════════════════════════════════════════════════════════════════════
-   GSTPilotLanding — Luxury monochrome landing page
+   VEYROLanding — Luxury monochrome landing page
    20 sections · liquid-glass · cinematic · space-grade minimalism
    ════════════════════════════════════════════════════════════════════════ */
 
-interface GSTPilotLandingProps {
+interface VEYROLandingProps {
   onGetStarted?: () => void
   onBookDemo?: () => void
 }
@@ -168,7 +168,7 @@ function SectionHeading({
    TOP NAV
    ════════════════════════════════════════════════════════════════════════ */
 
-function TopNav({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
+function TopNav({ onGetStarted, onBookDemo }: VEYROLandingProps) {
   const [open, setOpen] = useState(false)
   const links = [
     { label: 'Product', href: '#features' },
@@ -194,8 +194,8 @@ function TopNav({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black">
             <Sparkles className="h-4 w-4" />
           </span>
-          <span className="hidden sm:inline">GSTPilot Infinity™</span>
-          <span className="sm:hidden">GSTPilot</span>
+          <span className="hidden sm:inline">VEYRO™</span>
+          <span className="sm:hidden">VEYRO</span>
         </button>
 
         {/* Center links */}
@@ -285,7 +285,7 @@ function HeroProductMock() {
           </div>
           <div className="mx-auto flex w-full max-w-md items-center gap-2 rounded-md bg-white/5 px-3 py-1.5 text-[11px] text-white/40">
             <Lock className="h-3 w-3" />
-            app.gstpilot.infinity/dashboard
+            app.veyro.comfinity/dashboard
           </div>
         </div>
 
@@ -433,7 +433,7 @@ function HeroProductMock() {
   )
 }
 
-function HeroSection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
+function HeroSection({ onGetStarted, onBookDemo }: VEYROLandingProps) {
   return (
     <section
       id="hero"
@@ -463,7 +463,7 @@ function HeroSection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
           transition={{ duration: 0.8, ease: 'easeOut' as const, delay: 0.05 }}
           className="mt-7 max-w-4xl text-6xl font-semibold leading-[0.98] tracking-[-0.04em] text-white md:text-7xl lg:text-8xl"
         >
-          The Financial Brain
+          The AI Operating System
           <br />
           of India
           <sup className="ml-1 align-super text-2xl font-medium text-white/55 md:text-3xl lg:text-4xl">
@@ -645,7 +645,7 @@ function FeaturesSection() {
     <section id="features" className="relative px-6 py-24 md:py-32">
       <div className="mx-auto max-w-7xl">
         <SectionHeading
-          eyebrow="GSTPilot Infinity"
+          eyebrow="VEYRO"
           title="One platform. Every financial operation."
           subtitle="Six clouds working as one — replacing a dozen disconnected tools with a single autonomous system."
         />
@@ -902,7 +902,7 @@ function OracleSection() {
                 <Bot className="h-4 w-4" />
               </div>
               <div>
-                <div className="text-sm font-semibold text-white">Oracle</div>
+                <div className="text-sm font-semibold text-white">VEYRO AI</div>
                 <div className="text-[10px] text-white/45">
                   AI Chief Financial Officer
                 </div>
@@ -1278,7 +1278,7 @@ function CommunicationCloudSection() {
 
             <div className="mt-4 flex items-center gap-2 rounded-lg bg-white/4 px-3 py-2 text-[11px] text-white/55">
               <Send className="h-3 w-3" />
-              Auto-managed by GSTPilot · 0 human touches
+              Auto-managed by VEYRO · 0 human touches
             </div>
           </motion.div>
 
@@ -1396,7 +1396,7 @@ const MARKETPLACE = [
   {
     icon: Landmark,
     title: 'Lenders',
-    desc: 'Working capital, term loans, and invoice discounting — pre-underwritten with your live GSTPilot data.',
+    desc: 'Working capital, term loans, and invoice discounting — pre-underwritten with your live VEYRO data.',
   },
   {
     icon: ShieldCheck,
@@ -1417,7 +1417,7 @@ function MarketplaceSection() {
         <SectionHeading
           eyebrow="Marketplace"
           title="A marketplace for Indian finance."
-          subtitle="GSTPilot isn't just software. It's a two-sided network connecting businesses with the financial institutions that serve them."
+          subtitle="VEYRO isn't just software. It's a two-sided network connecting businesses with the financial institutions that serve them."
         />
         <motion.div
           variants={staggerParent}
@@ -1480,7 +1480,7 @@ const PRICING = [
     name: 'Professional',
     price: '₹2,999',
     cadence: '/mo',
-    features: ['Up to 10 businesses', 'Unlimited invoices', 'Full reconciliation suite', 'Oracle AI CFO', 'Priority support'],
+    features: ['Up to 10 businesses', 'Unlimited invoices', 'Full reconciliation suite', 'VEYRO AI CFO', 'Priority support'],
     cta: 'Start Free',
     highlight: true,
   },
@@ -1502,7 +1502,7 @@ const PRICING = [
   },
 ]
 
-function PricingSection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
+function PricingSection({ onGetStarted, onBookDemo }: VEYROLandingProps) {
   return (
     <section id="pricing" className="relative px-6 py-24 md:py-32">
       <div className="mx-auto max-w-7xl">
@@ -1603,7 +1603,7 @@ function PricingSection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
 
 const TESTIMONIALS = [
   {
-    quote: 'GSTPilot feels like hiring an AI CFO.',
+    quote: 'VEYRO feels like hiring an AI CFO.',
     name: 'Aarav Mehta',
     role: 'CFO, Aurum Ventures',
     initials: 'AM',
@@ -1685,7 +1685,7 @@ function CaseStudiesSection() {
         <SectionHeading
           eyebrow="Case Studies"
           title="Outcomes, not features."
-          subtitle="Numbers from real finance teams running real money on GSTPilot."
+          subtitle="Numbers from real finance teams running real money on VEYRO."
         />
         <motion.div
           variants={staggerParent}
@@ -1876,13 +1876,13 @@ const COMPARISON = [
   },
 ]
 
-function WhyGSTPilotSection() {
+function WhyVEYROSection() {
   return (
     <section id="why" className="relative px-6 py-24 md:py-32">
       <div className="mx-auto max-w-7xl">
         <SectionHeading
-          eyebrow="Why GSTPilot"
-          title="Why GSTPilot."
+          eyebrow="Why VEYRO"
+          title="Why VEYRO."
           subtitle="The legacy stack vs. the autonomous stack — measured in outcomes."
         />
 
@@ -1904,7 +1904,7 @@ function WhyGSTPilotSection() {
             <div className="bg-white/4 p-5">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white">
                 <Sparkles className="h-3.5 w-3.5" />
-                GSTPilot
+                VEYRO
               </div>
               <div className="mt-1 text-sm text-white/80">Autonomous operations</div>
             </div>
@@ -1965,7 +1965,7 @@ function WhyGSTPilotSection() {
 const FAQS = [
   {
     q: 'Is my financial data secure?',
-    a: 'Yes. All data is encrypted at rest with AES-256 and in transit with TLS 1.3. We are ISO 27001 certified and SOC 2 Type II audited. No human at GSTPilot can read your transaction-level data without your explicit, time-boxed consent.',
+    a: 'Yes. All data is encrypted at rest with AES-256 and in transit with TLS 1.3. We are ISO 27001 certified and SOC 2 Type II audited. No human at VEYRO can read your transaction-level data without your explicit, time-boxed consent.',
   },
   {
     q: 'Do you support all GST return types?',
@@ -1973,10 +1973,10 @@ const FAQS = [
   },
   {
     q: 'Can I connect my existing bank?',
-    a: 'Yes. GSTPilot connects to 60+ Indian banks via the RBI-compliant Account Aggregator framework, plus direct feeds for ICICI, HDFC, Axis, Kotak, and YES Bank. UPI autopay and NEFT/RTGS reconciliation are included on every plan.',
+    a: 'Yes. VEYRO connects to 60+ Indian banks via the RBI-compliant Account Aggregator framework, plus direct feeds for ICICI, HDFC, Axis, Kotak, and YES Bank. UPI autopay and NEFT/RTGS reconciliation are included on every plan.',
   },
   {
-    q: 'How does the Oracle AI work?',
+    q: 'How does the VEYRO AI work?',
     a: 'Oracle is a domain-trained model that reads every transaction, return, and reconciliation event in your workspace. It performs causal analysis — not just summarization — and surfaces proactive insights. Any action it proposes runs through your approval chain before execution.',
   },
   {
@@ -2050,7 +2050,7 @@ function FAQSection() {
    SECTION 19 — FINAL CTA
    ════════════════════════════════════════════════════════════════════════ */
 
-function FinalCTASection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
+function FinalCTASection({ onGetStarted, onBookDemo }: VEYROLandingProps) {
   return (
     <section
       id="final-cta"
@@ -2082,7 +2082,7 @@ function FinalCTASection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
           className="mt-6 max-w-xl text-base text-white/65 md:text-lg"
         >
           Join 100,000+ businesses and 10,000+ CA firms running their finance on
-          GSTPilot Infinity.
+          VEYRO.
         </motion.p>
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -2111,7 +2111,7 @@ function FinalCTASection({ onGetStarted, onBookDemo }: GSTPilotLandingProps) {
 const FOOTER_COLS = [
   {
     title: 'Product',
-    links: ['GST Execution Cloud', 'Banking Cloud', 'Invoice Engine', 'Oracle AI', 'Pricing'],
+    links: ['GST Execution Cloud', 'Banking Cloud', 'Invoice Engine', 'VEYRO AI', 'Pricing'],
   },
   {
     title: 'Company',
@@ -2138,10 +2138,10 @@ function Footer() {
               <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black">
                 <Sparkles className="h-4 w-4" />
               </span>
-              GSTPilot Infinity™
+              VEYRO™
             </div>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/55">
-              The Financial Brain of India™. An autonomous operating system for
+              The AI Operating System for Business™. An autonomous operating system for
               every finance team.
             </p>
             <div className="mt-5 flex items-center gap-2">
@@ -2183,7 +2183,7 @@ function Footer() {
         {/* Bottom */}
         <div className="mt-16 flex flex-col items-center justify-between gap-4 border-t border-white/8 pt-6 sm:flex-row">
           <p className="text-xs text-white/45">
-            © 2026 GSTPilot Infinity™. The Financial Brain of India.
+            © 2026 VEYRO™. The AI Operating System for Business.
           </p>
           <div className="flex items-center gap-4 text-xs text-white/45">
             <span className="flex items-center gap-1.5">
@@ -2203,10 +2203,10 @@ function Footer() {
    ROOT COMPONENT
    ════════════════════════════════════════════════════════════════════════ */
 
-export default function GSTPilotLanding({
+export default function VEYROLanding({
   onGetStarted,
   onBookDemo,
-}: GSTPilotLandingProps) {
+}: VEYROLandingProps) {
   return (
     <div className="gp-landing relative min-h-screen bg-black text-white">
       <TopNav onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
@@ -2228,7 +2228,7 @@ export default function GSTPilotLanding({
         {/* 14 */}<CaseStudiesSection />
         {/* 15 */}<SecuritySection />
         {/* 16 */}<IntegrationsSection />
-        {/* 17 */}<WhyGSTPilotSection />
+        {/* 17 */}<WhyVEYROSection />
         {/* 18 */}<FAQSection />
         {/* 19 */}<FinalCTASection onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
       </main>

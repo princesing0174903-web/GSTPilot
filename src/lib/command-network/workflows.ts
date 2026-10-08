@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Command Workflows™
+// VEYRO Infinity™ — Command Workflows™
 //
 // Enterprise workflows orchestrated by Oracle. Examples:
 //   Hire Employee → Payroll → Compliance → IT Provisioning → Knowledge Graph →

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Audit Log API
+// VEYRO AI CFO™ — Audit Log API
 //
 // GET /api/oracle/cfo/audit?organizationId=xxx&limit=20
 //   Returns recent CFO actions with full audit detail.

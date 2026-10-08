@@ -386,7 +386,7 @@ export default function EnterpriseCommandCenter() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" className="border-white/10 bg-white/[0.02] text-zinc-300 hover:text-white hover:bg-white/[0.05]">
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Ask Oracle
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Ask VEYRO AI
             </Button>
             <Button size="sm" className="bg-emerald-500 text-emerald-950 hover:bg-emerald-400">
               <Zap className="mr-1.5 h-3.5 w-3.5" /> Run AI Sweep

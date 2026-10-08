@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 2 — Data Validation Engine API
+// VEYRO™ — PHASE 2B · MODULE 2 — Data Validation Engine API
 //
 // GET  /api/validation → validation summary (dataQualityScore, issues, counts)
 // POST /api/validation → re-run full validation (triggered after sync or manually)

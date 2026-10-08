@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Google Workspace OAuth Client + Token Store
+// VEYRO — Google Workspace OAuth Client + Token Store
 //
 // Handles the full OAuth 2.0 lifecycle:
 //   • Build consent URLs with the full Workspace scope set

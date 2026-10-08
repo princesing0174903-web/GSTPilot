@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Run My Business™ — Real Agent Execution Engine (PT-1-b)
+// VEYRO Run My Business™ — Real Agent Execution Engine (PT-1-b)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Each agent in this file reads REAL business state from the database and writes

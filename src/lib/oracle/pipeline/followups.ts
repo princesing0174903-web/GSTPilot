@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Smart Follow-up Questions (PROMPT 5)
+// VEYRO AI™ — Smart Follow-up Questions (PROMPT 5)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Instead of ending responses flatly, Oracle asks intelligent follow-up

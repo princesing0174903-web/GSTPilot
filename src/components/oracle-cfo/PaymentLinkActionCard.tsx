@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Payment Link Action Card (Production)
+// VEYRO AI CFO™ — Payment Link Action Card (Production)
 //
 // Renders inline below an Oracle assistant message when the user asks to create
 // a payment link. This is the REAL production flow:

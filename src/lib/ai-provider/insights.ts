@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Insight Engine
+// VEYRO AI Oracle™ & AI CFO™ — Insight Engine
 //
 // A PURE, CLIENT-SAFE function that detects business events from a real
 // BusinessContext. Every insight references the REAL metric it was derived

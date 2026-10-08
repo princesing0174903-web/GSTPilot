@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — MULTI-AGENT SWARM™
+// VEYRO Infinity™ — INFINITY AGI™ — MULTI-AGENT SWARM™
 //
 // 15 specialized autonomous agents collaborate continuously. Oracle acts as
 // the coordinating intelligence.

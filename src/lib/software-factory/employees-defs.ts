@@ -47,7 +47,7 @@ export const DEV_EMPLOYEE_DEFS: EmployeeDef[] = [
     stage: 'architecture',
     responsibilities: [
       'Design end-to-end system architecture',
-      'Select technology stack aligned to GSTPilot standards',
+      'Select technology stack aligned to VEYRO standards',
       'Define service boundaries and data flow',
       'Ensure scalability, security, and maintainability',
     ],
@@ -64,7 +64,7 @@ export const DEV_EMPLOYEE_DEFS: EmployeeDef[] = [
       'Design page layouts and component hierarchy',
       'Map user flows and navigation',
       'Ensure WCAG 2.2 AA accessibility',
-      'Apply GSTPilot design system',
+      'Apply VEYRO design system',
     ],
     deliverables: ['Wireframes', 'Page specs', 'Component list', 'Design tokens'],
   },

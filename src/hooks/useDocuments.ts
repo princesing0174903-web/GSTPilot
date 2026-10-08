@@ -2,9 +2,9 @@
 import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useDocuments() Hook
+// VEYRO — useDocuments() Hook
 //
-// The single hook every GSTPilot component uses to:
+// The single hook every VEYRO component uses to:
 //   • LIST documents for the current organization (real-time, org-scoped)
 //   • UPLOAD files to Firebase Storage (+ write Firestore metadata)
 //   • DELETE a document (Storage file + Firestore metadata)

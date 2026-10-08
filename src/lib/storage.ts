@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Legacy Storage Helpers (Supabase Storage)
+// VEYRO — Legacy Storage Helpers (Supabase Storage)
 //
 // A smaller, path-based upload helper that predates the org-scoped
 // `storage-service.ts`. Kept for backwards compatibility. Internals now route

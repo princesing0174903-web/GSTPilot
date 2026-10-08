@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Background Analysis Scheduler (SERVER-ONLY)
+// VEYRO AI Oracle™ & AI CFO™ — Background Analysis Scheduler (SERVER-ONLY)
 //
 // Triggers background AI analysis:
 //   • Manual — `triggerAnalysis(orgId)` from an API route after a data change

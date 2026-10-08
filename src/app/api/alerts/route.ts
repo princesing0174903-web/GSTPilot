@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 4 — Real-Time Alert Center API
+// VEYRO™ — PHASE 2B · MODULE 4 — Real-Time Alert Center API
 //
 // GET  /api/alerts        → list alerts (optional ?status=open|read|archived|all)
 // POST /api/alerts        → bulk actions: { action: 'mark-all-read' }

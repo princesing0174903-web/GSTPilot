@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Server-side Auth Resolution for Enterprise Org API Routes
+// VEYRO — Server-side Auth Resolution for Enterprise Org API Routes
 //
 // Resolves the authenticated Firebase user + their membership in the current
 // organization from a Bearer token. Used by /api/enterprise-org/* routes to

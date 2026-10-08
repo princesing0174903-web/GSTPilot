@@ -1,10 +1,10 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — ZohoOracleInsights
+// VEYRO — ZohoOracleInsights
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Oracle AI insight entry-point for the Zoho Books page. ONLY rendered when
+// VEYRO AI insight entry-point for the Zoho Books page. ONLY rendered when
 // synced data exists (gated by the parent ZohoConnected via hasSyncedData).
 //
 // HONESTY CONTRACT (requirement #9 / #12):
@@ -15,7 +15,7 @@
 //
 //   Instead, this card is a genuine invitation: it tells the user Oracle CAN
 //   analyze their synced Zoho data, and offers concrete example questions they
-//   can ask. Real, computed insights come from the Oracle chat itself (which
+//   can ask. Real, computed insights come from VEYRO AI chat itself (which
 //   reads the live db.zohoCustomer / db.zohoInvoice tables).
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -44,40 +44,40 @@ const ORACLE_PROMPTS: Prompt[] = [
     icon: IndianRupee,
     title: 'Overdue receivables',
     body:
-      'Ask Oracle which of your synced Zoho customers have the largest overdue balances, and draft a reminder for each.',
+      'Ask VEYRO AI which of your synced Zoho customers have the largest overdue balances, and draft a reminder for each.',
   },
   {
     id: 'revenue-trend',
     icon: TrendingUp,
     title: 'Revenue trend',
     body:
-      'Ask Oracle to compare this month\u2019s invoiced revenue against last month using your synced Zoho invoices.',
+      'Ask VEYRO AI to compare this month\u2019s invoiced revenue against last month using your synced Zoho invoices.',
   },
   {
     id: 'cash-prediction',
     icon: Wallet,
     title: 'Cash runway',
     body:
-      'Ask Oracle to estimate your cash runway from synced Zoho bank balances, receivables, and payables.',
+      'Ask VEYRO AI to estimate your cash runway from synced Zoho bank balances, receivables, and payables.',
   },
   {
     id: 'reconciliation',
     icon: Sparkles,
     title: 'GST reconciliation',
     body:
-      'Ask Oracle which Zoho purchase bills are missing from GSTR-2B, and how much ITC is at risk.',
+      'Ask VEYRO AI which Zoho purchase bills are missing from GSTR-2B, and how much ITC is at risk.',
   },
 ];
 
 export function ZohoOracleInsights({
   onAskOracle,
 }: {
-  /** Optional: navigate to the Oracle chat view. If omitted, the button is a no-op anchor. */
+  /** Optional: navigate to VEYRO AI chat view. If omitted, the button is a no-op anchor. */
   onAskOracle?: () => void;
 }) {
   return (
     <section
-      aria-label="Oracle AI insights"
+      aria-label="VEYRO AI insights"
       className="rounded-xl border border-white/[0.06] bg-[#0C0C0C] p-6"
     >
       <div className="mb-1 flex items-center gap-2">
@@ -85,11 +85,11 @@ export function ZohoOracleInsights({
           <Sparkles className="h-4 w-4 text-[#60A5FA]" />
         </div>
         <h2 className="text-lg font-semibold tracking-tight text-foreground md:text-xl">
-          Oracle AI Insights
+          VEYRO AI Insights
         </h2>
       </div>
       <p className="mb-5 text-xs text-muted-foreground">
-        Ask Oracle to analyze your synced Zoho Books data
+        Ask VEYRO AI to analyze your synced Zoho Books data
       </p>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -116,7 +116,7 @@ export function ZohoOracleInsights({
                 className="h-7 gap-1 px-2 text-xs text-[#60A5FA] hover:bg-[#2563EB]/10 hover:text-[#60A5FA]"
                 onClick={onAskOracle}
               >
-                Ask Oracle
+                Ask VEYRO AI
                 <ArrowRight className="h-3 w-3" />
               </Button>
             </div>

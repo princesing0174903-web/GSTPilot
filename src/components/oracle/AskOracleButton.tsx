@@ -1,12 +1,12 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle — AskOracleButton
+// VEYRO AI — AskOracleButton
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// A small, subtle "Ask Oracle" chip rendered in the top-right of each major
+// A small, subtle "Ask VEYRO AI" chip rendered in the top-right of each major
 // workspace page (Invoices, Customers, Returns, Finance). Clicking it:
-//   1. Sets a pending prompt on the oracle-conversations store (the prompt is
+//   1. Sets a pending prompt on VEYRO AI-conversations store (the prompt is
 //      either the explicit `prompt` prop or a smart default derived from the
 //      page `context`).
 //   2. Navigates to /oracle (the canonical Oracle page). OracleChat consumes
@@ -17,7 +17,7 @@
 //   • Uses the existing Oracle amber/gold accent (Brain icon + amber text on
 //     hover). Stays subtle in the resting state so it never competes with the
 //     page's primary CTA.
-//   • Never says "Activate Oracle" — only "Ask Oracle".
+//   • Never says "Activate Oracle" — only "Ask VEYRO AI".
 //   • Uses router.push('/oracle') (the same path the sidebar uses) so there is
 //     exactly ONE Oracle entry point.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -78,7 +78,7 @@ export interface AskOracleButtonProps {
   className?: string;
   /** Visual size — default "sm" matches the page header buttons. */
   size?: 'sm' | 'md';
-  /** Optional label override. Defaults to "Ask Oracle". */
+  /** Optional label override. Defaults to "Ask VEYRO AI". */
   label?: string;
 }
 
@@ -87,7 +87,7 @@ export function AskOracleButton({
   prompt,
   className,
   size = 'sm',
-  label = 'Ask Oracle',
+  label = 'Ask VEYRO AI',
 }: AskOracleButtonProps) {
   const router = useRouter();
   const setPendingPrompt = useOracleConversations((s) => s.setPendingPrompt);

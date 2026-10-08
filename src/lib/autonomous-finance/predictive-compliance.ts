@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Predictive Compliance Engine (Phase Delta · 5)
+// VEYRO — Predictive Compliance Engine (Phase Delta · 5)
 // Forecasts late filing, GST mismatch, penalty, cash shortage, filing overload,
 // missing docs, and high-risk vendors — weeks before deadlines.
 // ═══════════════════════════════════════════════════════════════════════════════

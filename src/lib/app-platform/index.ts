@@ -1,4 +1,4 @@
-/** GSTPilot Global AI App Marketplace™ — service layer barrel. */
+/** VEYRO Global AI App Marketplace™ — service layer barrel. */
 export * from './types';
 export * from './catalog';
 export * from './permissions';

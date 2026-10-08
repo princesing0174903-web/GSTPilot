@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Enterprise Security Layer: ABAC Engine
+// VEYRO — Enterprise Security Layer: ABAC Engine
 //
 // Attribute-Based Access Control. Whereas RBAC decides "can this role perform
 // this action on this resource type?", ABAC decides "given the caller's

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Vendors View (Payables / Suppliers)
+// VEYRO™ — Vendors View (Payables / Suppliers)
 //
 // Real-time vendor list backed by Firestore onSnapshot:
 //   organizations/GSTpilot_SAAS/vendors

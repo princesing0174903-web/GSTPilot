@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 3 — Change Detection Events API
+// VEYRO™ — PHASE 2B · MODULE 3 — Change Detection Events API
 //
 // GET  /api/events           → list recent business events
 // POST /api/events/mark-read → mark events as read (eventId or all)

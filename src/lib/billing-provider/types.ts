@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — Type Definitions
+// VEYRO Billing, Subscriptions & Payments™ — Type Definitions
 //
 // The single source of truth for the billing / subscription / payment data model.
 // Every field maps 1:1 to a Firestore collection. All types are PURE (no Firebase

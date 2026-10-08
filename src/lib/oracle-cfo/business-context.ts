@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Business Context Loader (Real Data Layer)
+// VEYRO AI CFO™ — Business Context Loader (Real Data Layer)
 //
 // Auto-loads live business data into a structured `BusinessContext` object.
 // This is the SINGLE source of truth for "what does Oracle know about this

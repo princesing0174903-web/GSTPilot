@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Payment Timeline (Premium Edition)
+// VEYRO Banking Module™ — Payment Timeline (Premium Edition)
 //
 // A beautiful vertical timeline that traces the lifecycle of a single payment:
 //
@@ -25,7 +25,7 @@
 //
 // A `compact` horizontal variant is available for embedding inside cards / rows.
 //
-// Design tokens: pure-black GSTPilot theme. Primary emerald — NO indigo/blue.
+// Design tokens: pure-black VEYRO theme. Primary emerald — NO indigo/blue.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import React, { memo, useMemo } from 'react';

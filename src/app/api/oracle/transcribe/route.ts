@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Voice Input (ASR) API
+// VEYRO AI™ — Voice Input (ASR) API
 // POST /api/oracle/transcribe  → multipart "audio" (webm/wav/mp3) → { text }
 //
-// Used by the Oracle workspace's microphone button. Records in the browser via
+// Used by VEYRO AI workspace's microphone button. Records in the browser via
 // MediaRecorder, uploads the blob, and gets back plain text which fills the
 // prompt input. Reliability: any failure returns a graceful empty text so the
 // UI never shows a raw error.

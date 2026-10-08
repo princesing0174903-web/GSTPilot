@@ -1680,7 +1680,7 @@ export default function RunMyCompanyPage() {
             Autonomous Economy Mode — Run My Company™
           </p>
           <p className="text-[10px] text-slate-700 mt-1">
-            GSTPilot Financial Exchange™ v3.0
+            VEYRO Financial Exchange™ v3.0
           </p>
         </div>
       </div>

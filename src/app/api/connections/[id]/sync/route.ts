@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · Auto Sync Engine
+// VEYRO™ — PHASE 2B · Auto Sync Engine
 //
 // POST /api/connections/[id]/sync → trigger a fresh sync for a connection.
 //   • Uses executeSync() which runs the full post-sync pipeline:

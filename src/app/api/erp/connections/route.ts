@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Connections List API
+// VEYRO ERP & Accounting Integrations™ — Connections List API
 //
 // GET /api/erp/connections?organizationId=xxx
 //   Returns: { ok: true, connections: ERPConnection[] }

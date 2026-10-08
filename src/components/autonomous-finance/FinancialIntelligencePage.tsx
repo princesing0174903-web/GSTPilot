@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Financial Intelligence Page (Phase Delta · 3)
+// VEYRO — Financial Intelligence Page (Phase Delta · 3)
 // AI-powered analysis dashboard: insights, risks, recommendations, confidence,
 // historical comparison, overall health score.
 // ═══════════════════════════════════════════════════════════════════════════════

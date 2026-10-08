@@ -2,7 +2,7 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot Infinity™ — Unified Navigation Registry
+ * VEYRO™ — Unified Navigation Registry
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * ONE source of truth for:
@@ -66,7 +66,7 @@ export const VIEW_REGISTRY: Record<string, NavEntry> = {
   },
   'oracle-brain': {
     view: 'oracle-brain',
-    label: 'Oracle AI',
+    label: 'VEYRO AI',
     icon: BrainCircuit,
     inSidebar: true,
     href: '/oracle',

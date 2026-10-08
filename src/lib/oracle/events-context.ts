@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — PHASE 2B · MODULE 5 — Oracle Live Events Context™
+// VEYRO AI™ — PHASE 2B · MODULE 5 — Oracle Live Events Context™
 //
 // Auto-loads recent business events, latest sync state, data quality, and pending
 // alerts into every Oracle prompt. Renders a concise markdown block so Oracle can

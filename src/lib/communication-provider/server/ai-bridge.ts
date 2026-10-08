@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — AI Communication Bridge
+// VEYRO Gmail & WhatsApp Business Automation™ — AI Communication Bridge
 //
 // Connects the Communication Provider to the AI Oracle:
 //   1. Reads recent Gmail + WhatsApp messages from Firestore (org-scoped).

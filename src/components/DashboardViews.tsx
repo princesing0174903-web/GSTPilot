@@ -5,7 +5,7 @@
  * DashboardViews — View Registry & Renderer (Product Mode · Step 0)
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * GSTPilot is an AI Finance Operating System, not a collection of finance modules.
+ * VEYRO is an AI Finance Operating System, not a collection of finance modules.
  * This file is the single point where "build jobs, not pages" becomes real:
  *
  *   • ONLY real, working views are imported. ~21 dynamic imports, not ~150.
@@ -62,7 +62,7 @@ const TimelinePage = dynamic(withRetry(() => import('@/components/timeline/Timel
 const TasksPage = dynamic(withRetry(() => import('@/components/tasks/TasksPage')), { loading: PageLoader, ssr: false })
 const DocumentVaultPage = dynamic(withRetry(() => import('@/components/documents/DocumentVaultPage')), { loading: PageLoader, ssr: false })
 const NoticeCenterPage = dynamic(withRetry(() => import('@/components/notices/NoticeCenterPage')), { loading: PageLoader, ssr: false })
-// ── GSTPilot Firestore-connected registries (real CRUD) ────────────────────────
+// ── VEYRO Firestore-connected registries (real CRUD) ────────────────────────
 const GSTpilotVendorsView = dynamic(withRetry(() => import('@/components/gstpilot-data/VendorsView')), { loading: PageLoader, ssr: false })
 const GSTpilotExpensesView = dynamic(withRetry(() => import('@/components/gstpilot-data/ExpensesView')), { loading: PageLoader, ssr: false })
 const GSTpilotPaymentsView = dynamic(withRetry(() => import('@/components/gstpilot-data/PaymentsView')), { loading: PageLoader, ssr: false })
@@ -296,7 +296,7 @@ const PLACEHOLDER_META: Record<string, { name: string; description: string; icon
   },
   'app-store': {
     name: 'App Store',
-    description: 'Extend GSTPilot with third-party apps and integrations from the marketplace.',
+    description: 'Extend VEYRO with third-party apps and integrations from the marketplace.',
     icon: Boxes,
     capabilities: ['App catalog', 'One-click install', 'Unified billing', 'App management'],
   },
@@ -357,7 +357,7 @@ export default function DashboardViews({ view }: { view: string }) {
     return (
       <FeaturePlaceholder
         featureName="This module is on the roadmap"
-        description="GSTPilot is an AI Finance Operating System, focused on delivering one perfect workflow at a time. This module will be built once the core Invoice → Bank → GST → Oracle workflow is production-grade."
+        description="VEYRO is an AI Finance Operating System, focused on delivering one perfect workflow at a time. This module will be built once the core Invoice → Bank → GST → Oracle workflow is production-grade."
         icon={Sparkles}
       />
     );
@@ -386,7 +386,7 @@ export default function DashboardViews({ view }: { view: string }) {
   return (
     <FeaturePlaceholder
       featureName="This module is on the roadmap"
-      description="GSTPilot is an AI Finance Operating System, focused on delivering one perfect workflow at a time. This module will be built once the core Invoice → Bank → GST → Oracle workflow is production-grade."
+      description="VEYRO is an AI Finance Operating System, focused on delivering one perfect workflow at a time. This module will be built once the core Invoice → Bank → GST → Oracle workflow is production-grade."
       icon={Sparkles}
     />
   )

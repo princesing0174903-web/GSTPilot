@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — AUTONOMOUS PROJECT MANAGER™
+// VEYRO Infinity™ — INFINITY AGI™ — AUTONOMOUS PROJECT MANAGER™
 //
 // Oracle automatically: creates tasks, estimates timelines, assigns AI agents,
 // coordinates humans, predicts delays, reallocates resources, closes work.

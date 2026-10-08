@@ -14,7 +14,7 @@
 // high-severity BusinessAnomaly becomes a separate alert. Sorted by severity
 // (critical first). No fabrication — every alert ties to real risk data.
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type {

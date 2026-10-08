@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — OfflineBanner
+// VEYRO — OfflineBanner
 //
 // Listens to `navigator.onLine` + window `online`/`offline` events and shows
 // a sticky banner at the top of the viewport when the browser loses network.

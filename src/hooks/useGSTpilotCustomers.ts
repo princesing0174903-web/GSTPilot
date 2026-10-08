@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useGSTpilotCustomers() Hook
+// VEYRO — useGSTpilotCustomers() Hook
 //
 // Real-time customers list (onSnapshot) + CRUD + search.
 //

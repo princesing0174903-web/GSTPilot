@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — Webhook Engine™
+// VEYRO Global AI App Marketplace™ — Webhook Engine™
 // Developers subscribe to business events. Dispatch with HMAC signing + retries.
 // Events: lead.created · invoice.paid · gst.filed · task.assigned · workflow.completed
 // ai.decision · approval.granted · organization.created · employee.added · customer.created

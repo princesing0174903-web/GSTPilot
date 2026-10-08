@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Cancel Job
+// VEYRO AI Production Pipeline™ — Cancel Job
 //
 // POST /api/ai/jobs/[id]/cancel  { organizationId }
 //

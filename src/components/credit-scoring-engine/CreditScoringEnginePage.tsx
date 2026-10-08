@@ -1089,7 +1089,7 @@ function ScoreDashboardTab() {
                 <p className="text-sm md:text-base text-slate-600">
                   Generating 5 composite scores for every Indian business from GST returns,
                   collections, compliance, growth and risk signals. Powering credit decisions
-                  across the GSTPilot Financial Exchange.
+                  across the VEYRO Financial Exchange.
                 </p>
               </div>
               <div className="flex flex-col items-center justify-center gap-2 shrink-0">
@@ -2191,7 +2191,7 @@ export default function CreditScoringEnginePage() {
               <Shield className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg md:text-xl font-bold text-slate-900">GSTPilot Credit Scoring Engine</h1>
+              <h1 className="text-lg md:text-xl font-bold text-slate-900">VEYRO Credit Scoring Engine</h1>
               <p className="text-[11px] text-slate-500">Business Credit Engine for Indian MSMEs & Enterprises</p>
             </div>
           </div>

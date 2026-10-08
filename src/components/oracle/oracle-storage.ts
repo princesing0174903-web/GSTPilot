@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Conversation Persistence
+// VEYRO AI™ — Conversation Persistence
 //
 // All Oracle conversations live in localStorage (per-user key). This keeps
 // Oracle fully functional offline / without Firestore writes, and lets us

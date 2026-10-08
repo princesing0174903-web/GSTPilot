@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Business Graph Engine
+// VEYRO AI™ — Business Graph Engine
 //
 // Builds a compact relational graph of the firm's business universe:
 //   • The firm itself (trade name / GSTIN)

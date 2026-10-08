@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — Server Orchestrator (SERVER-ONLY)
+// VEYRO Billing, Subscriptions & Payments™ — Server Orchestrator (SERVER-ONLY)
 //
 // The thin server-side layer that:
 //   1. Resolves the active payment provider via the registry

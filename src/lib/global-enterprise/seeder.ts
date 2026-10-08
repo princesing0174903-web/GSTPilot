@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL ENTERPRISE OPERATING SYSTEM™
+// VEYRO™ — GLOBAL ENTERPRISE OPERATING SYSTEM™
 // Canonical Seeder — populates Country / TaxRule / ComplianceDeadline / PayrollStructure
 // from the canonical registry. Idempotent: safe to call repeatedly; never deletes
 // user-created rows.

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Premium Error State
+// VEYRO Infinity™ — Premium Error State
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A large, premium error card with:

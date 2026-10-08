@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — Connect Gmail API
+// VEYRO Gmail & WhatsApp Business Automation™ — Connect Gmail API
 //
 // POST /api/communication/gmail/connect
 //   Body: { organizationId, email, displayName?, createdBy }

@@ -6,7 +6,7 @@
 // a typed `WorkforceDataView` that every employee engine reads from. Never
 // touches Prisma directly — only reuses existing engines. No mock data.
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { fetchCEOData } from '@/lib/ceo/data';

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Execution Engine™ — MODULE 5: Workflow Engine™
+// VEYRO Execution Engine™ — MODULE 5: Workflow Engine™
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // ═══════════════════════════════════════════════════════════════════════════════
 // Multi-step playbooks for the 6 recurring Indian SME / CA firm scenarios:

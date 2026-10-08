@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 4 — Real-Time Alert Center™
+// VEYRO Infinity™ — PHASE 2B · MODULE 4 — Real-Time Alert Center™
 //
 // Generates user-facing Alerts from BusinessEvents. An Alert is the user-facing
 // representation of a change — it carries a severity-coloured UI, a message,

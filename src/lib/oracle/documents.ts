@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Document Intelligence
+// VEYRO AI™ — Document Intelligence
 //
 // Reads PDF, Excel, invoices, GST notices, bank statements, and images that a
 // user attaches to a chat. Returns plain text + a structured summary that the

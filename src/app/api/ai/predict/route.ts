@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Predictions API
+// VEYRO AI Oracle™ & AI CFO™ — Predictions API
 //
 // POST /api/ai/predict
 //   Body: { organizationId, metric: 'revenue' | 'cashflow', months?: number }

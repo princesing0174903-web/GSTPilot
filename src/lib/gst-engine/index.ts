@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot GST Return Engine™ — Barrel Export (CLIENT-SAFE)
+// VEYRO GST Return Engine™ — Barrel Export (CLIENT-SAFE)
 //
 // The single import surface for the GST Return Engine. Import everything from
 // `@/lib/gst-engine` — never reach into individual files.

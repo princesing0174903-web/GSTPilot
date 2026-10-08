@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Business Snapshot Invalidation Event Bus
+// VEYRO — Business Snapshot Invalidation Event Bus
 //
 // A tiny global event bus so ANY mutation (create invoice, create client,
 // Zoho sync, payment recorded, etc.) can instantly invalidate the Business

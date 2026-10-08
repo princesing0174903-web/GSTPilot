@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail Connector™ — REAL Email Sync
+// VEYRO Gmail Connector™ — REAL Email Sync
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Uses a user-provided Google OAuth access token (with gmail.readonly scope) to:

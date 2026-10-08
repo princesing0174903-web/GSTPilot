@@ -557,7 +557,7 @@ export default function AutomationStudio() {
         <div className="mt-6 flex items-center justify-center gap-2 text-center">
           <Workflow className="h-3.5 w-3.5 text-white/30" />
           <p className="text-[11px] text-white/40">
-            Drag, drop, automate. 184 templates · 13 node types. — GSTPilot Infinity™
+            Drag, drop, automate. 184 templates · 13 node types. — VEYRO™
           </p>
           <ArrowRight className="h-3 w-3 text-white/20" />
         </div>

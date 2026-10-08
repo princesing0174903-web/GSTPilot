@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Future Provider Placeholders (SERVER-ONLY)
+// VEYRO Real Banking Foundation™ — Future Provider Placeholders (SERVER-ONLY)
 //
 // Five placeholder providers for production banking integrations. Every method
 // throws `NotImplementedError` so the system fails LOUDLY if you switch to one
@@ -113,7 +113,7 @@ abstract class FutureBaseProvider implements IBankProvider {
 // ─── FutureAAProvider — Account Aggregator (Sahamati / RBI-regulated) ────────
 //
 // The Account Aggregator ecosystem lets a user consent to share their bank
-// statement data with an FIU (Financial Information User). GSTPilot acts as
+// statement data with an FIU (Financial Information User). VEYRO acts as
 // the FIU. The flow is:
 //   1. connect() → create a consent request via the AA, get a consent handle.
 //   2. The user approves the consent on their AA app.

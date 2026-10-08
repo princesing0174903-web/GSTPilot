@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 13: SECURITY™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 13: SECURITY™
 // RBAC, organization isolation, audit logging, compliance signatures,
 // rate limiting, Zero Trust validation. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════

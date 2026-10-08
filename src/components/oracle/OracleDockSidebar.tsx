@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Docked Assistant Sidebar
+// VEYRO AI™ — Docked Assistant Sidebar
 //
 // Premium enterprise UX (Stripe / Linear / OpenAI / Notion AI / Vercel / Ramp):
 //   • Desktop (md+): slides in from the right as a 380px sidebar
@@ -133,7 +133,7 @@ export function OracleDockSidebar({
               'md:flex',
             )}
             role="dialog"
-            aria-label="GSTPilot Oracle assistant"
+            aria-label="VEYRO AI assistant"
             aria-modal="true"
           >
             {/* Close button (top-right, inside the sidebar) */}
@@ -145,7 +145,7 @@ export function OracleDockSidebar({
               <X className="h-4 w-4" />
             </button>
 
-            {/* Sidebar content — the OraclePanel */}
+            {/* Sidebar content — VEYRO AIPanel */}
             <div className="h-full overflow-hidden pr-0">
               {children}
             </div>
@@ -165,7 +165,7 @@ export function OracleDockSidebar({
               'md:hidden',
             )}
             role="dialog"
-            aria-label="GSTPilot Oracle assistant"
+            aria-label="VEYRO AI assistant"
             aria-modal="true"
           >
             {/* Drag handle */}

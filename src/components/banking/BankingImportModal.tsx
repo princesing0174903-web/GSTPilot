@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Statement Import Modal (Premium Edition)
+// VEYRO Banking Module™ — Statement Import Modal (Premium Edition)
 //
 // A premium 3-step flow for importing bank statements:
 //
@@ -22,7 +22,7 @@
 //   • confirm=false → should return `{ preview: StatementPreview }` (step 1 → 2)
 //   • confirm=true  → should return `StatementImportResult`         (step 2 → 3)
 //
-// Design tokens: pure-black GSTPilot theme. Cards: `glass-surface rounded-2xl
+// Design tokens: pure-black VEYRO theme. Cards: `glass-surface rounded-2xl
 // border border-white/[0.06]`. Primary emerald — NO indigo/blue.
 // ═══════════════════════════════════════════════════════════════════════════════
 

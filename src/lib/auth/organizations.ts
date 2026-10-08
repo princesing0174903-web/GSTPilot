@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Organization Service Layer
+// VEYRO — Organization Service Layer
 //
 // All Firestore reads/writes for the multi-tenant organization system flow
 // through this module. Every function is:

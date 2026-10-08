@@ -17,7 +17,7 @@
 // Only strategies with meaningful baseline data are returned. Sorted by
 // expectedROI (desc). No fabrication — every KPI ties back to live CFO/Twin.
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type {

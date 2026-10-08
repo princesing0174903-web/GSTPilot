@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — ENTERPRISE EXECUTION ENGINE™ (Subsystem 1)
+// VEYRO Infinity™ — ENTERPRISE EXECUTION ENGINE™ (Subsystem 1)
 // The single global execution pipeline. Every action from every module flows
 // through it. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════

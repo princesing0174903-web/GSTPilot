@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Oracle Chat Engine
+// VEYRO AI Oracle™ & AI CFO™ — Oracle Chat Engine
 //
 // A PURE, CLIENT-SAFE function that answers natural-language business questions
 // using the REAL BusinessContext. NEVER fabricates data — every answer cites

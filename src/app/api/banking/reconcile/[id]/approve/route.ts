@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Approve Reconciliation API (TASK 12)
+// VEYRO Banking Module™ — Approve Reconciliation API (TASK 12)
 //
 // POST /api/banking/reconcile/:id/approve?organizationId=...
 //   → approveReconciliation(id, orgId, uid)

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Oracle Daily Briefing (Proactive CFO Engine)
+// VEYRO — Oracle Daily Briefing (Proactive CFO Engine)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Oracle does NOT wait for prompts. Oracle wakes up with knowledge.

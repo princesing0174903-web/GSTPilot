@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Server-side SWR (stale-while-revalidate) cache for GET API routes
+// VEYRO — Server-side SWR (stale-while-revalidate) cache for GET API routes
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A tiny in-memory TTL cache for GET API routes that are read-heavy but
@@ -20,7 +20,7 @@
 //
 // This is a SERVER-SIDE cache only. It lives in the Next.js server process
 // memory and is NOT shared across instances. For multi-instance deployments,
-// upgrade to Redis. For the GSTPilot sandbox (single Next.js process), this
+// upgrade to Redis. For the VEYRO sandbox (single Next.js process), this
 // is sufficient and zero-config.
 // ═══════════════════════════════════════════════════════════════════════════════
 

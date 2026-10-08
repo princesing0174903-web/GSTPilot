@@ -1,9 +1,9 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — useOracle() Hook
+// VEYRO AI Oracle™ & AI CFO™ — useOracle() Hook
 //
-// Conversational Q&A with the GSTPilot Oracle. Maintains a local in-memory
+// Conversational Q&A with the VEYRO AI. Maintains a local in-memory
 // `messages` array (user + assistant messages in order). The orchestrator
 // persists the conversation to `ai_memory` server-side, so this hook does NOT
 // write to Firestore directly — it just keeps the live chat state.
@@ -35,13 +35,13 @@ export interface UseOracleResult {
   loading: boolean;
   /** Error string from the last failed ask() call, or null. */
   error: string | null;
-  /** Ask the Oracle a question. Returns the ChatResponse on success, null on error. */
+  /** Ask VEYRO AI a question. Returns the ChatResponse on success, null on error. */
   ask: (question: string) => Promise<ChatResponse | null>;
   /** Reset the local chat history to []. */
   clear: () => void;
 }
 
-// Graceful fallback shown to the user when the Oracle request fails.
+// Graceful fallback shown to the user when VEYRO AI request fails.
 const FALLBACK_ANSWER =
   "I couldn't process that right now. Please check your connection and try again — I'm here to help once your data is available.";
 

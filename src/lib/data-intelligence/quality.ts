@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
+// VEYRO Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
 // Enterprise Data Quality Engine™ — continuous scanning of REAL production data.
 // Extends the existing DataQualityAlert table with computed issues + suggested fixes.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Risk Score Calculator (DELEGATES TO CANONICAL SNAPSHOT ENGINE)
+// VEYRO — Risk Score Calculator (DELEGATES TO CANONICAL SNAPSHOT ENGINE)
 //
 // This file is kept ONLY for backward compatibility with the legacy
 // financial-engine/ pipeline (consumed by financial-engine/businessSnapshot.ts).

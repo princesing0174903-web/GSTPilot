@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — ORGANIZATIONAL DIGITAL TWIN™
+// VEYRO Infinity™ — INFINITY AGI™ — ORGANIZATIONAL DIGITAL TWIN™
 //
 // Create a living simulation of the enterprise. Simulate acquisitions,
 // expansion, hiring, layoffs, pricing, tax changes, compliance changes,

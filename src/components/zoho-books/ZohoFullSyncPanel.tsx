@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Full Sync Panel (Phase 5)
+// VEYRO — Zoho Books Full Sync Panel (Phase 5)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The "Sync Now" button behind the full Zoho Books data synchronization engine.
@@ -247,7 +247,7 @@ export function ZohoFullSyncPanel() {
               Full Data Synchronization
             </CardTitle>
             <p className="text-xs text-white/50">
-              Sync all 13 Zoho Books modules into GSTPilot
+              Sync all 13 Zoho Books modules into VEYRO
             </p>
           </div>
         </div>

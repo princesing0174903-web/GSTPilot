@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Voice Mode Overlay (Phase 2 — Human Intelligence™)
+// VEYRO AI™ — Voice Mode Overlay (Phase 2 — Human Intelligence™)
 //
 // A full-screen voice conversation experience — like ChatGPT Voice / Claude
 // Voice. The user talks to Oracle; Oracle listens, thinks, and speaks back.

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Google Workspace OAuth Helper (server-only)
+// VEYRO™ — Google Workspace OAuth Helper (server-only)
 // ═══════════════════════════════════════════════════════════════════════════════
 // This module is the SINGLE entry point for all server-side Google Workspace
 // OAuth concerns:

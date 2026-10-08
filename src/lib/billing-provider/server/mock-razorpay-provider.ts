@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Mock Razorpay Provider (SERVER-ONLY)
+// VEYRO Billing™ — Mock Razorpay Provider (SERVER-ONLY)
 //
 // A deterministic, in-memory simulated Razorpay payment gateway. Used as the
 // default payment backend so the entire billing flow works end-to-end without

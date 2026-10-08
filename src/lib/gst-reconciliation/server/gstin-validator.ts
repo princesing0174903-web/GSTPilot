@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GSTIN Checksum Validator (SERVER-SAFE, no node:crypto)
+// VEYRO — GSTIN Checksum Validator (SERVER-SAFE, no node:crypto)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Re-implements the official GSTN checksum algorithm so we can validate GSTIN

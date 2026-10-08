@@ -154,7 +154,7 @@ const AI_INSIGHTS = [
   { title: 'GST compliance improved 8% nationwide', category: 'Compliance', impact: 'high', trend: [72, 74, 75, 78, 80, 82, 84] },
   { title: 'Average collection days reduced from 45 to 38', category: 'Cash Flow', impact: 'medium', trend: [45, 44, 43, 42, 40, 39, 38] },
   { title: 'UPI adoption in B2B payments grew 156%', category: 'Payments', impact: 'high', trend: [12, 18, 25, 35, 48, 62, 80] },
-  { title: 'Late fee avoidance saved ₹2,345 Crore for GSTPilot users', category: 'Savings', impact: 'high', trend: [150, 280, 420, 680, 1050, 1680, 2345] },
+  { title: 'Late fee avoidance saved ₹2,345 Crore for VEYRO users', category: 'Savings', impact: 'high', trend: [150, 280, 420, 680, 1050, 1680, 2345] },
 ];
 
 // Sector Intelligence — previously a hardcoded mock array of 5 sectors with
@@ -214,12 +214,12 @@ const ACCESS_CONTROL = [
 
 // Audit Log
 const AUDIT_LOG = [
-  { time: '14:32:18', user: 'admin@gstpilot.in', action: 'Data export', resource: 'Invoices Collection', status: 'success' },
+  { time: '14:32:18', user: 'admin@veyro.com', action: 'Data export', resource: 'Invoices Collection', status: 'success' },
   { time: '14:28:45', user: 'api-partner-4821', action: 'API query', resource: 'Business Credit Score', status: 'success' },
   { time: '14:25:03', user: 'ca@sharma.in', action: 'Client data read', resource: 'Client #GSTMH1234', status: 'success' },
   { time: '14:21:56', user: 'system', action: 'Auto-backup', resource: 'All Collections', status: 'success' },
   { time: '14:18:33', user: 'api-partner-7392', action: 'API query', resource: 'Compliance Risk Score', status: 'rate-limited' },
-  { time: '14:15:11', user: 'admin@gstpilot.in', action: 'Schema migration', resource: 'Returns Collection', status: 'success' },
+  { time: '14:15:11', user: 'admin@veyro.com', action: 'Schema migration', resource: 'Returns Collection', status: 'success' },
   { time: '14:12:09', user: 'audit@rbi.gov.in', action: 'Compliance audit', resource: 'Audit Logs', status: 'success' },
   { time: '14:08:42', user: 'system', action: 'Data quality scan', resource: 'All Collections', status: 'success' },
   { time: '14:05:27', user: 'api-partner-4821', action: 'API query', resource: 'Industry Benchmark', status: 'success' },

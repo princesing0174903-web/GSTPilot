@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const TWIN_TAGLINE =
-  'GSTPilot Digital Twin™ — Remember Everything. Understand Everything. Simulate Everything. Predict Everything.';
+  'VEYRO Digital Twin™ — Remember Everything. Understand Everything. Simulate Everything. Predict Everything.';
 
 export async function GET(request: Request) {
   try {

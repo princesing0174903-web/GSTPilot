@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { safeAudit } from '@/lib/audit/safe-write'
 
 const DEFAULT_SETTINGS = {
-  firmName: 'GSTPilot Firm',
+  firmName: 'VEYRO Firm',
   logoUrl: null as string | null,
   primaryColor: '#1D4ED8',
   accentColor: '#7c3aed',

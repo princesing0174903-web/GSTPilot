@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — PROFITABILITY ENGINE
+// VEYRO AI CFO™ Phase 1 — PROFITABILITY ENGINE
 //
 // Real profitability analytics from connected business data:
 //   • Gross Profit / Gross Margin %

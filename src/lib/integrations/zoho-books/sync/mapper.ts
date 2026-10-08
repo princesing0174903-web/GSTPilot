@@ -1,20 +1,20 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books → GSTPilot Mapper
+// VEYRO — Zoho Books → VEYRO Mapper
 //
 // Pure functions that transform raw Zoho Books API responses into normalized
-// GSTPilot record payloads. ZERO `any`. NEVER stores raw Zoho JSON — only the
+// VEYRO record payloads. ZERO `any`. NEVER stores raw Zoho JSON — only the
 // normalized fields.
 //
 // Key normalization rules:
 //   • Customer without GSTIN → synthetic key `ZOHO-CONTACT-{contact_id}`
 //     (Client.gstin is @unique so we need a stable identifier)
 //   • Vendor without GSTIN → null (Vendor.gstin is nullable)
-//   • Zoho `payment_status` → GSTPilot { unpaid | partial | paid | overdue }
+//   • Zoho `payment_status` → VEYRO { unpaid | partial | paid | overdue }
 //   • Zoho `last_modified_time` → ISO Date (for incremental watermark)
 //   • Date strings (Zoho returns "2024-01-15") → kept as ISO date strings
-//     (GSTPilot's existing models use String for dates, not DateTime)
+//     (VEYRO's existing models use String for dates, not DateTime)
 //   • Bank account numbers → masked (show only last 4 digits)
-//   • Currency code dropped (GSTPilot assumes INR)
+//   • Currency code dropped (VEYRO assumes INR)
 //
 // SERVER-ONLY.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -67,7 +67,7 @@ const maskAccount = (acct: string | undefined): string => {
 };
 
 /**
- * GSTPilot's Client model requires `gstin` to be @unique. Zoho customers may
+ * VEYRO's Client model requires `gstin` to be @unique. Zoho customers may
  * not have a GSTIN (e.g., B2C customers, unregistered clients). To keep the
  * unique constraint satisfied without losing the customer, synthesize a
  * deterministic key: `ZOHO-CONTACT-{contact_id}`.
@@ -89,7 +89,7 @@ function normalizeGstin(
   return fallback === 'synthetic' ? syntheticGstinForContact(contact.contact_id) : null;
 }
 
-/** Map Zoho's payment_status string to GSTPilot's payment-status vocabulary. */
+/** Map Zoho's payment_status string to VEYRO's payment-status vocabulary. */
 function normalizePaymentStatus(
   zohoStatus: string | undefined,
   balance: number,
@@ -141,7 +141,7 @@ function normalizeDate(d: string | undefined | null): string {
   return d;
 }
 
-/** Map Zoho payment_mode → GSTPilot payment-mode vocabulary. */
+/** Map Zoho payment_mode → VEYRO payment-mode vocabulary. */
 function normalizePaymentMode(mode: string | undefined): string | null {
   if (!mode) return null;
   const m = mode.toLowerCase();
@@ -153,7 +153,7 @@ function normalizePaymentMode(mode: string | undefined): string | null {
   return m;
 }
 
-/** Map Zoho expense category to GSTPilot's Expense.category enum. */
+/** Map Zoho expense category to VEYRO's Expense.category enum. */
 function normalizeExpenseCategory(categoryName: string | undefined): string {
   const c = (categoryName ?? '').toLowerCase();
   if (c.includes('office')) return 'Office';
@@ -340,7 +340,7 @@ export function mapExpense(
 
 export function mapBankAccount(a: ZohoBankAccount): NormalizedBankAccount {
   const type = (a.account_type ?? 'current').toLowerCase();
-  // Map Zoho's account_type strings to GSTPilot's enum.
+  // Map Zoho's account_type strings to VEYRO's enum.
   const accountType =
     type.includes('saving') ? 'savings' :
     type.includes('current') ? 'current' :
@@ -412,7 +412,7 @@ export function mapJournal(j: ZohoJournal): NormalizedJournalEntry {
 
 // ─── Tax (lookup-only — not persisted as a row, but tracked in ZohoEntityMap) ─
 //
-// Taxes are reference data: GSTPilot's existing models embed tax amounts
+// Taxes are reference data: VEYRO's existing models embed tax amounts
 // directly on invoices/bills/expenses (cgst/sgst/igst/cess), so there's no
 // dedicated Tax table to write into. We still sync taxes to populate
 // ZohoEntityMap (so the UI can show "Taxes: N imported" and future features

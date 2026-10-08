@@ -2,10 +2,10 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot Infinity™ — Unified UI Primitives
+ * VEYRO™ — Unified UI Primitives
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * Every page in GSTPilot uses these primitives. This guarantees:
+ * Every page in VEYRO uses these primitives. This guarantees:
  *   • Same card padding / radius / shadow / title size everywhere
  *   • Same empty states (illustration + explanation + CTA)
  *   • Same loading states (skeleton shimmer)

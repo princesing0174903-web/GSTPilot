@@ -1,13 +1,13 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Obsidian Infinity™ Home Screen
+// VEYRO™ — Obsidian Infinity™ Home Screen
 //
 // Calm. Premium. Uncrowded. Apple + Perplexity quality.
 //
 // Layout:
 //   1. Good Afternoon, {name} 👋
-//   2. Large Oracle input box — "Ask GSTPilot Oracle..."
+//   2. Large Oracle input box — "Ask VEYRO AI..."
 //      4 suggested chips: File GST Return · Generate Report · Predict Revenue · Recover Collections
 //   3. Business Health — Revenue · Cash Flow · Compliance (no fake numbers)
 //      If no data → "Connect your data sources to activate your Financial Brain."

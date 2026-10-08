@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 10: GLOBAL ENGINE™
+// VEYRO Infinity™ — GLOBAL COMPLIANCE CLOUD™ — Subsystem 10: GLOBAL ENGINE™
 // Unified pipeline orchestrator — Prepare / Analyze / Approve / Submit / Replay.
 // Every compliance activity flows through ONE pipeline:
 //   prepareFiling → gather real data → compute summary → digital twin simulation

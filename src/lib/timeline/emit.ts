@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Business Timeline Event System
+// VEYRO — Business Timeline Event System
 //
 // Single source of truth for emitting + reading timeline events.
 // Uses Prisma `BusinessEvent` table (NOT Firestore) — schema:

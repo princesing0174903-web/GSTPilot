@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Command Network Simulator Definitions (Prisma-free)
+// VEYRO Infinity™ — Command Network Simulator Definitions (Prisma-free)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pure static scenario definitions extracted from simulator.ts so client
 // components can import them WITHOUT pulling @prisma/client into the bundle.

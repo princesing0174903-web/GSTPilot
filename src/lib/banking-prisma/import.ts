@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Statement Import Engine (TASK 12)
+// VEYRO Banking Module™ — Statement Import Engine (TASK 12)
 //
 // The CSV/Excel bank statement import pipeline. SERVER-ONLY.
 //

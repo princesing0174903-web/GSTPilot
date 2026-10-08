@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Reports API (TASK 12)
+// VEYRO Banking Module™ — Reports API (TASK 12)
 //
 // GET /api/banking/reports?organizationId=...&period=daily|weekly|monthly|quarterly|yearly&referenceDate=YYYY-MM-DD
 //   → generateReport(orgId, period, referenceDate?)

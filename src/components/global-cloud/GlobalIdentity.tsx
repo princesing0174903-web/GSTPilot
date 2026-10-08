@@ -628,7 +628,7 @@ export default function GlobalIdentity() {
         <div className="mt-6 flex items-center justify-center gap-2 text-center">
           <ShieldCheck className="h-3.5 w-3.5 text-white/30" />
           <p className="text-[11px] text-white/40">
-            One Identity. Every System. Zero Passwords. — GSTPilot Infinity™
+            One Identity. Every System. Zero Passwords. — VEYRO™
           </p>
         </div>
       </div>

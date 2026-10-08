@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Phase 3: AI Invoice Extraction (Gemini / VLM)
+// VEYRO™ — Phase 3: AI Invoice Extraction (Gemini / VLM)
 //
 // SERVER-ONLY module. Uses z-ai-web-dev-sdk's vision model to read a real
 // invoice document (PDF or image) and return a structured JSON object with

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — App Catalog
+// VEYRO Global AI App Marketplace™ — App Catalog
 // 25 production-grade starter apps across all 20 categories. Each app is a real,
 // installable definition — not mock data. Seeded into the App table on first run.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -72,7 +72,7 @@ export const STARTER_APPS: StarterAppDef[] = [
     slug: 'tally-bridge',
     name: 'Tally Prime Bridge',
     tagline: 'Two-way sync with Tally Prime',
-    description: 'Bi-directional synchronization between GSTPilot and Tally Prime. Syncs ledgers, vouchers, invoices, and GST data in real-time.',
+    description: 'Bi-directional synchronization between VEYRO and Tally Prime. Syncs ledgers, vouchers, invoices, and GST data in real-time.',
     developerSlug: 'tally-solutions',
     type: 'connector',
     category: 'accounting',
@@ -90,8 +90,8 @@ export const STARTER_APPS: StarterAppDef[] = [
   {
     slug: 'quickbooks-sync',
     name: 'QuickBooks Sync',
-    tagline: 'Sync QuickBooks with GSTPilot',
-    description: 'One-click synchronization of QuickBooks Online data into GSTPilot for unified financial reporting and GST compliance.',
+    tagline: 'Sync QuickBooks with VEYRO',
+    description: 'One-click synchronization of QuickBooks Online data into VEYRO for unified financial reporting and GST compliance.',
     developerSlug: 'intuit-partner',
     type: 'connector',
     category: 'accounting',
@@ -243,7 +243,7 @@ export const STARTER_APPS: StarterAppDef[] = [
     slug: 'pos-integrator',
     name: 'POS Integrator',
     tagline: 'Sync POS data in real-time',
-    description: 'Connects retail POS systems to GSTPilot for real-time sales sync, inventory updates, and GST-compliant invoicing.',
+    description: 'Connects retail POS systems to VEYRO for real-time sales sync, inventory updates, and GST-compliant invoicing.',
     developerSlug: 'retailtech',
     type: 'connector',
     category: 'retail',
@@ -409,8 +409,8 @@ export const STARTER_APPS: StarterAppDef[] = [
   {
     slug: 'api-explorer',
     name: 'API Explorer',
-    tagline: 'Explore & test GSTPilot APIs',
-    description: 'Interactive API explorer with OpenAPI spec, code generation, and live testing for all GSTPilot Public APIs.',
+    tagline: 'Explore & test VEYRO APIs',
+    description: 'Interactive API explorer with OpenAPI spec, code generation, and live testing for all VEYRO Public APIs.',
     developerSlug: 'gstpilot-labs',
     type: 'api',
     category: 'developer_tools',

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Universal Search API
+// VEYRO AI™ — Universal Search API
 //
 // GET /api/oracle/search?q=<query> → searches clients, invoices, returns,
 //                                     reports, documents, tasks, notices.

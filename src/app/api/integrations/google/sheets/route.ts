@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'Invalid JSON body.' }, { status: 400 });
   }
 
-  const title = String(body.title ?? 'GSTPilot Export');
+  const title = String(body.title ?? 'VEYRO Export');
   const rowsRaw = Array.isArray(body.rows) ? body.rows : [];
   const rows = rowsRaw.map((r) => {
     const obj = r as { values?: string[] };

@@ -2,7 +2,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Dev Server Reconnect Overlay (Phase Gamma: Preview Stability)
+// VEYRO — Dev Server Reconnect Overlay (Phase Gamma: Preview Stability)
 //
 // In development (and in the sandbox preview), the Next.js dev server may
 // restart briefly while recompiling or when the OOM watchdog recycles the
@@ -11,7 +11,7 @@
 //
 // This component sits at the root of the app and pings a lightweight endpoint
 // every 4 seconds. When the ping fails, a premium full-screen overlay is shown
-// with the GSTPilot brand, a "Reconnecting…" message, and an animated pulse.
+// with the VEYRO brand, a "Reconnecting…" message, and an animated pulse.
 // The moment the server is back, the overlay fades away and the app is visible
 // again — no manual refresh required.
 //
@@ -103,7 +103,7 @@ export function DevServerReconnect() {
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-md"
           role="alertdialog"
           aria-live="assertive"
-          aria-label="Reconnecting to GSTPilot server"
+          aria-label="Reconnecting to VEYRO server"
         >
           <div className="flex flex-col items-center gap-6 px-6 text-center">
             {/* ── Animated brand badge ── */}
@@ -131,7 +131,7 @@ export function DevServerReconnect() {
             {/* ── Copy ── */}
             <div className="space-y-2">
               <h2 className="text-lg font-semibold tracking-tight text-white">
-                Reconnecting to GSTPilot
+                Reconnecting to VEYRO
               </h2>
               <p className="max-w-xs text-sm text-zinc-400">
                 The server is briefly restarting. This usually takes a few
@@ -151,7 +151,7 @@ export function DevServerReconnect() {
 
             {/* ── Brand footer ── */}
             <p className="mt-4 text-[11px] font-medium uppercase tracking-widest text-zinc-600">
-              GSTPilot Infinity™
+              VEYRO Infinity™
             </p>
           </div>
         </motion.div>

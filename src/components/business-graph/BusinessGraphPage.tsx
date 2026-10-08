@@ -812,7 +812,7 @@ function VisualGraphExplorer({ state, focusedNodeId, setFocusedNodeId }: Explore
                     className="mt-2 h-7 w-full border-white/10 bg-white/[0.03] text-[10px] hover:bg-white/[0.06]"
                   >
                     <MessageSquare className="mr-1 h-3 w-3" />
-                    Ask Oracle
+                    Ask VEYRO AI
                   </Button>
                 </motion.div>
               )}
@@ -1357,7 +1357,7 @@ function NLQueryModule({
                   <div className="mb-3 rounded-lg border border-emerald-500/30 bg-gradient-to-r from-emerald-500/[0.08] to-cyan-500/[0.05] p-3">
                     <div className="mb-1 flex items-center gap-1.5">
                       <Bot className="h-3.5 w-3.5 accent-text" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider accent-text">Oracle</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider accent-text">VEYRO AI</span>
                     </div>
                     <p className="text-sm leading-relaxed text-foreground">{result.spokenAck}</p>
                   </div>
@@ -1989,7 +1989,7 @@ export default function BusinessGraphPage() {
               </div>
               <div>
                 <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                  GSTPilot Business Graph<span className="accent-text">™</span>
+                  VEYRO Business Graph<span className="accent-text">™</span>
                 </h1>
                 <p className="text-[11px] text-muted-foreground">
                   Understand Everything · Connect Everything · See Connections · Understand Causes · Predict Outcomes · Operate Intelligently.
@@ -2014,7 +2014,7 @@ export default function BusinessGraphPage() {
               className="accent-gradient text-white hover:opacity-90"
             >
               <MessageSquare className="mr-2 h-3.5 w-3.5" />
-              Ask Oracle
+              Ask VEYRO AI
             </Button>
           </div>
         </div>
@@ -2062,7 +2062,7 @@ export default function BusinessGraphPage() {
       <FadeIn delay={0.1}>
         <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-emerald-500/[0.04] to-cyan-500/[0.04] p-5 text-center">
           <p className="text-sm font-medium text-foreground">
-            GSTPilot Business Graph<span className="accent-text">™</span> — Understand Everything. Connect Everything. See Connections. Understand Causes. Predict Outcomes. Operate Intelligently.
+            VEYRO Business Graph<span className="accent-text">™</span> — Understand Everything. Connect Everything. See Connections. Understand Causes. Predict Outcomes. Operate Intelligently.
           </p>
           <p className="mt-2 text-[10px] text-muted-foreground/60">
             Founded &amp; developed by Prince Singh

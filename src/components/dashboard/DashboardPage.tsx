@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — HOME (Financial Operating System)
+// VEYRO — HOME (Financial Operating System)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A premium command center inspired by Stripe, Linear, Notion, Vercel & Ramp.
@@ -11,7 +11,7 @@
 //
 //   1. Hero — greeting, Business Health Score, Today's Revenue, Pending GST,
 //      and the 3 most important quick actions.
-//   2. Oracle AI — a single built-in assistant card. No "Activate" buttons,
+//   2. VEYRO AI — a single built-in assistant card. No "Activate" buttons,
 //      no duplicate Oracle CTAs.
 //   3. Business Snapshot — Revenue, Profit, Expenses, Cash Flow, Invoices,
 //      Clients, GST Returns. Real numbers + a real MoM indicator.
@@ -588,7 +588,7 @@ export default function DashboardPage() {
   // The workflow pipeline is the CENTRAL visual element — it shows the live
   // state of every business object as it flows through Invoice → Payment →
   // Bank → Match → GST → Oracle → Approve → Done.
-  // The Oracle daily briefing makes Oracle proactive — it wakes up with
+  // VEYRO AI daily briefing makes Oracle proactive — it wakes up with
   // knowledge instead of waiting for prompts.
   const { pipeline, loading: pipelineLoading, refresh: refreshPipeline } = useWorkflowPipeline();
   const { briefing, loading: briefingLoading, refresh: refreshBriefing } = useOracleDailyBriefing();

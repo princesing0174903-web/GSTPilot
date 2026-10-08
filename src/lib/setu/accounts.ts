@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Setu SDK — Account Mapping Helpers
+// VEYRO Setu SDK — Account Mapping Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Converts Setu's nested `data.fips[].accounts[].data.account` structure into
@@ -80,7 +80,7 @@ export function fipNameFromSession(session: SetuSession, fipId: string): string 
 }
 
 /**
- * Normalize a Setu masked account number to GSTPilot's `••••` style.
+ * Normalize a Setu masked account number to VEYRO's `••••` style.
  *   "XXXXXX4373"  → "••••4373"
  *   "xxxxxx4373"  → "••••4373"
  *   "••••4373"    → "••••4373" (idempotent)
@@ -128,7 +128,7 @@ export function mapAccountStatus(raw: string | undefined): AccountStatus {
  * @param setuAccount Setu's `data.account` object
  * @param fipId The originating FIP id (e.g. "HDFC001")
  * @param fipName Display name for the bank (e.g. "HDFC Bank") — falls back to fipId
- * @param orgId GSTPilot org id (used to namespace the account id)
+ * @param orgId VEYRO org id (used to namespace the account id)
  */
 export function mapSetuAccountToBanking(
   setuAccount: SetuAccountData,

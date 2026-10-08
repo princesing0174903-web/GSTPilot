@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Provider Status API
+// VEYRO Real GSTN Integration™ — Provider Status API
 //
 // GET /api/gstn/status
 //   Returns: { ok: true, result: { healthy, name, isLive } }

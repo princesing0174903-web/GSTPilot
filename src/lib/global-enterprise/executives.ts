@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO™ — Global Enterprise Operating System™
 // Global AI Executives™ — 7 AI executives (CEO/CFO/COO/Legal/HR/Marketing/Operations)
 // each reasoning using global enterprise context. Daily briefs persisted to DB.
 // Founder & Owner: Prince Singh. Built on REAL production data.

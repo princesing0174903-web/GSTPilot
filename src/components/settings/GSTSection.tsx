@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Settings → GST / GSTN Connection Center
+// VEYRO — Settings → GST / GSTN Connection Center
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Premium enterprise control surface for the org's GSP (GST Suvidha Provider)

@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Oracle Intelligence Engine™
-// The Financial Brain of India™
+// VEYRO — VEYRO AI Intelligence Engine™
+// The AI Operating System for Business™
 //
 // The single entry point: `generateOracleBriefing(userId)`.
 //
@@ -184,7 +184,7 @@ export async function generateOracleBriefing(userId: string): Promise<OracleBrie
   const ranked = rankSignals(signals);
 
   // 4a. Fetch the canonical Health Score from the centralized Business
-  // Snapshot. The Oracle briefing is the same score shown on the Home
+  // Snapshot. VEYRO AI briefing is the same score shown on the Home
   // Dashboard / AI CFO / Run Business (see AUDIT-DUP-1 + task HEALTH-ENGINE).
   // Falls back to the signal-based score if the snapshot is unavailable.
   let canonicalHealthScore: number | undefined;

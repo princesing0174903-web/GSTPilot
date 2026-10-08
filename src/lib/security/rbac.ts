@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Enterprise Security Layer: RBAC Permission Engine
+// VEYRO — Enterprise Security Layer: RBAC Permission Engine
 //
 // The single source of truth for what each role can do. Pure functions — no
 // React, no Firestore, no I/O. Safe to import from client, server, Edge

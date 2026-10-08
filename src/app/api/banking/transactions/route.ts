@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Transactions API (TASK 12)
+// VEYRO Banking Module™ — Transactions API (TASK 12)
 //
 // GET  /api/banking/transactions?organizationId=...&accountId=...&category=...
 //       &type=...&matched=true|false&source=...&search=...&fromDate=...&toDate=...

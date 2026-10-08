@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — Shared Data Fetcher (TENANT-SCOPED)
+// VEYRO AI CFO™ Phase 1 — Shared Data Fetcher (TENANT-SCOPED)
 //
 // Single source of truth for fetching all connected business data from Prisma.
 // Every Phase 1 engine imports RawCFOData from here — no engine touches Prisma

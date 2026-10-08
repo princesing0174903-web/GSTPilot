@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — AI Bridge (SERVER-ONLY)
+// VEYRO Billing, Subscriptions & Payments™ — AI Bridge (SERVER-ONLY)
 //
 // Connects the Billing Provider to the AI Oracle:
 //   1. Reads billing data from Firestore (org-scoped): subscription, billing
@@ -267,7 +267,7 @@ function buildSnapshot(
  * These facts let Oracle answer questions like:
  *   - "What's my current plan?"
  *   - "When does my subscription renew?"
- *   - "How much have I spent on GSTPilot?"
+ *   - "How much have I spent on VEYRO?"
  *   - "Am I nearing any usage limits?"
  *   - "Should I upgrade my plan?"
  *
@@ -440,7 +440,7 @@ export async function persistBillingInsightsToMemory(
     await saveMemory(organizationId, {
       type: 'fact',
       source: 'billing',
-      summary: `Lifetime payments to GSTPilot: ₹${snapshot.totalPaid.toLocaleString('en-IN')}. Refunds: ₹${snapshot.totalRefunded.toLocaleString('en-IN')}. Net LTV: ₹${(snapshot.totalPaid - snapshot.totalRefunded).toLocaleString('en-IN')}.`,
+      summary: `Lifetime payments to VEYRO: ₹${snapshot.totalPaid.toLocaleString('en-IN')}. Refunds: ₹${snapshot.totalRefunded.toLocaleString('en-IN')}. Net LTV: ₹${(snapshot.totalPaid - snapshot.totalRefunded).toLocaleString('en-IN')}.`,
       embeddingPlaceholder: hashSummary(`billing|ltv|${organizationId}|${today}`),
       metadata: {
         category: 'billing_ltv',

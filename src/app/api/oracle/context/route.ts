@@ -39,6 +39,6 @@ export async function GET(req: NextRequest) {
       context: ctx,
     });
   } catch (err) {
-    return friendlyApiError(err, 'We could not load your Oracle context right now.');
+    return friendlyApiError(err, 'We could not load VEYRO AI context right now.');
   }
 }

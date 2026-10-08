@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — Barrel Export (CLIENT-SAFE)
+// VEYRO Billing, Subscriptions & Payments™ — Barrel Export (CLIENT-SAFE)
 //
 // The single import surface for billing functionality. This file is CLIENT-SAFE —
 // it only re-exports types, errors, the provider interface, and the client-side

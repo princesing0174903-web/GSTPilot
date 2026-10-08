@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — global-error.tsx (Next.js convention)
+// VEYRO — global-error.tsx (Next.js convention)
 //
 // Catches errors that `error.tsx` CANNOT:
 //   • Errors thrown in `layout.tsx` itself
@@ -94,7 +94,7 @@ export default function GlobalError({
               <AlertTriangle size={24} color="#ef4444" />
             </div>
             <h1 style={{ fontSize: '1.25rem', fontWeight: 600, margin: 0 }}>
-              GSTPilot ran into a problem
+              VEYRO ran into a problem
             </h1>
             <p
               style={{

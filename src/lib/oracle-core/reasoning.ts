@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Enterprise Reasoning Engine™
+// VEYRO AI Intelligence Core™ — Enterprise Reasoning Engine™
 //
 // Every AI decision must contain:
 //   • business reasoning    • financial reasoning    • risk reasoning
@@ -197,7 +197,7 @@ function buildDeterministicReasoning(
     ? `+${inr(slice.monthlyRevenue * 0.05)} to +${inr(slice.monthlyRevenue * 0.15)} over 90 days (5-15% revenue uplift assumption)`
     : null;
 
-  const rollback = `Rollback strategy: (1) Time-box the action to 30 days with a checkpoint review. (2) Define a clear abort trigger — e.g., cash balance drops below ${inr(slice.cashBalance * 0.8)}, anomaly count doubles, or GST compliance is at risk. (3) Pre-stage the rollback procedure: halt new commitments, revert configuration changes, notify affected stakeholders via the Connectivity Fabric. (4) Document the rollback in Oracle Memory for future learning. (5) If rollback is not possible (irreversible action), require explicit board-level approval before execution.`;
+  const rollback = `Rollback strategy: (1) Time-box the action to 30 days with a checkpoint review. (2) Define a clear abort trigger — e.g., cash balance drops below ${inr(slice.cashBalance * 0.8)}, anomaly count doubles, or GST compliance is at risk. (3) Pre-stage the rollback procedure: halt new commitments, revert configuration changes, notify affected stakeholders via the Connectivity Fabric. (4) Document the rollback in VEYRO AI Memory for future learning. (5) If rollback is not possible (irreversible action), require explicit board-level approval before execution.`;
 
   return {
     business,
@@ -421,7 +421,7 @@ export async function reason(req: ReasoningRequest): Promise<ReasoningResult> {
     context: formatContextForPrompt(safeCtx),
     question: req.request,
   });
-  const systemPrompt = rendered?.system ?? 'You are Oracle™ — the unified AI brain of GSTPilot Infinity™.';
+  const systemPrompt = rendered?.system ?? 'You are Oracle™ — the unified AI brain of VEYRO™.';
   const userPrompt = rendered?.user ?? `CONTEXT:\n${formatContextForPrompt(safeCtx)}\n\nQUESTION:\n${req.request}`;
 
   // Step 4 — optional LLM call

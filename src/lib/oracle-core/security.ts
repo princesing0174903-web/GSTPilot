@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Security Engine
+// VEYRO AI Intelligence Core™ — Security Engine
 // Every AI call is RBAC-enforced, organization-isolated, audit-logged,
 // prompt-logged, response-logged, token-encrypted, rate-limited, and
 // approval-gated. No black boxes. No silent decisions.

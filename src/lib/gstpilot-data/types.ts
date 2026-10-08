@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Data Types
+// VEYRO™ — Data Types
 //
 // Type definitions for Customer / Product / Invoice documents stored in
 // Firestore at:

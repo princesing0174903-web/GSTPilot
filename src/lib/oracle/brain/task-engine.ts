@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Task Engine (PROMPT 6)
+// VEYRO AI™ — Task Engine (PROMPT 6)
 //
 // Autonomous task lifecycle: Create → Reminder → Follow-up → Complete.
 // Tasks can be created manually by the user or autonomously by Oracle when it

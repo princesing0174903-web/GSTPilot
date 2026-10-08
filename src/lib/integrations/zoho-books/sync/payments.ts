@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Payments (Customer + Vendor) → Payment
+// VEYRO — Zoho Books Sync · Payments (Customer + Vendor) → Payment
 //
 // Syncs Zoho Books customer payments (/customerpayments) AND vendor payments
 // (/vendorpayments) into the existing `Payment` Prisma model.
 //
-// Oracle Memory Engine reads db.payment.findMany — so synced Zoho payments
+// VEYRO AI Memory Engine reads db.payment.findMany — so synced Zoho payments
 // appear in Oracle's memory snapshot ("How much did we collect last month?",
 // "What's our total vendor payouts?", "Show me all UPI payments from Acme Corp").
 //
@@ -206,7 +206,7 @@ async function syncVendorPayments(
       try {
         const normalized = mapVendorPayment(p);
 
-        // Best-effort: resolve vendor_id → Client.id (GSTPilot vendors live in
+        // Best-effort: resolve vendor_id → Client.id (VEYRO vendors live in
         // the Client table too — Client.entityType='vendor' — but ZohoEntityMap
         // tracks them under 'vendor' with localEntityType='Vendor'. We link the
         // payment to the Client row if the vendor maps to one, otherwise leave

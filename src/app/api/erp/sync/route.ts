@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Sync API
+// VEYRO ERP & Accounting Integrations™ — Sync API
 //
 // POST /api/erp/sync
 //   Body: { organizationId, connectionId, provider, jobType? }

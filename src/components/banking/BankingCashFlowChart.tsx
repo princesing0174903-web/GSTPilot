@@ -12,7 +12,7 @@ import {
 import type { CashFlowPoint } from '@/lib/banking-prisma/types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Cash Flow Chart (Premium Edition)
+// VEYRO Banking Module™ — Cash Flow Chart (Premium Edition)
 //
 // Dual-area SVG chart: emerald = inflow, red = outflow, cyan dashed = net.
 // Renders in a glass-surface card with a legend, period selector (7D/30D/90D/1Y)

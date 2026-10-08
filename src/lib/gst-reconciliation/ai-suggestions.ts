@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Oracle AI Suggestions for Reconciliation Mismatches
+// VEYRO — VEYRO AI Suggestions for Reconciliation Mismatches
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // For each mismatch, Oracle recommends ONE primary action with reasoning.
@@ -59,7 +59,7 @@ function fmtINR(n: number | null | undefined): string {
 }
 
 /**
- * Generate the Oracle AI suggestion for a single mismatch.
+ * Generate the VEYRO AI suggestion for a single mismatch.
  * Returns one primary action + reasoning.
  */
 export function suggestAction(ctx: MatchContext): AISuggestion {

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Setu SDK — Utilities (config loader, logger, helpers)
+// VEYRO Setu SDK — Utilities (config loader, logger, helpers)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Pure helpers used across the SDK. Nothing here touches the network.

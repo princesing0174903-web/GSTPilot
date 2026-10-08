@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Type Definitions
+// VEYRO Real Invoice Engine™ — Type Definitions
 // Phase 8 Step 3 — Shared types for the Invoice Cloud™ / Payables Cloud™ /
 // Expense Cloud™ / Payroll Cloud™ / TDS Cloud™ / AI Cash Conversion Engine.
 //

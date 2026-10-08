@@ -18,7 +18,7 @@
 // Tasks are ONLY generated when a real trigger exists in the live data.
 // No fabrication. No mock tasks. Capped at 15 active tasks.
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type {

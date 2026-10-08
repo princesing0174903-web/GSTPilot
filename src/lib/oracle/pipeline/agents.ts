@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Multi-Agent Reasoning Engine (PROMPT 5)
+// VEYRO AI™ — Multi-Agent Reasoning Engine (PROMPT 5)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Before generating a response, Oracle internally creates specialist agents.

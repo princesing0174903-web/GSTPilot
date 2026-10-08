@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Cancel API
+// VEYRO Billing™ — Cancel API
 // POST /api/billing/cancel
 //   Body: { organizationId, subscriptionId, immediately?, reason? }
 // ═══════════════════════════════════════════════════════════════════════════════

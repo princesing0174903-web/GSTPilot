@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Multi-Model AI Router
+// VEYRO AI Intelligence Core™ — Multi-Model AI Router
 // Automatically selects the best model for each request based on
 // speed / cost / reasoning / coding / vision / voice / long-context.
 // Never hardcodes one provider. Falls back gracefully.

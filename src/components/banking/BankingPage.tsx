@@ -1,10 +1,10 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — BankingPage (Lean Orchestrator) (TASK 12)
+// VEYRO Banking Module™ — BankingPage (Lean Orchestrator) (TASK 12)
 //
 // Composes all premium banking sub-components into a single dashboard.
-// Pure-black GSTPilot theme. Sticky header + sticky footer. Mobile responsive.
+// Pure-black VEYRO theme. Sticky header + sticky footer. Mobile responsive.
 //
 // Layout:
 //   ┌─────────────────────────────────────────────────────────────────────┐
@@ -264,7 +264,7 @@ export default function BankingPage() {
                 { key: 'accounts', label: 'Accounts' },
                 { key: 'transactions', label: 'Transactions' },
                 { key: 'reconciliation', label: 'Reconciliation' },
-                { key: 'oracle', label: 'Oracle AI' },
+                { key: 'oracle', label: 'VEYRO AI' },
                 { key: 'reports', label: 'Reports' },
               ].map((tab) => (
                 <TabsTrigger
@@ -429,7 +429,7 @@ function BankingHeader({
           </div>
           <div>
             <h1 className="text-base font-bold tracking-tight text-foreground sm:text-lg">
-              GSTPilot Banking™
+              VEYRO Banking™
             </h1>
             <p className="hidden text-[11px] text-muted-foreground sm:block">
               Banking & Reconciliation Platform

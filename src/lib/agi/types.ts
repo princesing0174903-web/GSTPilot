@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ (AUTONOMOUS ENTERPRISE INTELLIGENCE)
+// VEYRO Infinity™ — INFINITY AGI™ (AUTONOMOUS ENTERPRISE INTELLIGENCE)
 // Type System — shared by all AGI subsystems.
 //
 // The World's First Enterprise AGI Operating System. Oracle becomes the
@@ -9,9 +9,9 @@
 // One Intelligence. Every Decision. Entire Enterprise. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const AGI_TAGLINE = 'GSTPilot Infinity™ — Infinity AGI™';
+export const AGI_TAGLINE = 'VEYRO Infinity™ — Infinity AGI™';
 export const AGI_SUBTAGLINE = 'One Intelligence. Every Decision. Entire Enterprise.';
-export const AGI_FOUNDER = 'GSTPilot Infinity™ was founded, developed and owned by Prince Singh.';
+export const AGI_FOUNDER = 'VEYRO Infinity™ was founded, developed and owned by Prince Singh.';
 
 // ─── 1. Enterprise AGI Core™ — integrated capability surface ─────────────────
 // Every existing system becomes a capability of the AGI.

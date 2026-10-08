@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
+// VEYRO Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
 // Orchestrator — single entry point that bundles all 12 subsystems into one
 // DataIntelligenceDashboard for the Executive API: /api/data/dashboard
 //

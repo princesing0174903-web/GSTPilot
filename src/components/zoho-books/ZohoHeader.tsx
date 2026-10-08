@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — ZohoHeader
+// VEYRO — ZohoHeader
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Sticky connection-header bar shown at the top of the connected-mode
@@ -530,7 +530,7 @@ export function ZohoHeader({
             <AlertDialogTitle>Disconnect Zoho Books?</AlertDialogTitle>
             <AlertDialogDescription>
               You&rsquo;ll lose live sync until you reconnect. Your previously
-              synced records stay in GSTPilot. This cannot be undone.
+              synced records stay in VEYRO. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

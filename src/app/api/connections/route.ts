@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Real Data Activation · Connections API
+// VEYRO™ — Real Data Activation · Connections API
 //
 // GET  /api/connections       → list active connections with summary cards
 // POST /api/connections       → connect a new GSTN or Bank source

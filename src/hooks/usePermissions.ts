@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — usePermissions Hook (PART 4)
+// VEYRO — usePermissions Hook (PART 4)
 //
 // Reusable permission middleware for React components. Reads the current
 // user's role from OrgContext and exposes granular permission checks.

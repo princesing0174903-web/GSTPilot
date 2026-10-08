@@ -37,7 +37,7 @@ import {
 } from 'lucide-react'
 
 // ═════════════════════════════════════════════════════════════════════════════
-// GSTPilot Intelligence™ — Global Floating AI Assistant
+// VEYRO Intelligence™ — Global Floating AI Assistant
 // "The AI Brain of Your Business."
 // Jarvis + ChatGPT + Palantir + Cursor for Indian CAs and Businesses
 // ═════════════════════════════════════════════════════════════════════════════
@@ -237,7 +237,7 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
       onPointerUp={handlePointerUp}
       whileHover={{ scale: 1.08 }}
       whileTap={{ scale: 0.95 }}
-      title="GSTPilot Intelligence™ — Ctrl+K"
+      title="VEYRO Intelligence™ — Ctrl+K"
     >
       <div className="relative h-16 w-16">
         {/* Outer pulsing glow ring */}
@@ -373,7 +373,7 @@ function FloatingOrb({ onClick, isOpen, isListening, isThinking }: OrbProps) {
           whileHover={{ opacity: 1, x: 0 }}
         >
           <div className="bg-slate-900/90 backdrop-blur-md text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-xl border border-white/10">
-            GSTPilot Oracle™
+            VEYRO AI™
             <span className="block text-[10px] text-emerald-400 font-normal">Ctrl + K</span>
           </div>
         </motion.div>
@@ -790,7 +790,7 @@ function CommandCenter({
       id: 'welcome',
       role: 'assistant',
       content:
-        "**GSTPilot Oracle™**\n\nThe Financial Brain of Your Business.\n\nI'm connected to your live data — clients, invoices, returns, payments, predictions, and priorities across every module.\n\nAsk me anything, or tap a suggestion below.",
+        "**VEYRO AI™**\n\nThe AI Operating System of Your Business.\n\nI'm connected to your live data — clients, invoices, returns, payments, predictions, and priorities across every module.\n\nAsk me anything, or tap a suggestion below.",
       timestamp: Date.now(),
     },
   ])
@@ -1060,7 +1060,7 @@ function CommandCenter({
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">
-                    GSTPilot Oracle™
+                    VEYRO AI™
                   </h2>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
                     Ask anything. Run everything.
@@ -1237,7 +1237,7 @@ function CommandCenter({
                         handleSend()
                       }
                     }}
-                    placeholder={isListening ? 'Listening…' : 'Ask GSTPilot Oracle anything…'}
+                    placeholder={isListening ? 'Listening…' : 'Ask VEYRO AI anything…'}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition-all"
                     disabled={isThinking}
                   />
@@ -1268,7 +1268,7 @@ function CommandCenter({
                 </button>
               </div>
               <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1.5 text-center">
-                GSTPilot Oracle™ reads live data · Ctrl+K to toggle · Voice + Speech enabled
+                VEYRO AI™ reads live data · Ctrl+K to toggle · Voice + Speech enabled
               </p>
             </div>
           </div>
@@ -1280,7 +1280,7 @@ function CommandCenter({
 
 // --- Main Component --------------------------------------------------------
 
-export function GSTPilotIntelligence() {
+export function VEYROIntelligence() {
   const [isOpen, setIsOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isListening, setIsListening] = useState(false)
@@ -1332,4 +1332,4 @@ export function GSTPilotIntelligence() {
   )
 }
 
-export default GSTPilotIntelligence
+export default VEYROIntelligence

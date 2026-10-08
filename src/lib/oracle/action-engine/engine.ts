@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Action Engine: Pipeline
+// VEYRO AI™ — Action Engine: Pipeline
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The generic pipeline that runs an Oracle action end-to-end:

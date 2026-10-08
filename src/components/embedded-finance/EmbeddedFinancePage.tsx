@@ -1726,7 +1726,7 @@ export default function EmbeddedFinancePage() {
           </div>
           <div>
             <h1 className="text-lg font-bold text-slate-800">
-              GSTPilot Payments<sup className="text-emerald-500 text-[10px] ml-0.5">™</sup>
+              VEYRO Payments<sup className="text-emerald-500 text-[10px] ml-0.5">™</sup>
             </h1>
             <p className="text-xs text-slate-500">Embedded Finance Layer — Collect, Pay & Manage</p>
           </div>

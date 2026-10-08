@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Scaling Layer Barrel (SERVER-ONLY)
+// VEYRO™ — Scaling Layer Barrel (SERVER-ONLY)
 //
 // Re-exports everything from:
 //   • firestore-scaling.ts   — sharding, batched writes, distributed counters,

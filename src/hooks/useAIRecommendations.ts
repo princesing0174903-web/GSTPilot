@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useAIRecommendations() Hook
+// VEYRO — useAIRecommendations() Hook
 //
 // Real recommendations derived from the Business Snapshot + targeted Prisma
 // queries (replaces the previous Firestore subscription model).

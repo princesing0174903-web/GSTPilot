@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Invoice Action Card (Production)
+// VEYRO AI CFO™ — Invoice Action Card (Production)
 //
 // Renders inline below an Oracle assistant message when the user asks to
 // create an invoice. This is the REAL production flow:
@@ -208,8 +208,8 @@ export function InvoiceActionCard({
           decision: 'approved',
           summary: editedSummary,
           sellerDetails: {
-            tradeName: sellerDetails?.tradeName ?? 'GSTPilot',
-            legalName: sellerDetails?.legalName ?? sellerDetails?.tradeName ?? 'GSTPilot',
+            tradeName: sellerDetails?.tradeName ?? 'VEYRO',
+            legalName: sellerDetails?.legalName ?? sellerDetails?.tradeName ?? 'VEYRO',
             gstin: createResponse.seller?.gstin ?? sellerDetails?.gstin ?? '',
             address: sellerDetails?.address ?? '',
             state: createResponse.seller?.state ?? sellerDetails?.state ?? '',

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — FutureOfficialGenProvider (SERVER-ONLY)
+// VEYRO AI Production Pipeline™ — FutureOfficialGenProvider (SERVER-ONLY)
 //
 // The placeholder for real production AI provider integrations (OpenAI,
 // Anthropic, Google, Stability, Runway, ElevenLabs, etc.). Every method

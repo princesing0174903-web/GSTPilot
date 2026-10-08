@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Communication Cloud™ — Notification Center™ Engine
+// VEYRO Communication Cloud™ — Notification Center™ Engine
 // GST Due, Payment Due, Collection Risk, Cash Shortage, Payroll, TDS, System Alerts.
 // Pure TypeScript — importable from both client and server.
 // ═══════════════════════════════════════════════════════════════════════════════

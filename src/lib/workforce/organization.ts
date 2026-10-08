@@ -6,7 +6,7 @@
 // through the chain of command. Every responsibility maps to REAL connected
 // business data — no fabricated duties.
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { EmployeeRole, Department, EmployeeTier } from './types';

@@ -615,7 +615,7 @@ export default function DeveloperPlatform() {
                     API Playground
                   </CardTitle>
                   <p className="mt-1 text-xs text-white/50">
-                    Try real GSTPilot API calls from your browser. Requests run against the sandbox.
+                    Try real VEYRO API calls from your browser. Requests run against the sandbox.
                   </p>
                 </CardHeader>
                 <CardContent className="p-4">

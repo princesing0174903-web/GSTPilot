@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI™ — Artifact Renderer
+// VEYRO AI™ — Artifact Renderer
 //
 // Renders the 8 artifact kinds (table, chart, report, document, code, json,
 // kanban, metric) inside a shadcn Card. Used both inline in the chat thread
@@ -56,7 +56,7 @@ import type {
 } from '@/lib/oracle-ai/types';
 
 // Chart series palette — sourced from @/lib/chart-theme so every Oracle
-// artifact chart stays aligned with the GSTPilot Infinity™ brand system
+// artifact chart stays aligned with the VEYRO Infinity™ brand system
 // (blue primary, violet secondary, amber for warning, red for danger).
 // Index 0..6 keeps parity with the previous 7-color array so the modulo
 // cycling behaviour is unchanged.

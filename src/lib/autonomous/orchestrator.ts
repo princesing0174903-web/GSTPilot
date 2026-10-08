@@ -6,7 +6,7 @@
 // workflows + simulations + memory stats + alerts + learnings + self-healing
 // into one AutonomousDashboard. Cached 45s in-memory.
 //
-// Tagline: GSTPilot Infinity™ — Think. Decide. Execute. Learn. Grow.
+// Tagline: VEYRO Infinity™ — Think. Decide. Execute. Learn. Grow.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { observeCompany } from './observer';

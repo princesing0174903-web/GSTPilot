@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPILOT INFINITY™ — PHASE 14: MULTI-LANGUAGE PLATFORM™ (BILLION-DOLLAR GRADE)
 //
-// Internationalization hub for GSTPilot — 8 languages, RTL support, live preview,
+// Internationalization hub for VEYRO — 8 languages, RTL support, live preview,
 // translation management, QA dashboard, RTL preview, cultural adaptation guide &
 // translator workflow. All values derived from @/lib/global/data. No API calls.
 //
@@ -62,7 +62,7 @@ interface SampleCard {
 // translation preview still renders translated labels without showing
 // fabricated KPIs. Replace with real KPIs from /api/business-snapshot.
 const SAMPLE_CARDS: SampleCard[] = [
-  { icon: LayoutDashboard, key: 'dashboard', value: 'GSTPilot', accent: 'teal' },
+  { icon: LayoutDashboard, key: 'dashboard', value: 'VEYRO', accent: 'teal' },
   { icon: DollarSign, key: 'revenue', value: '—', accent: 'emerald' },
   { icon: ShieldCheck, key: 'compliance', value: '—', accent: 'cyan' },
   { icon: MapPin, key: 'countries', value: '—', accent: 'violet' },
@@ -1570,7 +1570,7 @@ export default function MultiLanguagePlatform() {
       {/* Footer */}
       <div className="flex items-center justify-center gap-2 text-[10px] text-zinc-600 pt-2">
         <Languages className="h-3 w-3" />
-        <span>GSTPilot Infinity™ Multi-Language Platform — {LANGUAGES.length} languages · {TRANSLATION_QA.length} tracked translation keys · {stats.rtlCount} RTL</span>
+        <span>VEYRO™ Multi-Language Platform — {LANGUAGES.length} languages · {TRANSLATION_QA.length} tracked translation keys · {stats.rtlCount} RTL</span>
       </div>
     </div>
   );

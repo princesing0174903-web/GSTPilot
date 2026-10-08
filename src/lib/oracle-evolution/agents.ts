@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Upgrade Phase 1 · Upgrade 3: Multi-Agent Architecture
+// VEYRO AI™ — Upgrade Phase 1 · Upgrade 3: Multi-Agent Architecture
 //
 // Eight CFO-domain specialist agents. Oracle automatically routes each query
 // to the right expert based on intent detection. Each agent carries a focused

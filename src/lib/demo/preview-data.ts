@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Phase 9 Demo Preview Data
-// The Financial Brain of India™
+// VEYRO Infinity™ — Phase 9 Demo Preview Data
+// The AI Operating System for Business™
 //
 // Pure, frontend-only premium demo dataset shown on empty dashboards so the
 // product never looks dead (no ₹0, no "No activity", no "No data").

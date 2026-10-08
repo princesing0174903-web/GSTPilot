@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 1 — Auto Sync Engine API
+// VEYRO™ — PHASE 2B · MODULE 1 — Auto Sync Engine API
 //
 // GET  /api/sync-queue → list sync queue items + schedules + auto-sync status
 // POST /api/sync-queue → process the queue now (manual tick)

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI™ Intelligence Layer — Tool Calling Framework
+// VEYRO AI™ Intelligence Layer — Tool Calling Framework
 //
 // A registry of tools the AI agents can invoke. Each tool declares its
 // parameters, category, and an async executor. The engine detects tool calls
@@ -7,9 +7,9 @@
 // runs them, and emits `tool-call` / `tool-result` stream events.
 //
 // Built-in tools (read-side, safe):
-//   • query-business-context  — pulls the Oracle Context Engine snapshot
+//   • query-business-context  — pulls VEYRO AI Context Engine snapshot
 //   • search-knowledge        — searches the firm's curated knowledge base
-//   • search-memory           — searches Oracle Memory (oracle-core/memory)
+//   • search-memory           — searches VEYRO AI Memory (oracle-core/memory)
 //   • fetch-financials        — pulls invoice/expense/payment stats
 //   • fetch-receivables       — pulls receivables aging summary
 //   • fetch-payables          — pulls payables summary
@@ -177,7 +177,7 @@ registerTool({
 
 registerTool({
   name: 'search-memory',
-  description: 'Search Oracle Memory — the long-term store of past decisions, conversations, and learned facts about the business.',
+  description: 'Search VEYRO AI Memory — the long-term store of past decisions, conversations, and learned facts about the business.',
   category: 'research',
   parameters: [
     { name: 'query', type: 'string', description: 'The search query', required: true },

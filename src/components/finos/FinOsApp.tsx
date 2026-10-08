@@ -2,7 +2,7 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * FinOsApp — root shell for the GSTPilot FinOS product.
+ * FinOsApp — root shell for the VEYRO FinOS product.
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * Layout: sticky sidebar (collapsible on mobile) + main content area + sticky
@@ -113,7 +113,7 @@ function Sidebar({
               <Zap className="h-5 w-5" />
             </div>
             <div className="leading-tight">
-              <p className="text-sm font-bold tracking-tight text-foreground">GSTPilot FinOS</p>
+              <p className="text-sm font-bold tracking-tight text-foreground">VEYRO FinOS</p>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">AI Financial OS</p>
             </div>
           </div>
@@ -247,7 +247,7 @@ function Footer() {
         <div className="flex items-center gap-3">
           <span>v2.4.0 · FinOS</span>
           <span className="hidden sm:inline">·</span>
-          <span className="hidden sm:inline">© 2025 GSTPilot Technologies Pvt. Ltd.</span>
+          <span className="hidden sm:inline">© 2025 VEYRO Technologies Pvt. Ltd.</span>
         </div>
       </div>
     </footer>

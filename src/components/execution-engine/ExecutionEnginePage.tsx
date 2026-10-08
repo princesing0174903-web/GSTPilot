@@ -5,7 +5,7 @@
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // The flagship autonomous-operations UI. 8 tabs.
 // Premium dark cinematic theme. Oracle proactive integration.
-// "I don't operate GSTPilot. GSTPilot operates my business."
+// "I don't operate VEYRO. VEYRO operates my business."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import React, { useState, useMemo, useCallback } from 'react'
@@ -433,7 +433,7 @@ function PipelineSection({ pipeline }: { pipeline: ExecutionPipelineEntry[] }) {
         </ProBadge>
       } />
       <p className="text-xs text-white/45 mb-5">
-        Observe → Think → Decide → Execute → Confirm → Learn — the autonomous loop GSTPilot runs every minute of every day.
+        Observe → Think → Decide → Execute → Confirm → Learn — the autonomous loop VEYRO runs every minute of every day.
       </p>
 
       {/* Horizontal flow — wraps on smaller screens */}
@@ -1044,7 +1044,7 @@ function ApproveTab({ state }: { state: ExecutionEngineState }) {
 
         <div className="space-y-3 max-h-[700px] overflow-y-auto custom-scrollbar pr-1">
           {appr.pendingApprovals.length === 0 ? (
-            <EmptyState label="No approvals pending. GSTPilot is operating autonomously." icon={CheckCircle2} />
+            <EmptyState label="No approvals pending. VEYRO is operating autonomously." icon={CheckCircle2} />
           ) : (
             appr.pendingApprovals.map((approval) => (
               <ApprovalCard
@@ -1398,7 +1398,7 @@ function LearnTab({ state }: { state: ExecutionEngineState }) {
         } />
         <div className="space-y-3 max-h-[700px] overflow-y-auto custom-scrollbar pr-1">
           {sortedPatterns.length === 0 ? (
-            <EmptyState label="No patterns learned yet. GSTPilot is still observing your behaviour." icon={GraduationCap} />
+            <EmptyState label="No patterns learned yet. VEYRO is still observing your behaviour." icon={GraduationCap} />
           ) : (
             sortedPatterns.map((pattern, idx) => (
               <PatternCard key={`${pattern.action}-${idx}`} pattern={pattern} />
@@ -1503,7 +1503,7 @@ function TimelineTab({ state }: { state: ExecutionEngineState }) {
           }
         />
         <p className="text-xs text-white/45 mb-5">
-          A live activity feed of everything GSTPilot has done today — newest first. Every observation, decision, execution, and learning is recorded here.
+          A live activity feed of everything VEYRO has done today — newest first. Every observation, decision, execution, and learning is recorded here.
         </p>
 
         <div className="relative">
@@ -1600,7 +1600,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
       <div>
         <h3 className="text-base font-semibold text-white">Execution Engine state unavailable</h3>
         <p className="text-xs text-white/55 mt-1 max-w-md">
-          I couldn&apos;t reach the GSTPilot Execution Engine API. This usually clears in a moment — please retry.
+          I couldn&apos;t reach the VEYRO Execution Engine API. This usually clears in a moment — please retry.
         </p>
       </div>
       <ProButton variant="primary" size="sm" onClick={onRetry}>
@@ -1645,7 +1645,7 @@ export default function ExecutionEnginePage() {
             </div>
             <div className="min-w-0">
               <h1 className="text-base font-semibold text-white truncate flex items-center gap-2">
-                GSTPilot Execution Engine
+                VEYRO Execution Engine
                 <span className="hidden sm:inline text-[10px] uppercase tracking-wider text-white/40 border border-white/10 rounded-full px-2 py-0.5">
                   Phase 8 · Step 5
                 </span>

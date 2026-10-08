@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2A · Data Normalization API (MODULE 3)
+// VEYRO™ — PHASE 2A · Data Normalization API (MODULE 3)
 //
 // GET /api/data-normalization → unified graph of all business entities.
 //   • Returns { ok, entities, counts } — entities capped at 500

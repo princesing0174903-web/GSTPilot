@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Friendly Auth & Firestore Error Mapping
+// VEYRO — Friendly Auth & Firestore Error Mapping
 //
 // Firebase error codes are internal implementation details. End users must
 // never see `auth/invalid-credential` or `FirebaseError`. This module is the

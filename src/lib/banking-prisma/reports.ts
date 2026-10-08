@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Reports Engine (TASK 12)
+// VEYRO Banking Module™ — Reports Engine (TASK 12)
 //
 // Period-based comprehensive banking reports. SERVER-ONLY.
 //

@@ -1959,7 +1959,7 @@ function ConnectDialog({ open, onOpenChange, onDone, apiPost }: { open: boolean;
     setSubmitting(true);
     const { ok } = await apiPost('connect', {
       toOrgId: toOrgEmail,
-      fromNodeName: 'GSTPilot Host',
+      fromNodeName: 'VEYRO Host',
       toNodeName: toOrgName,
       toOrgEmail,
       relationshipType,

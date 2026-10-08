@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Intelligence Analyze Engine — POST /api/intelligence/analyze
+// VEYRO Intelligence Analyze Engine — POST /api/intelligence/analyze
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Orchestrates a unified AnalyzeResponse from a natural-language question.

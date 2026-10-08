@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Firebase Storage Optimization (SERVER-ONLY)
+// VEYRO™ — Firebase Storage Optimization (SERVER-ONLY)
 //
 // Direct-to-storage signed URLs, image-optimization heuristics, orphan-file
 // cleanup, and per-org usage aggregation. All helpers use the Admin SDK

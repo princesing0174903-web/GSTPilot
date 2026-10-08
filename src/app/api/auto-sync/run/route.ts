@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 1 — Auto Sync Engine API
+// VEYRO™ — PHASE 2B · MODULE 1 — Auto Sync Engine API
 //
 // POST /api/auto-sync/run → run all due syncs now (manual tick of the engine)
 // ═══════════════════════════════════════════════════════════════════════════════

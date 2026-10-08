@@ -11,7 +11,7 @@
 // In dryRun mode the plan is returned without side effects. In live mode,
 // the strategy meeting + daily plan are persisted.
 //
-// Tagline: GSTPilot Infinity™ — Think. Decide. Execute. Learn. Grow.
+// Tagline: VEYRO™ — Think. Decide. Execute. Learn. Grow.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';

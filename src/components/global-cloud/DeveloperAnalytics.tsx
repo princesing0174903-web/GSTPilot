@@ -6,7 +6,7 @@
 // API Usage · Errors · Latency · Revenue · Apps · Downloads · Subscriptions
 //
 // Real-time observability for every API call, error, SDK download and developer
-// app on the GSTPilot open platform — serving 2.4M developers and 4,820 apps.
+// app on the VEYRO open platform — serving 2.4M developers and 4,820 apps.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useMemo } from 'react';
@@ -577,7 +577,7 @@ export default function DeveloperAnalytics() {
         <div className="mt-6 flex items-center justify-center gap-2 text-center">
           <TrendingUp className="h-3.5 w-3.5 text-white/30" />
           <p className="text-[11px] text-white/40">
-            Every call. Every error. Every developer. One console. — GSTPilot Infinity™
+            Every call. Every error. Every developer. One console. — VEYRO™
           </p>
         </div>
       </div>

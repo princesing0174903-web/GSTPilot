@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Email Webhook Endpoint
+// VEYRO AI CFO™ — Email Webhook Endpoint
 //
 // POST /api/webhooks/email?provider=resend|sendgrid|mailgun|gmail|outlook
 // GET  /api/webhooks/email  (health check)

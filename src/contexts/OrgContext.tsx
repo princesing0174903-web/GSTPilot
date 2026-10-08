@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Global Organization Context (PART 3)
+// VEYRO — Global Organization Context (PART 3)
 //
 // After the user is authenticated (handled by AuthContext), this context:
 //   1. Loads the user's profile from Firestore (`users/{uid}`)

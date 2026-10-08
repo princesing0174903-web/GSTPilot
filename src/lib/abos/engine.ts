@@ -89,7 +89,7 @@ export function buildPersonality(): AbosPersonality {
       'Executive Assistant',
       'Team of AI Employees',
     ],
-    tagline: 'GSTPilot Autonomous Business Operating System™ — Observe. Think. Decide. Execute. Learn. Grow.',
+    tagline: 'VEYRO Autonomous Business Operating System™ — Observe. Think. Decide. Execute. Learn. Grow.',
     spokenBehaviours: [
       "I've prepared the return.",
       "I've scheduled collections recovery.",
@@ -120,7 +120,7 @@ export function buildPersonality(): AbosPersonality {
     successCriteria: [
       "The user feels: I don't run my business alone.",
       "The user feels: I have an autonomous company operating system.",
-      "GSTPilot thinks, decides, and executes for me.",
+      "VEYRO thinks, decides, and executes for me.",
     ],
   };
 }

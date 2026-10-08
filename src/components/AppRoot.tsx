@@ -2,10 +2,10 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot — AppRoot (chunk-split entry)
+ * VEYRO — AppRoot (chunk-split entry)
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * This module is the REAL entry point of the GSTPilot SPA. It is loaded
+ * This module is the REAL entry point of the VEYRO SPA. It is loaded
  * on-demand via `next/dynamic` from `src/app/page.tsx` so that the initial
  * `/` compile only processes the tiny page.tsx + layout.tsx + globals.css.
  *

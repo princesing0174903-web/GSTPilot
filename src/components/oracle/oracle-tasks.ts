@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Task Queue (Phase 3 — Agent Engine™)
+// VEYRO AI™ — Task Queue (Phase 3 — Agent Engine™)
 //
 // Persistent store for Oracle Tasks. Tasks are spawned when the user clicks an
 // Action Card (or when Oracle proactively schedules one). They move through a

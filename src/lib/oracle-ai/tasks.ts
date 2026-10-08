@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI™ Intelligence Layer — Task Queue Manager
+// VEYRO AI™ Intelligence Layer — Task Queue Manager
 //
 // CRUD for the AI Task Queue. Tasks are background jobs (research, report
 // generation, batch processing, agent runs) that are enqueued by tools or by

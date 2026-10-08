@@ -1,4 +1,4 @@
-// POST /api/oracle/ask — Ask Oracle a question. Returns structured reasoning.
+// POST /api/oracle/ask — Ask VEYRO AI a question. Returns structured reasoning.
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { reason } from '@/lib/oracle-core/reasoning';

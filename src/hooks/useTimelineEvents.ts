@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useTimelineEvents() Hook
+// VEYRO — useTimelineEvents() Hook
 //
 // Reads the most recent Business Timeline events from /api/timeline (which
 // delegates to the canonical `BusinessEvent` Prisma table via

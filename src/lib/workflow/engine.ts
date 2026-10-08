@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Workflow Engine
+// VEYRO — Workflow Engine
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The single source of truth for the "Business Workflow Pipeline" — the live

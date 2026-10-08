@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot FinOS — Shared types + seed data for an Indian SME business.
+ * VEYRO FinOS — Shared types + seed data for an Indian SME business.
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * NOTE: `company` and `executiveKpis` are intentionally empty placeholders.
@@ -594,6 +594,6 @@ export const modules: ModuleMeta[] = [
   { id: 'inventory', name: 'Inventory', shortName: 'Inventory', description: 'Stock, products, warehouses, reorder alerts', icon: 'Package', category: 'Operations', accent: 'amber' },
   { id: 'payroll', name: 'Payroll', shortName: 'Payroll', description: 'Employees, runs, PF/TDS, payslips', icon: 'Users', category: 'Operations', accent: 'sky' },
   { id: 'compliance', name: 'Compliance Center', shortName: 'Compliance', description: 'GST/TDS/PF/ESI/ROC — calendar + notices', icon: 'ShieldCheck', category: 'Compliance', accent: 'rose' },
-  { id: 'oracle', name: 'Oracle AI', shortName: 'Oracle', description: 'Conversational AI for any business question', icon: 'Sparkles', category: 'Intelligence', accent: 'violet', badge: 'AI' },
+  { id: 'oracle', name: 'VEYRO AI', shortName: 'Oracle', description: 'Conversational AI for any business question', icon: 'Sparkles', category: 'Intelligence', accent: 'violet', badge: 'AI' },
   { id: 'automation', name: 'Automation Builder', shortName: 'Automation', description: 'Build no-code workflows across modules', icon: 'Workflow', category: 'Intelligence', accent: 'cyan' },
 ]

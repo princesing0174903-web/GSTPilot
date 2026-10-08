@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Virtualized Reconciliation Table
+// VEYRO — Virtualized Reconciliation Table
 // ═══════════════════════════════════════════════════════════════════════════════
 // Uses react-window v2 List for virtualization — supports 50,000+ rows without lag.
 // Only the visible rows (~20-30) are rendered at any time.
@@ -129,7 +129,7 @@ const Row = function Row({
         <button
           onClick={() => onOpenMatch(m)}
           className="gst-btn gst-btn-ghost gst-btn-sm !h-7 !px-2"
-          title="Oracle AI analysis"
+          title="VEYRO AI analysis"
         >
           <Sparkles className="h-3.5 w-3.5 text-[#60A5FA]" />
         </button>

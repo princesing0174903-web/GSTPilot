@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Decision Log (PROMPT 6)
+// VEYRO AI™ — Decision Log (PROMPT 6)
 //
 // Explainable decision tracking. Every Oracle recommendation is logged with
 // reason + evidence + expected outcome + confidence. The lifecycle tracks

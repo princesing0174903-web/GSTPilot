@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Stats
+// VEYRO AI Production Pipeline™ — Stats
 //
 // GET /api/ai/stats?orgId=
 //

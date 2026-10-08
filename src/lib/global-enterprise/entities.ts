@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO™ — Global Enterprise Operating System™
 // Global Organization Engine™ — Manages unlimited organizations, each with unlimited
 // countries/legal entities/branches/offices/warehouses/departments/business units.
 // All isolated while Oracle™ sees the entire enterprise.

@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Journals → ZohoJournalEntry
+// VEYRO — Zoho Books Sync · Journals → ZohoJournalEntry
 //
 // Syncs Zoho Books journals into the new `ZohoJournalEntry` Prisma model.
-// GSTPilot has no generic Journal model, so journals live in this dedicated
+// VEYRO has no generic Journal model, so journals live in this dedicated
 // Zoho-specific table (normalized — not raw Zoho JSON). Oracle doesn't have a
 // tool for journals yet; the data is persisted for future use and the UI shows
 // the imported count.

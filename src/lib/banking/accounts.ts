@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Cloud™ — Module 1: Bank Account Integration
+// VEYRO Banking Cloud™ — Module 1: Bank Account Integration
 // Deterministic engine. Reads from Prisma. No LLM.
 // ═══════════════════════════════════════════════════════════════════════════════
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Apply Coupon API
+// VEYRO Billing™ — Apply Coupon API
 // POST /api/billing/coupon
 //   Body: ApplyCouponInput
 // ═══════════════════════════════════════════════════════════════════════════════

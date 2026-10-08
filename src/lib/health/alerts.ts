@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Health, Monitoring & Alerting — Alerting Engine
+// VEYRO™ — Health, Monitoring & Alerting — Alerting Engine
 //
 // SERVER-ONLY. The alerting layer:
 //   • Defines DEFAULT_ALERT_RULES — the built-in rules shipped with the app.
@@ -38,7 +38,7 @@ const ALERTS_COLLECTION = 'alerts';
 // ─── Built-in alert rules ───────────────────────────────────────────────────
 
 /**
- * The default alert rules shipped with GSTPilot. Each rule is a pure
+ * The default alert rules shipped with VEYRO. Each rule is a pure
  * condition over SystemHealth. Rules are evaluated in order; the first match
  * for a given source wins (so order them most-severe-first).
  */

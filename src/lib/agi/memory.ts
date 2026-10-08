@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — LONG-TERM MEMORY™
+// VEYRO Infinity™ — INFINITY AGI™ — LONG-TERM MEMORY™
 //
 // Oracle remembers everything forever: conversations, decisions, failures,
 // customer history, employee history, strategy, roadmap, experiments, meetings,

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Communication Cloud™ — WhatsApp Business Cloud™ Engine
+// VEYRO Communication Cloud™ — WhatsApp Business Cloud™ Engine
 // Send invoices, payment reminders, GST reminders, collection notices, reports,
 // and bulk campaigns via WhatsApp Business Platform.
 // Pure TypeScript — importable from both client and server.
@@ -76,7 +76,7 @@ export function generateWhatsAppMessage(
 
   // Fallback inline message
   return {
-    body: `Dear ${data.customer_name ?? 'Customer'},\n\n${data.message ?? 'This is a notification from GSTPilot.'}\n\n— ${data.firm_name ?? 'GSTPilot'}`,
+    body: `Dear ${data.customer_name ?? 'Customer'},\n\n${data.message ?? 'This is a notification from VEYRO.'}\n\n— ${data.firm_name ?? 'VEYRO'}`,
     templateName: null,
   };
 }
@@ -118,7 +118,7 @@ export function bulkCampaignRecipients(
     dueDate?: string | null;
     clientPhone?: string | null;
   }>,
-  firmName = 'GSTPilot',
+  firmName = 'VEYRO',
 ): BulkCampaignRecipient[] {
   return invoices
     .filter((inv) => inv.balanceAmount > 0 && inv.clientPhone)

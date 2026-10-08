@@ -4,7 +4,7 @@ import React from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Invoice Skeletons (Premium Shimmer)
+// VEYRO — Invoice Skeletons (Premium Shimmer)
 //
 // Layout-matched skeletons for every part of the Invoice Workspace so the page
 // never shifts on load. Uses the shimmer animation defined in globals.css

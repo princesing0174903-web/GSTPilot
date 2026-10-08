@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Action Cards (Phase 3 — Agent Engine™)
+// VEYRO AI™ — Action Cards (Phase 3 — Agent Engine™)
 //
 // Every Oracle response ends with 3 large glass Action Cards. Single click
 // spawns an Oracle Task in the Agent Execution Panel.
@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 
 export interface OracleActionCardsProps {
   cards: OracleActionCard[];
-  /** Click handler — receives the card. The parent spawns the Oracle Task. */
+  /** Click handler — receives the card. The parent spawns VEYRO AI Task. */
   onRun?: (card: OracleActionCard) => void;
   /** Disable all cards (e.g. while a task is already running) */
   disabled?: boolean;

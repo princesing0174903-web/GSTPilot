@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Enterprise Security Layer: Error Hierarchy
+// VEYRO — Enterprise Security Layer: Error Hierarchy
 //
 // A typed error hierarchy for the security engine. Every error carries:
 //   • `code`         — a stable machine-readable string (for client-side

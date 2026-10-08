@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — InvoiceHeaderPanel
+// VEYRO™ — InvoiceHeaderPanel
 //
 // The RIGHT card of the rebuilt Invoice Builder. All invoice-meta fields in
 // one place, no scrolling:
@@ -297,11 +297,11 @@ export function InvoiceHeaderPanel({
         </div>
       </div>
 
-      {/* ── Oracle AI hint ───────────────────────────────────────────────── */}
+      {/* ── VEYRO AI hint ───────────────────────────────────────────────── */}
       <div className="mt-5 flex items-start gap-2.5 rounded-lg border border-[#F59E0B]/25 bg-[#F59E0B]/[0.06] p-3.5">
         <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#FBBF24]" />
         <div className="flex-1 text-[13px] leading-relaxed text-[#FBBF24]/90">
-          <span className="font-semibold text-[#FBBF24]">Oracle AI ·</span>{' '}
+          <span className="font-semibold text-[#FBBF24]">VEYRO AI ·</span>{' '}
           {interState ? (
             <>
               <AlertCircle className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />

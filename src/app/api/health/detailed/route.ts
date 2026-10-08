@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — /api/health/detailed — Fresh Authenticated Probe
+// VEYRO™ — /api/health/detailed — Fresh Authenticated Probe
 //
 // GET /api/health/detailed
 //   Requires authentication (any org member). Runs all checks fresh (no cache)

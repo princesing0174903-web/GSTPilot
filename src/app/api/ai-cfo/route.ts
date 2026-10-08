@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ — Operating System API
+// VEYRO AI CFO™ — Operating System API
 // GET /api/ai-cfo
 //
 // Returns the full CFO intelligence bundle:

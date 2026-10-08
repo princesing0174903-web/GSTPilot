@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Unified Audit Logger
+// VEYRO AI CFO™ — Unified Audit Logger
 //
 // Every Oracle CFO operation is audit-logged to the `oracle_audit_logs`
 // Firestore collection. This is the SYSTEM OF RECORD for "what did Oracle do,

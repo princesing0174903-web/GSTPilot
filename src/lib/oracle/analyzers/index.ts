@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Analyzer Registry
+// VEYRO AI Intelligence Engine — Analyzer Registry
 //
 // The single place new analyzers register. The engine imports `ANALYZERS`
 // from here and runs them all in parallel over the collected dataset. Adding

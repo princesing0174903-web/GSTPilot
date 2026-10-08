@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
+// VEYRO Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
 // Type System — shared by all 16 subsystems.
 // Every Data Point. One Enterprise Brain. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Autopilot Actions API
+// VEYRO AI™ — Autopilot Actions API
 // POST /api/oracle/actions  → execute a detected action { type, title, description, payload, messageId? }
 // GET  /api/oracle/actions  → list recent executed actions (default last 20)
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Cloud™ — Module 7: Collection Recovery Cloud
+// VEYRO Banking Cloud™ — Module 7: Collection Recovery Cloud
 // Detect → Remind → Escalate → Recover → Report.
 // WhatsApp + Email reminders. Deterministic engine. No LLM.
 // ═══════════════════════════════════════════════════════════════════════════════

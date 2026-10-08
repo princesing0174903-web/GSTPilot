@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Integration · Barrel Export
+// VEYRO — Zoho Books Integration · Barrel Export
 //
 // Single import surface for the Zoho Books module:
 //   import { buildAuthUrl, getValidAccessToken, getConnectionStatus, … } from

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — MockAIProvider (SERVER-ONLY, default)
+// VEYRO AI Oracle™ & AI CFO™ — MockAIProvider (SERVER-ONLY, default)
 //
 // The DEFAULT AI provider. Implements IAIProvider by delegating to the pure
 // deterministic engines (insights, recommendations, scoring, chat, predictions).

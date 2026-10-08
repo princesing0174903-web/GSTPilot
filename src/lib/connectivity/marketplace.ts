@@ -20,7 +20,7 @@ export async function seedMarketplaceIfEmpty(): Promise<void> {
     name: c.name,
     tagline: c.description.slice(0, 80) + (c.description.length > 80 ? '…' : ''),
     description: c.description,
-    developerName: c.certified ? 'GSTPilot Certified' : 'Community Developer',
+    developerName: c.certified ? 'VEYRO Certified' : 'Community Developer',
     developerHandle: c.certified ? 'gstpilot' : `dev-${idx}`,
     category: c.category,
     provider: c.provider,

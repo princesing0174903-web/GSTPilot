@@ -5,7 +5,7 @@
 // Tagline: "Think. Decide. Execute. Grow Automatically."
 //          "Observe. Think. Decide. Execute. Learn. Grow."
 //
-// ABOS transforms GSTPilot from an assistant into a system that can run an
+// ABOS transforms VEYRO from an assistant into a system that can run an
 // entire business autonomously — 24/7 monitoring, problem detection, planning,
 // decision-making, execution, learning, and growth.
 //

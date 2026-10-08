@@ -6,7 +6,7 @@ import { Landmark, RefreshCw, Upload, Sparkles, AlertCircle, ArrowLeft, ShieldAl
 import { Button } from '@/components/ui/button';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Empty + Error States
+// VEYRO Banking Module™ — Empty + Error States
 //
 // Professional states that never look like an admin template. Beautiful
 // illustrations, clear CTAs, and sanitized error messages (never exposes raw
@@ -35,7 +35,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
         <h3 className="mb-1.5 text-base font-semibold text-foreground">No bank accounts connected</h3>
         <p className="mb-4 max-w-sm text-sm text-muted-foreground">
           Connect your first bank account to start tracking transactions, reconciling payments, and
-          unlocking Oracle AI insights.
+          unlocking VEYRO AI insights.
         </p>
         {onConnect && (
           <Button onClick={onConnect} className="gap-2 bg-blue-500 hover:bg-blue-400 text-zinc-950">
@@ -69,7 +69,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
         </motion.div>
 
         <h2 className="mb-2 text-2xl font-bold tracking-tight text-foreground">
-          Welcome to GSTPilot Banking™
+          Welcome to VEYRO Banking™
         </h2>
         <p className="mb-8 max-w-lg text-sm text-muted-foreground leading-relaxed">
           The complete banking & reconciliation platform. Connect your bank accounts, auto-reconcile
@@ -81,7 +81,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
           {[
             { icon: Landmark, title: 'Connect Accounts', desc: 'HDFC, ICICI, Axis & more' },
             { icon: RefreshCw, title: 'Auto-Reconcile', desc: 'Invoice → Payment → Bank' },
-            { icon: Sparkles, title: 'Oracle AI Insights', desc: 'Predict cash flow & fraud' },
+            { icon: Sparkles, title: 'VEYRO AI Insights', desc: 'Predict cash flow & fraud' },
           ].map((feature, i) => (
             <motion.div
               key={feature.title}
@@ -124,7 +124,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
               className="gap-2 text-amber-300 hover:bg-amber-400/10 hover:text-amber-200"
             >
               <Sparkles className="h-4 w-4" />
-              Ask Oracle AI
+              Ask VEYRO AI AI
             </Button>
           )}
         </div>
@@ -189,7 +189,7 @@ export function BankingErrorState({ message, onRetry, onAskOracle, onBack }: Err
               className="gap-2 border-amber-400/25 text-amber-300 hover:bg-amber-400/10"
             >
               <Sparkles className="h-4 w-4" />
-              Ask Oracle AI
+              Ask VEYRO AI AI
             </Button>
           )}
           {onBack && (

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Background Analysis API
+// VEYRO AI Oracle™ & AI CFO™ — Background Analysis API
 //
 // POST /api/ai/analyze/background
 //   Body: { organizationId? }     (orgId may be passed in the body)
@@ -8,7 +8,7 @@
 //
 // Refreshes the org's AI memory: clears stale insights/recommendations,
 // regenerates fresh ones from the latest Firestore data, and stores an analysis
-// memory entry so the Oracle "remembers" this run.
+// memory entry so VEYRO AI "remembers" this run.
 //
 // If the org has no business data yet, returns counts=0 with a graceful brief
 // (does NOT throw NoBusinessDataError).

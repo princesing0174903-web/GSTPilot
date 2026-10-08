@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Premium Enterprise Sidebar
+// VEYRO™ — Premium Enterprise Sidebar
 // ═══════════════════════════════════════════════════════════════════════════════
 // Redesigned (Task 9) to match the enterprise polish of Linear / Stripe / Vercel.
 //
@@ -150,7 +150,7 @@ export function LeftNav({
             'focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40',
             forceExpanded ? 'justify-start px-2.5' : 'xl:justify-start xl:px-2.5 justify-center',
           )}
-          aria-label="GSTPilot Infinity — Home"
+          aria-label="VEYRO — Home"
         >
           <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#1E3A8A]/30 to-[#0F172A] ring-1 ring-[#3B82F6]/15 transition-all duration-300 group-hover/brand:ring-[#3B82F6]/30">
             <BrandLogo variant="icon" theme="dark" size={20} animated={false} disableGlow />
@@ -158,7 +158,7 @@ export function LeftNav({
           <div className={cn('flex-col items-start leading-none', labelShow)}>
             <div className="flex items-center gap-1.5">
               <span className="text-[14px] font-semibold tracking-tight text-white">
-                GSTPilot
+                VEYRO
               </span>
               <span className="rounded-[5px] bg-[#3B82F6]/12 px-1.5 py-[2px] text-[11px] font-bold uppercase tracking-[0.08em] text-[#60A5FA] ring-1 ring-[#3B82F6]/20">
                 Infinity
@@ -197,7 +197,7 @@ export function LeftNav({
                 onFocus={() => setHovered(item.view)}
                 onBlur={() => setHovered(null)}
                 onClick={() => {
-                  // Oracle AI sidebar item has href:'/oracle' which redirects
+                  // VEYRO AI sidebar item has href:'/oracle' which redirects
                   // to /?view=oracle-brain. But if we're already on /, the
                   // router.push('/oracle') → redirect → /?view=oracle-brain
                   // chain doesn't trigger AppContext's lazy initializer
@@ -360,7 +360,7 @@ export function LeftNav({
             </span>
           </div>
           <p className="mt-1.5 px-2.5 text-[11px] font-medium uppercase leading-tight tracking-[0.12em] text-[#3F3F46]">
-            The Financial Brain
+            The AI Operating System
             <br />
             of India
           </p>

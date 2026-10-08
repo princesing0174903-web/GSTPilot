@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Supabase Client (Storage)
+// VEYRO — Supabase Client (Storage)
 //
 // Replaces Firebase Storage. Reads credentials exclusively from environment
 // variables — NOTHING is hardcoded.
@@ -9,7 +9,7 @@
 //   NEXT_PUBLIC_SUPABASE_ANON_KEY
 //
 // The `NEXT_PUBLIC_` prefix makes them available on the client (required,
-// because GSTPilot uploads run client-side under the authenticated user's
+// because VEYRO uploads run client-side under the authenticated user's
 // context — same pattern as the existing Firestore onSnapshot hooks).
 //
 // Bucket: "gstpilot-files"
@@ -17,7 +17,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-/** The Supabase Storage bucket used by GSTPilot for all file uploads. */
+/** The Supabase Storage bucket used by VEYRO for all file uploads. */
 export const GSTPILOT_STORAGE_BUCKET = 'gstpilot-files';
 
 /**
@@ -62,7 +62,7 @@ export function getSupabase(): SupabaseClient {
   if (_client) return _client;
   _client = createClient(resolveSupabaseUrl(), resolveSupabaseAnonKey(), {
     auth: {
-      // GSTPilot uses Firebase Auth — Supabase Auth is not used, so we disable
+      // VEYRO uses Firebase Auth — Supabase Auth is not used, so we disable
       // session persistence to avoid unnecessary localStorage writes.
       persistSession: false,
       autoRefreshToken: false,
@@ -72,7 +72,7 @@ export function getSupabase(): SupabaseClient {
 }
 
 /**
- * Convenience accessor for the Supabase Storage API bound to the GSTPilot
+ * Convenience accessor for the Supabase Storage API bound to the VEYRO
  * bucket. Every upload/download/delete/list call in the codebase goes through
  * here so the bucket name lives in exactly one place.
  */

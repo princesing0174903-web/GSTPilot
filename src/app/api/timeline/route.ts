@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Timeline API
+// VEYRO — Timeline API
 // GET /api/timeline?organizationId=...&limit=20
 //
 // Returns the most recent Business Timeline events for the org.

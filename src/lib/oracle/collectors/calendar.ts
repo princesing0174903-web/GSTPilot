@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Google Calendar Collector
+// VEYRO AI Intelligence Engine — Google Calendar Collector
 //
 // Reads upcoming calendar events for the next 7 days. Detects scheduling
 // conflicts (overlapping events) so the productivity analyzer can flag them.

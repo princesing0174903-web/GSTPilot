@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — Developer Portal™
+// VEYRO Global AI App Marketplace™ — Developer Portal™
 // Developer Dashboard: Published Apps · Revenue · Downloads · Ratings
 // Crash Reports · Usage Analytics · Webhook Logs · API Keys · Sandbox Testing
 // CI/CD · Release Management

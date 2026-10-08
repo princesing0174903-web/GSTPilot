@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — ZohoLatestRecords
+// VEYRO — ZohoLatestRecords
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // 3-tab compact table — Latest Invoices / Latest Customers / Latest Payments.
@@ -387,7 +387,7 @@ export function ZohoLatestRecords({ syncStatus }: ZohoLatestRecordsProps) {
             Latest Synced Records
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Pulled from your local GSTPilot database · labeled as synced from
+            Pulled from your local VEYRO database · labeled as synced from
             Zoho Books
           </p>
         </div>

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Predictions Engine
+// VEYRO AI Oracle™ & AI CFO™ — Predictions Engine
 //
 // PURE, CLIENT-SAFE functions that forecast revenue and cash flow for the
 // next N months using the real BusinessContext. The Mock provider uses a

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — GOAL ENGINE™
+// VEYRO Infinity™ — INFINITY AGI™ — GOAL ENGINE™
 //
 // Businesses define goals. Oracle automatically breaks goals into projects,
 // creates milestones, assigns work, executes, monitors progress, adapts plans.

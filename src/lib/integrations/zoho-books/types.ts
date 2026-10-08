@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Integration · Type Definitions
+// VEYRO — Zoho Books Integration · Type Definitions
 //
 // Zero `any`. Every Zoho API response shape touched by this integration is
 // modeled here so the compiler enforces correctness end-to-end.

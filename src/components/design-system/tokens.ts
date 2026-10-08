@@ -1,9 +1,9 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot Infinity™ — ONE Unified Design System
+ * VEYRO™ — ONE Unified Design System
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * This is the SINGLE source of truth for every visual decision in GSTPilot.
+ * This is the SINGLE source of truth for every visual decision in VEYRO.
  * Every page MUST use these tokens and primitives. No exceptions.
  *
  * DESIGN PRINCIPLES:

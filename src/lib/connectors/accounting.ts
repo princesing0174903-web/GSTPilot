@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Accounting Connector™ — Tally / Zoho Books / QuickBooks
+// VEYRO Accounting Connector™ — Tally / Zoho Books / QuickBooks
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Tally Prime:   Local HTTP API on port 9000 (Tally XML over HTTP). Requires

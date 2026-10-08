@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing, Subscriptions & Payments™ — Provider Interface
+// VEYRO Billing, Subscriptions & Payments™ — Provider Interface
 //
 // IPaymentProvider is the SINGLE contract every payment backend implements.
 // Today we ship two live implementations:

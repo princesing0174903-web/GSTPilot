@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Left Sidebar (Memory + History)
+// VEYRO AI™ — Left Sidebar (Memory + History)
 //
 // Two stacked sections:
 //   1. Memory Panel — what Oracle knows (firm profile, connected services,
@@ -163,10 +163,10 @@ export function OracleSidebar({
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="truncate text-[10px] font-medium text-foreground/70">
-              GSTPilot Infinity™
+              VEYRO Infinity™
             </p>
             <p className="truncate text-[9px] text-muted-foreground/60">
-              The Financial Brain of India
+              The AI Operating System for Business
             </p>
           </div>
           <div className="shrink-0 text-right">

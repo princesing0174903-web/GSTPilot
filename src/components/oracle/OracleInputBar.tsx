@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle — Premium Input Bar (ChatGPT-Enterprise redesign)
+// VEYRO AI — Premium Input Bar (ChatGPT-Enterprise redesign)
 //
 // Rounded-2xl · #161616 bg · #2A2A2A border · blue focus ring · circular blue
 // send button. Inline buttons: 📎 Attach · 🎤 Voice · 🌐 Web Search · ➤ Send
@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 
 // Rotating multilingual placeholders — reinforces "Oracle speaks every language".
 const ROTATING_PLACEHOLDERS = [
-  'Ask Oracle anything — GST, cash flow, compliance, strategy…',
+  'Ask VEYRO AI anything — GST, cash flow, compliance, strategy…',
   'GST return kaise file karu?',
   'Meri cash flow problem hai…',
   'How do I calculate ITC?',
@@ -112,7 +112,7 @@ export function OracleInputBar({
           disabled={disabled}
           rows={1}
           placeholder={currentPlaceholder}
-          aria-label="Ask Oracle"
+          aria-label="Ask VEYRO AI"
           className="flex-1 resize-none border-0 bg-transparent px-2 py-2.5 text-[14px] text-white placeholder:text-white/40 focus:outline-none disabled:cursor-not-allowed custom-scrollbar"
           style={{ fontFamily: 'var(--font-body, inherit)' }}
         />

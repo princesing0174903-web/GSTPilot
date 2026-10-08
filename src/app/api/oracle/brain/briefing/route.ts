@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Daily Briefing API
+// VEYRO AI™ — Daily Briefing API
 // GET /api/oracle/brain/briefing?orgId=xxx
 //
 // Generates a structured daily briefing for the business by:
@@ -502,7 +502,7 @@ export async function GET(request: NextRequest) {
     })),
   });
 
-  const systemPrompt = `You are Oracle, the AI CFO of GSTPilot. Generate a structured daily briefing for this business.
+  const systemPrompt = `You are Oracle, the AI CFO of VEYRO. Generate a structured daily briefing for this business.
 
 Output ONLY valid JSON (no markdown fences, no prose) with this EXACT shape:
 {

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Initiate Payment API
+// VEYRO Billing™ — Initiate Payment API
 // POST /api/billing/payment
 //   Body: InitiatePaymentInput
 // ═══════════════════════════════════════════════════════════════════════════════

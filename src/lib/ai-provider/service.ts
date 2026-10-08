@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — AI Memory Firestore Service (CLIENT-SAFE)
+// VEYRO AI Oracle™ & AI CFO™ — AI Memory Firestore Service (CLIENT-SAFE)
 //
 // The client-safe service layer for the `ai_memory` Firestore collection.
 // Mirrors the banking-provider/gstn-provider service pattern:

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useClients() Hook  (Prisma-backed tenant-scoped clients)
+// VEYRO — useClients() Hook  (Prisma-backed tenant-scoped clients)
 //
 // ROOT-CAUSE FIX for the "empty dropdown" production blocker.
 //

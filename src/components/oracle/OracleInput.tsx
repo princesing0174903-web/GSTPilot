@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle — Input Box (Executive Command Center redesign)
+// VEYRO AI — Input Box (Executive Command Center redesign)
 //
 // Premium capsule input with:
 //   • Specific placeholder ("Ask about cash flow, GST filings, ITC, vendor fraud…")
@@ -212,7 +212,7 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
               disabled={isStreaming}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-amber-500/10 hover:text-amber-300 disabled:opacity-40 disabled:hover:bg-transparent"
               aria-label="Insert chart prompt"
-              title="Ask Oracle for a chart"
+              title="Ask VEYRO AI for a chart"
             >
               <BarChart3 className="h-4 w-4" />
             </button>
@@ -232,7 +232,7 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
               disabled={isStreaming}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/55 transition-colors hover:bg-amber-500/10 hover:text-amber-300 disabled:opacity-40 disabled:hover:bg-transparent"
               aria-label="Insert agent prompt"
-              title="Ask Oracle to run an agent"
+              title="Ask VEYRO AI to run an agent"
             >
               <RefreshCw className="h-4 w-4" />
             </button>

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Engine — Barrel Export
+// VEYRO Banking Engine — Barrel Export
 //
 // Pure, client-safe banking engines:
 //   • categorize.ts — Transaction Categorization Engine (12 categories)

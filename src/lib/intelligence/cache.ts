@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Intelligence Cache — Performance™ Subsystem
+// VEYRO Intelligence Cache — Performance™ Subsystem
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // In-memory TTL cache for expensive aggregation queries.

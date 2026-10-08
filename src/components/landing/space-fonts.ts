@@ -2,7 +2,7 @@ import { Instrument_Serif, Barlow } from "next/font/google";
 
 /**
  * Space-landing fonts — loaded independently of the root layout so the
- * GSTPilot SaaS app keeps its Inter / JetBrains Mono fonts untouched.
+ * VEYRO SaaS app keeps its Inter / JetBrains Mono fonts untouched.
  *
  * These CSS variables (--font-space-heading / --font-space-body) are scoped
  * to the cinematic landing page only and never leak into the dashboard.

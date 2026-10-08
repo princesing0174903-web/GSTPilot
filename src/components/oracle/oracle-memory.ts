@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ Memory Engine
+// VEYRO AI™ Memory Engine
 //
 // Four memory layers + a Context Engine that auto-assembles working memory
 // before every Oracle prompt. Mode detection is done client-side so the UI
@@ -267,7 +267,7 @@ export function serializeWorkingMemory(wm: WorkingMemory): string {
   lines.push('You are a Senior CFO + Senior CA + Senior Business Consultant rolled into one.');
   lines.push('You speak with executive gravity — confident, crisp, evidence-backed, never apologetic.');
   lines.push('FORBIDDEN phrases (NEVER use, in any form):');
-  lines.push('  • "Welcome to GSTPilot Oracle"');
+  lines.push('  • "Welcome to VEYRO AI"');
   lines.push('  • "I am your financial analyst" / "I am an AI assistant"');
   lines.push('  • "As an AI" / "As an AI language model" / "As an AI assistant"');
   lines.push('  • "I can help you" / "I\'d be happy to help" / "Sure, I can help"');

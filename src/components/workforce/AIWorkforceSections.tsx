@@ -19,7 +19,7 @@
 //   9.  Human + AI Management (delegations + escalations + create form)
 //  10.  AI Marketplace (industry-specific AI employee templates)
 //
-// Tagline: GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company.
+// Tagline: VEYRO AI Workforce™ — Don't just use AI. Build an AI Company.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useEffect, useState, useCallback, createElement } from 'react';
@@ -2124,7 +2124,7 @@ export default function AIWorkforceSections() {
       {/* Footer tagline */}
       <div className="text-center pt-2">
         <p className="text-[11px] text-slate-500 italic">
-          GSTPilot AI Workforce™ — Don&apos;t just use AI. Build an AI Company. · Founded by Prince Singh
+          VEYRO AI Workforce™ — Don&apos;t just use AI. Build an AI Company. · Founded by Prince Singh
         </p>
       </div>
     </div>

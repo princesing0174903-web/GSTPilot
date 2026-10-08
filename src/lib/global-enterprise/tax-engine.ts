@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO™ — Global Enterprise Operating System™
 // Global Tax Engine™ — Country-specific taxation (GST/VAT/SalesTax/Corporate/
 // Payroll/Customs/ImportDuty/Withholding/DigitalService). Oracle auto-applies
 // correct rule based on entity country.

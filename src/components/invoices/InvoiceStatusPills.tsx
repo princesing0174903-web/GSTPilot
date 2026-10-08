@@ -16,7 +16,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Invoice Status Pills (Premium Edition)
+// VEYRO — Invoice Status Pills (Premium Edition)
 //
 // Beautiful color-coded status badges with icon + dot + subtle animation.
 // Each status maps to a semantic group used by the filter bar:

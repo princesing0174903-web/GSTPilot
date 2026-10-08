@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — WhatsApp Webhook Endpoint
+// VEYRO AI CFO™ — WhatsApp Webhook Endpoint
 //
 // GET  /api/webhooks/whatsapp?orgId=X   — Meta Cloud API verify hub challenge
 // POST /api/webhooks/whatsapp?orgId=X   — receive delivery + inbound webhooks

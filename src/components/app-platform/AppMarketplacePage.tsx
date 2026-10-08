@@ -1,7 +1,7 @@
 'use client'
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — Ecosystem Platform
+// VEYRO Global AI App Marketplace™ — Ecosystem Platform
 // Phase 10 — AppMarketplacePage.tsx (9 tabs)
 // Founded, developed and owned by Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -226,7 +226,7 @@ export default function AppMarketplacePage() {
         </Tabs>
 
         <footer className="mt-12 border-t border-border pt-6 text-center text-xs text-muted-foreground">
-          <p>GSTPilot Global AI App Marketplace™ — 37 apps · 12 AI Employees™ · Extension SDK v3.2.0 · Oracle AI Builder™ · Developer Revenue Share 70%</p>
+          <p>VEYRO Global AI App Marketplace™ — 37 apps · 12 AI Employees™ · Extension SDK v3.2.0 · VEYRO AI Builder™ · Developer Revenue Share 70%</p>
           <p className="mt-1">Founded, developed and owned by Prince Singh.</p>
         </footer>
       </div>
@@ -1149,7 +1149,7 @@ function DeveloperPortalTab() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="flex items-center gap-2 text-base font-semibold"><Code2 className="h-4 w-4 text-emerald-400" /> Developer Portal™</h2>
-              <p className="text-xs text-muted-foreground">Build, publish, and monetize your apps on GSTPilot</p>
+              <p className="text-xs text-muted-foreground">Build, publish, and monetize your apps on VEYRO</p>
             </div>
             <Select value={selectedDev ?? ''} onValueChange={setSelectedDev}>
               <SelectTrigger className="h-9 w-64 text-xs"><SelectValue placeholder="Select developer" /></SelectTrigger>

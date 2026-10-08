@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Invoices Collector
+// VEYRO AI Intelligence Engine — Invoices Collector
 //
 // Reads the firm's real invoice / purchase-bill / expense / payment data from
 // Prisma and computes aggregate receivables & payables totals that downstream

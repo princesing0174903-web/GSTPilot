@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — RequirePermission Guard Component (PART 4)
+// VEYRO — RequirePermission Guard Component (PART 4)
 //
 // A reusable wrapper that hides its children if the current user lacks the
 // required permission(s). Used to gate UI sections for Create / Edit /

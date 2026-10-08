@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Workflow Engine: Core Types
+// VEYRO AI™ — Workflow Engine: Core Types
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Oracle Priority 2 — Autonomous Workflow Engine.

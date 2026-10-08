@@ -2,7 +2,7 @@
 // GET /api/oracle/briefing?userId=<firebase_uid>
 //
 // Returns the structured OracleBriefing JSON for the given user. This is the
-// HTTP surface for the Oracle Intelligence Engine — the engine itself lives
+// HTTP surface for the VEYRO AI Intelligence Engine — the engine itself lives
 // in `@/lib/oracle/oracle-engine.ts` and exposes ONE function:
 // `generateOracleBriefing(userId)`.
 //

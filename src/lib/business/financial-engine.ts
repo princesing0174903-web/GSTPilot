@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Financial Engine (helper calculators for the Snapshot)
+// VEYRO Infinity™ — Financial Engine (helper calculators for the Snapshot)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // This file exposes the small pure-function calculators that the canonical

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Smart Reconciliation Engine (Phase Delta · 4)
+// VEYRO — Smart Reconciliation Engine (Phase Delta · 4)
 // AI-assisted matching of invoices ↔ bank transactions ↔ payments ↔ credit notes.
 // Confidence-scored auto-approval. Detects duplicates, missing invoices, tax &
 // amount mismatches, late payments.

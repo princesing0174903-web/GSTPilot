@@ -564,7 +564,7 @@ export default function FinancialDataCloud() {
         <div className="mt-6 flex items-center justify-center gap-2 text-center">
           <Database className="h-3.5 w-3.5 text-white/30" />
           <p className="text-[11px] text-white/40">
-            One unified financial data layer. Every system. Every developer. — GSTPilot Infinity™
+            One unified financial data layer. Every system. Every developer. — VEYRO™
           </p>
         </div>
       </div>

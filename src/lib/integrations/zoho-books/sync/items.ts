@@ -1,15 +1,15 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Items → ZohoItem
+// VEYRO — Zoho Books Sync · Items → ZohoItem
 //
 // Syncs Zoho Books items (product/service catalog from /items) into the
 // `ZohoItem` Prisma model.
 //
-// GSTPilot has no standalone Item model (InvoiceItem is a line-item on invoices,
+// VEYRO has no standalone Item model (InvoiceItem is a line-item on invoices,
 // not a catalog entry). Zoho Books exposes /items (products & services sold),
-// so we store them in a dedicated ZohoItem table — normalized GSTPilot records,
+// so we store them in a dedicated ZohoItem table — normalized VEYRO records,
 // NOT raw Zoho JSON.
 //
-// Oracle Memory Engine can read db.zohoItem.findMany to answer catalog questions
+// VEYRO AI Memory Engine can read db.zohoItem.findMany to answer catalog questions
 // ("What's my product list?", "Which items have GST?", "Show low-stock items")
 // with zero Oracle code changes.
 //

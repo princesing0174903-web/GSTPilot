@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Customers View (CRM)
+// VEYRO™ — Customers View (CRM)
 //
 // Real-time customer list backed by Firestore onSnapshot:
 //   organizations/GSTpilot_SAAS/customers

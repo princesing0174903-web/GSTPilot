@@ -118,7 +118,7 @@ interface NavItem {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * 5 GROUPS · GSTPilot Infinity™ — The Financial Brain of India
+ * 5 GROUPS · VEYRO™ — The AI Operating System for Business
  * Command · Intelligence · Finance · Business · Platform
  * ────────────────────────────────────────────────────────────────────────── */
 
@@ -146,7 +146,7 @@ const autonomousItems: NavItem[] = [
 // INTELLIGENCE — AI Executive + AI Workforce merged
 const intelligenceItems: NavItem[] = [
   { title: 'AI CEO', view: 'firm-command-center', icon: Crown, subtitle: 'Autonomous Partner', isNew: true },
-  { title: 'Oracle AI', view: 'oracle-intelligence', icon: Sparkles, subtitle: 'Enterprise AI Workspace', isNew: true },
+  { title: 'VEYRO AI', view: 'oracle-intelligence', icon: Sparkles, subtitle: 'Enterprise AI Workspace', isNew: true },
   { title: 'Operating Room', view: 'ai-operating-room', icon: Gauge, subtitle: '6 Live Scores', isNew: true },
   { title: 'Predictions', view: 'ai-predictions', icon: TrendingUp, subtitle: '6 Prediction Models', isNew: true },
   { title: 'Priority Engine', view: 'ai-priority-engine', icon: Target, subtitle: 'Daily Priorities', isNew: true },
@@ -335,7 +335,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-base font-bold tracking-tight text-foreground">
-                GSTPilot
+                VEYRO
               </span>
               <span className="inline-flex items-center rounded-md accent-gradient-soft px-1.5 py-0.5 leading-none">
                 <span className="text-[11px] font-bold uppercase tracking-wider accent-text">
@@ -416,7 +416,7 @@ function SidebarNav({ onSearchOpen }: AppSidebarProps) {
         </DropdownMenu>
         <div className="flex items-center justify-between mt-2 px-1 hidden group-data-[collapsible=icon]:hidden">
           <span className="text-[11px] font-medium text-muted-foreground/40">
-            GSTPilot Infinity™
+            VEYRO™
           </span>
           {unreadCount > 0 && (
             <div className="flex items-center gap-1">

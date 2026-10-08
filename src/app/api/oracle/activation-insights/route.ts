@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Activation Insights API
+// VEYRO AI™ — Activation Insights API
 // GET /api/oracle/activation-insights?organizationId=...
 //
 // NOTE on path: This route lives at `/api/oracle/activation-insights` rather
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     // ── 2. Authenticate ──
     // Local workspace org IDs (guest/demo users) skip Firebase auth — they have
     // no real Firebase session or Firestore membership record. We generate
-    // insights from the BusinessSnapshot directly so the Oracle panel still
+    // insights from the BusinessSnapshot directly so VEYRO AI panel still
     // renders without throwing a 401 every poll cycle (which polluted dev.log
     // and caused the hook to silently no-op).
     const isLocalOrg = organizationId.startsWith('local-');

@@ -1,18 +1,18 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — InvoiceOraclePanel
+// VEYRO™ — InvoiceOraclePanel
 //
-// A premium right-side Oracle AI panel that lights up when an invoice is
+// A premium right-side VEYRO AI panel that lights up when an invoice is
 // selected. Mirrors the Returns module's Oracle panel design language:
-//   • Amber/gold accent (Sparkles icon, "Oracle AI" branding)
+//   • Amber/gold accent (Sparkles icon, "VEYRO AI" branding)
 //   • Emerald success / red danger / cyan info / amber warning tones
 //   • Framer Motion staggered entrance per card
 //   • Skeleton while insights are loading
 //   • Friendly error card with retry when insights fail to load
 //
 // Sections (top to bottom):
-//   1. Header — Oracle AI branding + Live insights (green pulsing dot)
+//   1. Header — VEYRO AI branding + Live insights (green pulsing dot)
 //   2. Payment Prediction Card — likely pay date, confidence %, reasoning
 //   3. Late Payment Risk Card — level, score gauge, factors
 //   4. Anomalies List — icon + message, empty state
@@ -20,7 +20,7 @@
 //   6. GST Mismatch Warning — red warning / green verified
 //   7. Collection Suggestion — action card with channel icon
 //   8. One-Click Fixes — emerald buttons per fix
-//   9. Footer — "Powered by Oracle AI™ — deterministic heuristics, not legal advice."
+//   9. Footer — "Powered by VEYRO AI™ — deterministic heuristics, not legal advice."
 //
 // Spec compliance: Task 3-c (Oracle Panel + Details Sheet).
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -665,7 +665,7 @@ function Footer() {
   return (
     <div className="px-1 pb-1 pt-2 text-center">
       <p className="text-[11px] leading-relaxed text-zinc-600">
-        Powered by <span className="font-semibold text-amber-300/80">Oracle AI™</span> —
+        Powered by <span className="font-semibold text-amber-300/80">VEYRO AI™</span> —
         deterministic heuristics, not legal advice.
       </p>
     </div>
@@ -698,7 +698,7 @@ export function InvoiceOraclePanel({
             Select an invoice
           </p>
           <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-            Oracle AI will analyse the selected invoice and surface payment
+            VEYRO AI will analyse the selected invoice and surface payment
             predictions, risk signals, and one-click fixes.
           </p>
         </div>
@@ -855,7 +855,7 @@ function OracleHeader() {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-bold text-white">Oracle AI</h3>
+          <h3 className="text-sm font-bold text-white">VEYRO AI</h3>
           <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-300">
             Live
           </span>

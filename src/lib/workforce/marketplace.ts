@@ -1,17 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GSTPILOT AI WORKFORCE™ — AI MARKETPLACE™
 //
-// Industry-specific AI Employees that plug into the existing GSTPilot platform.
+// Industry-specific AI Employees that plug into the existing VEYRO platform.
 // One installable template per MarketplaceIndustry — Manufacturing gets Forge,
 // Healthcare gets Medicus, Retail gets Retail, and so on. Each template carries
 // a capability map, a target Department, an estimated ROI, and a public rating
-// derived from real install telemetry across the GSTPilot customer base.
+// derived from real install telemetry across the VEYRO customer base.
 //
 // These are installable TEMPLATES, not active employees. Installing one spawns
 // an AIEmployee instance into the org chart under its declared Department and
 // connects the relevant GST / compliance / operations data sources.
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { MarketplaceEmployee, MarketplaceIndustry, Department } from './types';
@@ -30,7 +30,7 @@ export const MARKETPLACE_EMPLOYEES: MarketplaceEmployee[] = [
     industry: 'manufacturing',
     title: 'Manufacturing Operations AI',
     description:
-      'Forge runs the shop floor from a GSTPilot lens — production scheduling, BOM costing, and GST on manufactured goods (including MRP-based and transactional valuation). It auto-reconciles raw-material input credits against finished-goods output tax and flags inverted-duty structures before they erode margin.',
+      'Forge runs the shop floor from a VEYRO lens — production scheduling, BOM costing, and GST on manufactured goods (including MRP-based and transactional valuation). It auto-reconciles raw-material input credits against finished-goods output tax and flags inverted-duty structures before they erode margin.',
     capabilities: [
       'Production scheduling',
       'BOM management',

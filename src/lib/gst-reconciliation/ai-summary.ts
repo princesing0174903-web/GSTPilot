@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — AI Reconciliation Summary (CFO Report)
+// VEYRO — AI Reconciliation Summary (CFO Report)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // After every reconciliation, Oracle generates a CFO-grade report:

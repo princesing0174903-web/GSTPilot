@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle AI — Production Data Layer + Business Context Service
+// VEYRO AI AI — Production Data Layer + Business Context Service
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Upgrade Phase 1 — STEP 1 (Production Data Layer) + STEP 3 (Business Context)
@@ -1439,7 +1439,7 @@ export function buildBusinessContext(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LLM PROMPT FORMATTER
-// Produces a concise (<2000 token) text block for injection into the Oracle
+// Produces a concise (<2000 token) text block for injection into VEYRO AI
 // system prompt. Clearly states what data IS available (with real numbers) and
 // what is MISSING (so the LLM knows not to invent answers).
 // ═══════════════════════════════════════════════════════════════════════════

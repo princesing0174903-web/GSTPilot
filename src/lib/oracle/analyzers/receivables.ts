@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Receivables Analyzer
+// VEYRO AI Intelligence Engine — Receivables Analyzer
 //
 // Inspects sales invoices to detect overdue receivables, aging buckets, and
 // the top overdue customers who account for most of the at-risk balance.

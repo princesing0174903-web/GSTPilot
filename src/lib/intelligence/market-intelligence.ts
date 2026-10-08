@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Market Intelligence™
+// VEYRO Global Market Intelligence™
 // Phase 7 — Subsystem 3
 // ═══════════════════════════════════════════════════════════════════════════════
 //
@@ -260,7 +260,7 @@ async function detectInternalSignals(): Promise<MarketSignal[]> {
         impactScore: Math.min(60, Math.round(avgTrend * 2)),
         affectedIndustries: [industry as IndustryKey],
         affectedRegions: ['all'],
-        source: 'GSTPilot Intelligence Pool',
+        source: 'VEYRO Intelligence Pool',
         effectiveDate: today,
         createdAt: new Date().toISOString(),
       })
@@ -274,7 +274,7 @@ async function detectInternalSignals(): Promise<MarketSignal[]> {
         impactScore: Math.max(-60, Math.round(avgTrend * 2)),
         affectedIndustries: [industry as IndustryKey],
         affectedRegions: ['all'],
-        source: 'GSTPilot Intelligence Pool',
+        source: 'VEYRO Intelligence Pool',
         effectiveDate: today,
         createdAt: new Date().toISOString(),
       })

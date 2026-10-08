@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GitHub Session Bridge (server-only)
+// VEYRO™ — GitHub Session Bridge (server-only)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Bridges GitHub OAuth identity into the existing GSTPilot canonical session
+// Bridges GitHub OAuth identity into the existing VEYRO canonical session
 // architecture (src/lib/auth/session.ts). Does NOT create a competing session
 // system — instead, it issues a JWT cookie that `requireAuth` recognizes as
 // an alternative to the Firebase ID token when the Admin SDK is unavailable.
@@ -176,7 +176,7 @@ function avatarKeyForGithubUser(githubId: number): string {
 }
 
 /**
- * Resolve a GitHub user into a GSTPilot Prisma User, following the safe
+ * Resolve a GitHub user into a VEYRO Prisma User, following the safe
  * account-linking rules from STEP 7.
  *
  * Throws on database failure — the caller must catch + redirect to login

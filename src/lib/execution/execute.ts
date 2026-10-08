@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Execution Engine™ — MODULE 3: Autonomous Execution Engine™
+// VEYRO Execution Engine™ — MODULE 3: Autonomous Execution Engine™
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // ═══════════════════════════════════════════════════════════════════════════════
 // Receives ActionPlans from decide.ts and runs them through specialised agents:

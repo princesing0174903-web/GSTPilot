@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 // GET /api/invoices/[id]/insights
 //
-// Returns deterministic, heuristic "Oracle AI" insights for a single invoice.
+// Returns deterministic, heuristic "VEYRO AI" insights for a single invoice.
 // NO external LLM call — every value is computed from the invoice + its line
 // items + a small window of recent same-tenant invoices (for anomaly + dup
 // detection). The response shape is intentionally stable so the frontend can

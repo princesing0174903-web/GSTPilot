@@ -1,10 +1,10 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Structured Query Card
+// VEYRO AI™ — Structured Query Card
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Renders a StructuredQueryResult as a premium data card INSIDE the Oracle chat
+// Renders a StructuredQueryResult as a premium data card INSIDE VEYRO AI chat
 // (above the conversational text answer). Four render modes, picked by the
 // `format` field:
 //
@@ -13,7 +13,7 @@
 //   • 'number' → Stat tiles (cash position, GST, profit, health)
 //   • 'chart'  → 6-month mini bar chart + trend direction + stats
 //
-// Styling is hard-coded to the Oracle chat's dark palette (#0c0c0c card, white
+// Styling is hard-coded to VEYRO AI chat's dark palette (#0c0c0c card, white
 // text, emerald accents) — independent of the app theme — so the card always
 // looks right inside the chat surface.
 // ═══════════════════════════════════════════════════════════════════════════════

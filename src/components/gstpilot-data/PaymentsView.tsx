@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Payments View
+// VEYRO™ — Payments View
 //
 // Real-time payments ledger backed by Firestore onSnapshot:
 //   organizations/GSTpilot_SAAS/payments

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — ViewErrorBoundary
+// VEYRO — ViewErrorBoundary
 //
 // Module-level React error boundary that isolates crashes to a SINGLE view.
 // If CRM throws during render, the user can still navigate to Invoices,

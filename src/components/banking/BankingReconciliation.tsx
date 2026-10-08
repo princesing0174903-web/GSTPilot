@@ -37,7 +37,7 @@ import type {
 } from '@/lib/banking-prisma/types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Reconciliation Panel (TASK 12)
+// VEYRO Banking Module™ — Reconciliation Panel (TASK 12)
 //
 // The complete bank reconciliation workflow:
 //   Invoice → Payment → Bank Credit → Reconciled

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Intelligence Layer
+// VEYRO AI™ — Intelligence Layer
 //
 // Three roles: CFO · Chartered Accountant (CA) · Operations Manager
 // Six functions:
@@ -251,7 +251,7 @@ const FN_KEYWORDS: Record<Exclude<OracleFunction, 'answer'>, string[]> = {
 
 /**
  * Detect the most appropriate role for the message.
- * Falls back to 'ca' (most GSTPilot questions are GST/compliance) when no signal.
+ * Falls back to 'ca' (most VEYRO questions are GST/compliance) when no signal.
  */
 export function detectRole(message: string): OracleRole {
   const lower = message.toLowerCase()
@@ -265,7 +265,7 @@ export function detectRole(message: string): OracleRole {
   if (cfo >= ca && cfo >= ops && cfo > 0) return 'cfo'
   if (ops >= ca && ops > 0) return 'ops'
   if (ca > 0) return 'ca'
-  // Default — GSTPilot's primary domain is GST/CA work
+  // Default — VEYRO's primary domain is GST/CA work
   return 'ca'
 }
 
@@ -518,7 +518,7 @@ export function hasAnyData(snap: OracleDataSnapshot): boolean {
     snap.reconciliations.length > 0
   )
   // Note: clients alone don't count as "business data" — a client with no
-  // invoices/payments/returns is just a registry entry. The Oracle should
+  // invoices/payments/returns is just a registry entry. VEYRO AI should
   // still honestly say "no invoices recorded" even if clients exist.
 }
 
@@ -723,7 +723,7 @@ function buildDataContext(snap: OracleDataSnapshot, fn: OracleFunction): string 
 
 // ─── Role-specific persona blocks ─────────────────────────────────────────────
 
-const CFO_PERSONA = `You are GSTPilot Oracle™ operating in **CFO Mode**.
+const CFO_PERSONA = `You are VEYRO AI™ operating in **CFO Mode**.
 
 You are a Chief Financial Officer with 20+ years of experience scaling Indian companies. You think in numbers, ratios, and runways. Your vocabulary: cash flow, working capital, burn rate, unit economics, EBITDA, gross margin, net margin, CAGR, WCAP days, DSO, DPO, inventory turns. You always tie advice back to money in the bank and money owed.
 
@@ -734,7 +734,7 @@ Your lens:
 - Working capital optimization > revenue growth (for SMEs).
 - You speak to founders, CEOs, and boards — concise, confident, no hedging.`
 
-const CA_PERSONA = `You are GSTPilot Oracle™ operating in **CA Mode**.
+const CA_PERSONA = `You are VEYRO AI™ operating in **CA Mode**.
 
 You are a senior Chartered Accountant with deep Indian tax and compliance expertise. You have filed thousands of GSTR-1/3B/9 returns, handled ITC reconciliation, responded to SCN notices, and guided clients through tax audits. Your vocabulary: GSTIN, GSTR-1/3B/2B/9, ITC, reverse charge, place of supply, Section 17(5), Rule 36(4), e-invoicing, IRN, QRMP, TDS 26Q/24Q/27Q, 44AB tax audit, ROC MGT-7/AOC-4, advance tax.
 
@@ -745,7 +745,7 @@ Your lens:
 - When citing law, give the section + a one-line plain-English explanation.
 - You speak to business owners and CA firm staff — precise, authoritative, practical.`
 
-const OPS_PERSONA = `You are GSTPilot Oracle™ operating in **Operations Manager Mode**.
+const OPS_PERSONA = `You are VEYRO AI™ operating in **Operations Manager Mode**.
 
 You are a senior Operations Manager running the back-office of an Indian CA firm or finance team. You live in deadlines, task lists, follow-ups, and client communications. Your vocabulary: deadline, due date, follow-up, assignment, status, pipeline, queue, priority, SLA, turnaround, owner, blocker, escalation.
 
@@ -910,7 +910,7 @@ ${dataBlock}
 
 ${fnInstr}
 
-Remember: you are GSTPilot Oracle™. You always respond. You always give all 4 sections. You never use placeholder text.`
+Remember: you are VEYRO AI™. You always respond. You always give all 4 sections. You never use placeholder text.`
 }
 
 // ─── Sources Panel™ — detect which data sources Oracle read ────────────────────

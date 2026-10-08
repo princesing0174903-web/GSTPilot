@@ -370,7 +370,7 @@ export default function GlobalIntelligenceDashboardPage() {
             <TabsTrigger value="recommendations" className="text-xs"><Lightbulb className="h-3.5 w-3.5 mr-1" />Recs</TabsTrigger>
             <TabsTrigger value="knowledge" className="text-xs"><Network className="h-3.5 w-3.5 mr-1" />Graph</TabsTrigger>
             <TabsTrigger value="feed" className="text-xs"><FileText className="h-3.5 w-3.5 mr-1" />Feed</TabsTrigger>
-            <TabsTrigger value="analyze" className="text-xs"><Brain className="h-3.5 w-3.5 mr-1" />Ask Oracle</TabsTrigger>
+            <TabsTrigger value="analyze" className="text-xs"><Brain className="h-3.5 w-3.5 mr-1" />Ask VEYRO AI</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -386,7 +386,7 @@ export default function GlobalIntelligenceDashboardPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-semibold">Oracle Intelligence Cloud™</span>
+                            <span className="text-sm font-semibold">VEYRO AI Intelligence Cloud™</span>
                             <Badge variant="outline" className="text-[10px]">{bundle.generatedAt}</Badge>
                           </div>
                           <p className="text-sm text-muted-foreground leading-relaxed">{bundle.oracleNarrative}</p>
@@ -663,12 +663,12 @@ export default function GlobalIntelligenceDashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Brain className="h-4 w-4" /> Ask Oracle
+                  <Brain className="h-4 w-4" /> Ask VEYRO AI
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <Textarea
-                  placeholder="Ask Oracle anything about your industry, benchmarks, predictions, or market signals..."
+                  placeholder="Ask VEYRO AI anything about your industry, benchmarks, predictions, or market signals..."
                   value={analyzeQuestion}
                   onChange={(e) => setAnalyzeQuestion(e.target.value)}
                   rows={3}

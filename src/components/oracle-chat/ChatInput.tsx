@@ -74,7 +74,7 @@ export function ChatInput({
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={onKeyDown}
           rows={1}
-          placeholder="Ask Oracle anything about your business…"
+          placeholder="Ask VEYRO AI anything about your business…"
           disabled={streaming}
           className="flex-1 resize-none bg-transparent px-3 py-2 text-[15px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none disabled:opacity-50"
         />

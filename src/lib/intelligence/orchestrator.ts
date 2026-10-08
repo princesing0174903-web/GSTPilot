@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Data Intelligence Cloud™ — Orchestrator
+// VEYRO Global Data Intelligence Cloud™ — Orchestrator
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Single entry point for the Executive API: /api/intelligence/dashboard
@@ -217,7 +217,7 @@ export interface SeedGlobalIntelligenceCloudResult {
  *   3. Compute the knowledge graph report.
  *   4. Generate today's insight feed.
  *   5. Generate recommendations + count active predictions.
- *   6. Build the Oracle narrative + return the summary.
+ *   6. Build VEYRO AI narrative + return the summary.
  */
 export async function seedGlobalIntelligenceCloud(): Promise<SeedGlobalIntelligenceCloudResult> {
   const seededAt = currentDate()

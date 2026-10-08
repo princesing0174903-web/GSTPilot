@@ -1,9 +1,9 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle — Preview Route (/oracle-preview)
+// VEYRO AI — Preview Route (/oracle-preview)
 // ═══════════════════════════════════════════════════════════════════════════════
-// DEVELOPMENT-ONLY lightweight entry that renders the Oracle AI workspace
+// DEVELOPMENT-ONLY lightweight entry that renders the VEYRO AI workspace
 // directly against a local demo organization, WITHOUT requiring sign-in or
 // compiling the heavy DashboardShell + Firebase graph.
 //
@@ -27,7 +27,7 @@ const OraclePreviewApp = dynamic(
             </svg>
           </div>
           <span className="text-sm font-medium text-muted-foreground">
-            Loading GSTPilot Oracle…
+            Loading VEYRO AI…
           </span>
         </div>
       </div>

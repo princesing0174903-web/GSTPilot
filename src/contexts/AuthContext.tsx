@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Auth Context (PART 1, 7, 8)
+// VEYRO — Auth Context (PART 1, 7, 8)
 //
 // Responsibilities:
 //   • Listen to Firebase Auth state (the single source of truth for identity)

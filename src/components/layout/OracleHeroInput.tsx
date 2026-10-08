@@ -1,9 +1,9 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — V17 Hero Search Input
+// VEYRO AI™ — V17 Hero Search Input
 //
-// "The Oracle input becomes the hero of the dashboard."
+// "VEYRO AI input becomes the hero of the dashboard."
 // Placed directly below: Good Morning, Prince 👋
 //
 // Spec:
@@ -16,12 +16,12 @@
 //   Shadow:    0 20px 60px rgba(0,0,0,0.4)
 //
 // Right side:  ⌘K  +  Arrow submit button
-// Placeholder: "Ask GSTPilot Oracle…"
+// Placeholder: "Ask VEYRO AI…"
 // Subtitle:    "Run your business, ask questions, or execute actions instantly."
 //
 // Behavior: Perplexity / ChatGPT / Cursor-grade.
 //   • Enter  → dispatch 'gstpilot-ask' (opens the full Oracle palette + asks)
-//   • ⌘K     → open the Oracle palette directly (no question)
+//   • ⌘K     → open VEYRO AI palette directly (no question)
 //   • Clicking a suggested prompt → fill + submit immediately
 //   • "/" focuses when not already in an input
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -51,7 +51,7 @@ export function OracleHeroInput() {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        // Open palette with empty question — the GSTPilotIntelligence component
+        // Open palette with empty question — the VEYROIntelligence component
         // also listens for ⌘K, so this is a defensive double-trigger.
         window.dispatchEvent(new CustomEvent('gstpilot-ask', { detail: '' }));
       }
@@ -126,8 +126,8 @@ export function OracleHeroInput() {
           }}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder="Ask GSTPilot Oracle…"
-          aria-label="Ask GSTPilot Oracle"
+          placeholder="Ask VEYRO AI…"
+          aria-label="Ask VEYRO AI"
           className="min-w-0 flex-1 bg-transparent text-base font-medium text-foreground outline-none placeholder:text-muted-foreground/60 md:text-lg"
         />
 
@@ -144,7 +144,7 @@ export function OracleHeroInput() {
           <button
             type="submit"
             disabled={!hasText}
-            aria-label="Ask Oracle"
+            aria-label="Ask VEYRO AI"
             className={cn(
               'flex h-10 w-10 items-center justify-center rounded-2xl transition-all duration-200',
               hasText

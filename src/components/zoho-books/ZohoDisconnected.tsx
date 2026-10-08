@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — ZohoDisconnected
+// VEYRO — ZohoDisconnected
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Premium centered connection screen shown when `status.connected === false`.
@@ -46,7 +46,7 @@ const FEATURES: FeatureBullet[] = [
   {
     icon: ArrowLeftRight,
     title: 'Two-way sync',
-    body: 'Push and pull invoices, customers, bills, and payments without leaving GSTPilot.',
+    body: 'Push and pull invoices, customers, bills, and payments without leaving VEYRO.',
   },
   {
     icon: ReceiptText,
@@ -60,7 +60,7 @@ const FEATURES: FeatureBullet[] = [
   },
   {
     icon: Sparkles,
-    title: 'Oracle AI insights',
+    title: 'VEYRO AI insights',
     body: 'Predictive collection reminders, cash-runway forecasts, and anomaly alerts.',
   },
 ];
@@ -187,7 +187,7 @@ export function ZohoDisconnected({
             <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
               {requiresReconnect
                 ? 'Your previous Zoho Books connection can no longer be used. Reconnect to resume syncing your financial data.'
-                : 'Sync your customers, invoices, bills, payments, and taxes into GSTPilot&rsquo;s unified financial brain.'}
+                : 'Sync your customers, invoices, bills, payments, and taxes into VEYRO&rsquo;s unified financial brain.'}
             </p>
           </div>
 
@@ -327,7 +327,7 @@ export function ZohoDisconnected({
           <div className="mt-8 flex items-center justify-center gap-2 rounded-lg border border-white/[0.04] bg-white/[0.01] py-3 text-xs text-muted-foreground">
             <Lock className="h-3.5 w-3.5 text-[#60A5FA]" />
             <span>
-              Your data is encrypted end-to-end. GSTPilot never stores your Zoho
+              Your data is encrypted end-to-end. VEYRO never stores your Zoho
               password.
             </span>
           </div>

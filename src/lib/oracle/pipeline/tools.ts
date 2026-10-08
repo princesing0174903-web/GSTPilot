@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Tool Registry (REAL DATA ONLY)
+// VEYRO AI™ — Tool Registry (REAL DATA ONLY)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Every tool reads REAL data from Prisma (via the canonical Business Snapshot

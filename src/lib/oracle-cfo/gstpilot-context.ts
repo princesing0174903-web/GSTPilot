@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — GSTPilot Live Data Context Block
+// VEYRO AI CFO™ — VEYRO Live Data Context Block
 //
 // Server-side loader that reads the REAL Firestore collections at:
 //   organizations/{organizationId}/{customers,products,invoices,vendors,expenses,payments}
 //
-// Produces a formatted context block injected into the Oracle system prompt so
+// Produces a formatted context block injected into VEYRO AI system prompt so
 // that when the user asks "Show customers / invoices / products", Oracle replies
 // with the ACTUAL live data — never fabricated, never mock.
 //
@@ -79,7 +79,7 @@ export interface GSTpilotSnapshot {
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 /**
- * Load a one-shot snapshot of all three GSTPilot collections from Firestore.
+ * Load a one-shot snapshot of all three VEYRO collections from Firestore.
  * Safe to call server-side (API route). Returns an empty (loaded:false) snapshot
  * if Firestore is unreachable or permission is denied (preview mode).
  *
@@ -92,7 +92,7 @@ export interface GSTpilotSnapshot {
  * (`invoiceStats.totalInvoiced/totalPaid/totalOutstanding/totalTaxCollected`,
  * `totalCustomerOutstanding`, `totalPayable`, `customerCount`, `vendorCount`,
  * `paymentStats.totalReceived/totalPaidOut`) are OVERRIDDEN with snapshot
- * values so the Oracle LLM cites the exact same numbers as the Home Dashboard
+ * values so VEYRO AI LLM cites the exact same numbers as the Home Dashboard
  * / Oracle chat / AI CFO. The Firestore reads are kept because they expose
  * record-level detail (individual customer / vendor / product / invoice /
  * expense / payment names) that the snapshot doesn't surface.
@@ -285,7 +285,7 @@ export async function loadGSTpilotSnapshot(
 // ─── Formatter ────────────────────────────────────────────────────────────────
 
 /**
- * Format the GSTPilot snapshot into a markdown context block for the Oracle
+ * Format the VEYRO snapshot into a markdown context block for VEYRO AI
  * system prompt. Includes:
  *   • Aggregate KPIs (counts, revenue, outstanding, tax)
  *   • Top customers by outstanding balance
@@ -449,7 +449,7 @@ When the user asks to "show customers / invoices / products / vendors / expenses
 
 /**
  * Convenience: load + format in one call. Fail-safe (returns a graceful
- * "unavailable" block on any error so the Oracle prompt still builds).
+ * "unavailable" block on any error so VEYRO AI prompt still builds).
  *
  * Pass the real `organizationId` from the request context. If null/empty, the
  * returned block reports the registry as unavailable (honest empty state).
@@ -461,8 +461,8 @@ export async function buildGSTpilotContextBlock(
     const snap = await loadGSTpilotSnapshot(organizationId);
     return formatGSTpilotContextBlock(snap);
   } catch (err) {
-    console.warn('[Oracle] GSTPilot context unavailable:', err);
+    console.warn('[Oracle] VEYRO context unavailable:', err);
     return `## GSTPILOT LIVE REGISTRY (organizations/${organizationId ?? '(no org)'})
-The live GSTPilot registry could not be loaded right now. If the user asks to "show customers / invoices / products / vendors / expenses / payments", reply that the registry is temporarily unavailable and suggest they try again in a moment. NEVER fabricate customer, product, invoice, vendor, expense, or payment records.`;
+The live VEYRO registry could not be loaded right now. If the user asks to "show customers / invoices / products / vendors / expenses / payments", reply that the registry is temporarily unavailable and suggest they try again in a moment. NEVER fabricate customer, product, invoice, vendor, expense, or payment records.`;
   }
 }

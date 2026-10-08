@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Prisma-backed Bank Reconciliation Engine (TASK 12)
+// VEYRO Banking Module™ — Prisma-backed Bank Reconciliation Engine (TASK 12)
 //
 // The persistence-aware reconciliation engine. SERVER-ONLY.
 //

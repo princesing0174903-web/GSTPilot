@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Communication Cloud™ — Template Registry
+// VEYRO Communication Cloud™ — Template Registry
 // All WhatsApp / Email / SMS templates with {{variable}} placeholders.
 // Pure TypeScript — importable from both client and server.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -112,35 +112,35 @@ export const COMMUNICATION_TEMPLATES: TemplateDef[] = [
     name: 'otp_sms',
     channel: 'sms',
     category: 'otp',
-    body: '{{otp}} is your GSTPilot verification code. Valid for 10 minutes. Do not share with anyone. — GSTPilot',
+    body: '{{otp}} is your VEYRO verification code. Valid for 10 minutes. Do not share with anyone. — VEYRO',
     variables: ['otp'],
   },
   {
     name: 'gst_filing_reminder_sms',
     channel: 'sms',
     category: 'gst_alert',
-    body: 'GSTPilot: GSTR-{{return_type}} for {{period}} due {{due_date}} ({{days_left}}d left). Reply STOP to opt out.',
+    body: 'VEYRO: GSTR-{{return_type}} for {{period}} due {{due_date}} ({{days_left}}d left). Reply STOP to opt out.',
     variables: ['return_type', 'period', 'due_date', 'days_left'],
   },
   {
     name: 'payment_reminder_sms',
     channel: 'sms',
     category: 'payment_reminder',
-    body: 'GSTPilot: Invoice {{invoice_no}} for Rs.{{amount}} due {{due_date}}. Please process payment. — {{firm_name}}',
+    body: 'VEYRO: Invoice {{invoice_no}} for Rs.{{amount}} due {{due_date}}. Please process payment. — {{firm_name}}',
     variables: ['invoice_no', 'amount', 'due_date', 'firm_name'],
   },
   {
     name: 'due_date_alert_sms',
     channel: 'sms',
     category: 'due_date',
-    body: 'GSTPilot ALERT: Invoice {{invoice_no}} (Rs.{{amount}}) is {{days_overdue}}d overdue. Immediate payment needed. — {{firm_name}}',
+    body: 'VEYRO ALERT: Invoice {{invoice_no}} (Rs.{{amount}}) is {{days_overdue}}d overdue. Immediate payment needed. — {{firm_name}}',
     variables: ['invoice_no', 'amount', 'days_overdue', 'firm_name'],
   },
   {
     name: 'collection_escalation_sms',
     channel: 'sms',
     category: 'collection',
-    body: 'GSTPilot ESCALATION: {{customer_name}} invoice {{invoice_no}} (Rs.{{amount}}) {{days_overdue}}d overdue. Manager notified. Recovery action initiated.',
+    body: 'VEYRO ESCALATION: {{customer_name}} invoice {{invoice_no}} (Rs.{{amount}}) {{days_overdue}}d overdue. Manager notified. Recovery action initiated.',
     variables: ['customer_name', 'invoice_no', 'amount', 'days_overdue'],
   },
 
@@ -208,7 +208,7 @@ export const COMMUNICATION_TEMPLATES: TemplateDef[] = [
     channel: 'email',
     category: 'report',
     subject: 'AI CFO Monthly Briefing — {{period}}',
-    body: `<p>Dear {{recipient_name}},</p><p>I've prepared your <strong>AI CFO Monthly Briefing</strong> for <strong>{{period}}</strong>.</p><p><strong>Executive Summary:</strong> {{executive_summary}}</p><p><strong>Key Metrics:</strong></p><ul><li>Revenue: ₹{{revenue}}</li><li>Net Profit: ₹{{profit}}</li><li>Cash Position: ₹{{cash}}</li><li>Health Score: {{health_score}}/100</li></ul><p><strong>Top Risks:</strong></p><ul>{{top_risks}}</ul><p><strong>Recommendations:</strong></p><ol>{{recommendations}}</ol><p>Full report: <a href="{{report_url}}">{{report_url}}</a></p><p>Best regards,<br/>GSTPilot Oracle™ — Your AI CFO</p>`,
+    body: `<p>Dear {{recipient_name}},</p><p>I've prepared your <strong>AI CFO Monthly Briefing</strong> for <strong>{{period}}</strong>.</p><p><strong>Executive Summary:</strong> {{executive_summary}}</p><p><strong>Key Metrics:</strong></p><ul><li>Revenue: ₹{{revenue}}</li><li>Net Profit: ₹{{profit}}</li><li>Cash Position: ₹{{cash}}</li><li>Health Score: {{health_score}}/100</li></ul><p><strong>Top Risks:</strong></p><ul>{{top_risks}}</ul><p><strong>Recommendations:</strong></p><ol>{{recommendations}}</ol><p>Full report: <a href="{{report_url}}">{{report_url}}</a></p><p>Best regards,<br/>VEYRO AI™ — Your AI CFO</p>`,
     variables: ['recipient_name', 'period', 'executive_summary', 'revenue', 'profit', 'cash', 'health_score', 'top_risks', 'recommendations', 'report_url'],
   },
 ];

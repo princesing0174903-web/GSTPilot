@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GLOBAL COMPLIANCE CLOUD™ (AUTONOMOUS COMPLIANCE ENGINE)
+// VEYRO™ — GLOBAL COMPLIANCE CLOUD™ (AUTONOMOUS COMPLIANCE ENGINE)
 // One unified compliance engine — every regulation, filing, risk and audit
 // flows through it. Predict. Prepare. Validate. Comply.
 // Founder & Owner: Prince Singh.

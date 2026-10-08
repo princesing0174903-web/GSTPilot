@@ -1,10 +1,10 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Executive Briefing Panel (collapsible, 8 sections)
+// VEYRO AI™ — Executive Briefing Panel (collapsible, 8 sections)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Renders a collapsible "Today's Briefing" panel at the top of the Oracle view.
+// Renders a collapsible "Today's Briefing" panel at the top of VEYRO AI view.
 // When expanded, it fetches /api/oracle/executive-briefing?orgId=X and renders
 // the 8 sections:
 //   1. Today's Financial Status  — headline + revenue/cash/receivables/GST grid
@@ -21,7 +21,7 @@
 //   - When collapsed, shows a small summary badge: "3 risks · 5 items to chase".
 //   - Loading skeleton (pulsing gray bars) while fetching.
 //   - Friendly error message + Retry button if fetch fails (401/403/500).
-//   - Never crashes the Oracle view — all errors are caught + isolated.
+//   - Never crashes VEYRO AI view — all errors are caught + isolated.
 //
 // Each item card shows: title, detail, "Why it matters", "Recommended action",
 // and an evidence badge if evidenceId is present.

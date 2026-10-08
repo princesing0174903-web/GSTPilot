@@ -8,7 +8,7 @@
 //
 // Pure server-side TypeScript. Never throws — every builder wrapped in try/catch.
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { WorkforceDataView } from './data';

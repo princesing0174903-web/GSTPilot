@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Sync Scheduler (SERVER-ONLY)
+// VEYRO Real Banking Foundation™ — Sync Scheduler (SERVER-ONLY)
 //
 // Manages banking sync jobs with five trigger types:
 //   • manual      — user clicked "Sync Now"

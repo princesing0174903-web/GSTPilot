@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Premium Markdown Renderer
+// VEYRO AI™ — Premium Markdown Renderer
 //
 // ChatGPT Enterprise + Claude level markdown rendering for Oracle responses.
 //   • Full GFM support (tables, strikethrough, task lists, autolinks)

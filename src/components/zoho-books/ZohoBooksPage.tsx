@@ -13,7 +13,7 @@
 //   • When connected + org selected: shows Customers / Invoices / Bills /
 //     Payments tabs backed by REAL Zoho API responses (no mock data).
 //   • Uses the existing dark theme (bg-black + text-white + white/[0.04]
-//     surfaces) consistent with every other GSTPilot page.
+//     surfaces) consistent with every other VEYRO page.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -453,7 +453,7 @@ function DisconnectedCard({
       <div className="flex flex-col items-center gap-2">
         <h2 className="text-lg font-semibold">Connect to Zoho Books</h2>
         <p className="max-w-md text-sm text-white/50">
-          Authorize GSTPilot to read your Zoho Books customers, invoices, vendor
+          Authorize VEYRO to read your Zoho Books customers, invoices, vendor
           bills, and customer payments. You can disconnect at any time — tokens
           are encrypted and stored server-side only.
         </p>
@@ -733,7 +733,7 @@ function OrganizationPicker({
 
       <p className="text-sm text-white/50">
         Your Zoho account has access to multiple Books organizations. Pick the
-        one you want to sync with GSTPilot. You can change this later.
+        one you want to sync with VEYRO. You can change this later.
       </p>
 
       {error && (

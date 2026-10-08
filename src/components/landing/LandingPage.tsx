@@ -341,7 +341,7 @@ function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
     ? {
         headlineTop: 'Stop being a cost center.',
         headlineAccent: 'Become the CFO your clients trust.',
-        sub: 'GSTPilot Infinity unifies GST, banking, invoicing and AI-driven insights into one compliance-grade system — so your firm shifts from filing returns to advising growth.',
+        sub: 'VEYRO unifies GST, banking, invoicing and AI-driven insights into one compliance-grade system — so your firm shifts from filing returns to advising growth.',
         primaryCta: 'Start Free — 14-day trial, no card',
         secondaryCta: 'Book a 15-min demo for CA firms',
         pricing: 'From ₹2,999/month for CA firms',
@@ -574,7 +574,7 @@ function HeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
    1b. WHY GSTPILOT — vs-competitor differentiators
    ════════════════════════════════════════════════════════════════════════ */
 
-function WhyGSTPilotSection() {
+function WhyVEYROSection() {
   const diffs = [
     {
       vs: 'vs ClearTax / Zoho Tax',
@@ -597,7 +597,7 @@ function WhyGSTPilotSection() {
     {
       vs: 'vs spreadsheets',
       icon: Brain,
-      claim: 'Oracle AI CFO included',
+      claim: 'VEYRO AI CFO included',
       support: 'Ask plain-English questions, get ranked actions — not just dashboards.',
     },
   ];
@@ -606,7 +606,7 @@ function WhyGSTPilotSection() {
     <section className="relative section-gap px-4 py-20 sm:px-6">
       <div className="mx-auto max-w-7xl">
         <Reveal className="mx-auto max-w-2xl text-center">
-          <SectionTag><Target className="h-3 w-3" /> Why GSTPilot</SectionTag>
+          <SectionTag><Target className="h-3 w-3" /> Why VEYRO</SectionTag>
           <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             Built different. <span className="accent-text">Built to win.</span>
           </h2>
@@ -700,7 +700,7 @@ function OracleHeroSection({ onGetStarted, onBookDemo }: LandingPageProps) {
                       <span className="flex h-6 w-6 items-center justify-center rounded-lg accent-gradient">
                         <Brain className="h-3.5 w-3.5 text-black" />
                       </span>
-                      <span className="text-xs font-semibold text-white">Oracle</span>
+                      <span className="text-xs font-semibold text-white">VEYRO AI</span>
                       <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Live
                       </span>
@@ -791,7 +791,7 @@ function FeaturesSection() {
     { icon: Landmark, title: 'Banking Cloud', desc: 'Live bank feeds, auto-reconciliation, payment tracking and working-capital intelligence in one place.' },
     { icon: Receipt, title: 'Invoice Cloud', desc: 'Create, track, reconcile and execute invoices — sales, purchase, TDS, payroll and receivables.' },
     { icon: Workflow, title: 'Reconciliation Engine', desc: 'Two-way matching across ledgers, bank statements and GST returns with AI-assisted mismatch resolution.' },
-    { icon: Sparkles, title: 'Oracle AI', desc: 'Proactive intelligence that detects, predicts and prepares — so you never chase, you execute.' },
+    { icon: Sparkles, title: 'VEYRO AI', desc: 'Proactive intelligence that detects, predicts and prepares — so you never chase, you execute.' },
   ];
 
   return (
@@ -1182,7 +1182,7 @@ function HowItWorksSection() {
     {
       n: '02',
       icon: Brain,
-      title: 'Oracle AI analyzes',
+      title: 'VEYRO AI analyzes',
       desc: 'Oracle reads every ledger, return and payment — detecting gaps, predicting cash, ranking actions.',
     },
     {
@@ -1441,9 +1441,9 @@ function OracleAISection() {
       <Aurora />
       <div className="relative z-10 mx-auto max-w-5xl text-center">
         <Reveal>
-          <SectionTag><Brain className="h-3 w-3" /> Oracle AI</SectionTag>
+          <SectionTag><Brain className="h-3 w-3" /> VEYRO AI</SectionTag>
           <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
-            Oracle AI — your always-on <span className="accent-text">financial mind</span>
+            VEYRO AI — your always-on <span className="accent-text">financial mind</span>
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-white/60">
             Oracle doesn&apos;t wait to be asked. It watches every ledger, predicts every curve, and
@@ -1505,7 +1505,7 @@ function InteractiveDemoSection({ onGetStarted }: { onGetStarted: () => void }) 
         <Reveal className="text-center">
           <SectionTag><MessageSquareDemo /> Interactive Demo</SectionTag>
           <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl">
-            Ask Oracle anything. <span className="accent-text">Get the answer — and the action.</span>
+            Ask VEYRO AI anything. <span className="accent-text">Get the answer — and the action.</span>
           </h2>
         </Reveal>
 
@@ -1665,7 +1665,7 @@ function LogosSection() {
 function TestimonialsSection() {
   const quotes = [
     {
-      q: 'GSTPilot replaced six tools and three accountants worth of manual work. Oracle files returns before I even remember they are due.',
+      q: 'VEYRO replaced six tools and three accountants worth of manual work. Oracle files returns before I even remember they are due.',
       n: 'Rahul Mehta',
       r: 'Founder & CA, Nexus Associates',
     },
@@ -1722,7 +1722,7 @@ function PricingSection({ onGetStarted }: { onGetStarted: () => void }) {
       name: 'Starter',
       price: 0,
       desc: 'For solo practitioners getting started.',
-      features: ['1 firm', 'Up to 25 clients', 'GST Cloud basics', 'Oracle AI (limited)', 'Community support'],
+      features: ['1 firm', 'Up to 25 clients', 'GST Cloud basics', 'VEYRO AI (limited)', 'Community support'],
       cta: 'Start Free',
       featured: false,
     },
@@ -1730,7 +1730,7 @@ function PricingSection({ onGetStarted }: { onGetStarted: () => void }) {
       name: 'Professional',
       price: yearly ? 3999 : 4999,
       desc: 'For growing firms that need every superpower.',
-      features: ['Up to 5 firms', 'Unlimited clients', 'Full GST + Banking + Invoice Cloud', 'Oracle AI (unlimited)', 'All 8 AI Agents', 'Priority support'],
+      features: ['Up to 5 firms', 'Unlimited clients', 'Full GST + Banking + Invoice Cloud', 'VEYRO AI (unlimited)', 'All 8 AI Agents', 'Priority support'],
       cta: 'Get Started',
       featured: true,
     },
@@ -1909,12 +1909,12 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 
 function FAQSection() {
   const faqs = [
-    { q: 'Is GSTPilot approved by GSTN?', a: 'GSTPilot operates as a GST Suvidha Provider–aligned workflow layer. We generate return payloads in GSTN-compatible formats and support ARN tracking. Full ASP/GSP certification is in progress for direct filing.' },
-    { q: 'How does Oracle AI work?', a: 'Oracle is a deterministic intelligence layer — not a chatbot. It continuously evaluates your invoices, payments, receivables and returns, then surfaces proactive statements and prepared actions. It acts only with your approval.' },
+    { q: 'Is VEYRO approved by GSTN?', a: 'VEYRO operates as a GST Suvidha Provider–aligned workflow layer. We generate return payloads in GSTN-compatible formats and support ARN tracking. Full ASP/GSP certification is in progress for direct filing.' },
+    { q: 'How does VEYRO AI work?', a: 'Oracle is a deterministic intelligence layer — not a chatbot. It continuously evaluates your invoices, payments, receivables and returns, then surfaces proactive statements and prepared actions. It acts only with your approval.' },
     { q: 'Can I manage multiple firms?', a: 'Yes. The Multi-Firm Command and Executive War Room are built specifically for CAs and networks operating many client firms from a single screen, with bulk filing and bulk reconciliation.' },
     { q: 'Is my data secure?', a: 'All data is encrypted in transit (TLS 1.3) and at rest (AES-256), hosted on audited Indian cloud infrastructure in Mumbai and Hyderabad. We are SOC 2 Type II and ISO 27001 aligned, with daily encrypted backups.' },
     { q: 'Do you support all GST return types?', a: 'Yes — GSTR-1, GSTR-3B, GSTR-9, GSTR-9C, CMP-08 and more, with ITC reconciliation across GSTR-2B, ledger matching, and automated compliance scoring.' },
-    { q: 'What is included in the free plan?', a: 'One firm, up to 25 clients, GST Cloud basics, and limited Oracle AI insights — enough to feel the difference. Upgrade anytime for unlimited firms and the full agent roster.' },
+    { q: 'What is included in the free plan?', a: 'One firm, up to 25 clients, GST Cloud basics, and limited VEYRO AI insights — enough to feel the difference. Upgrade anytime for unlimited firms and the full agent roster.' },
     { q: 'How fast can I get started?', a: 'Most firms are live within a day. Onboarding collects your firm and GSTIN details, Oracle begins analyzing immediately, and the first returns can be prepared the same session.' },
   ];
   return (
@@ -1952,7 +1952,7 @@ function CTASection({ onGetStarted, onBookDemo }: LandingPageProps) {
             Run your entire financial operation on <span className="accent-text">one brain</span>.
           </h2>
           <p className="mx-auto mt-5 max-w-xl text-white/60">
-            Join the firms that have already replaced a dozen tools with GSTPilot Infinity. Start
+            Join the firms that have already replaced a dozen tools with VEYRO. Start
             free — no card required.
           </p>
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -1976,7 +1976,7 @@ function CTASection({ onGetStarted, onBookDemo }: LandingPageProps) {
 
 function Footer() {
   const cols = [
-    { h: 'Product', links: ['Features', 'Oracle AI', 'Pricing', 'Security', 'App Store'] },
+    { h: 'Product', links: ['Features', 'VEYRO AI', 'Pricing', 'Security', 'App Store'] },
     { h: 'Company', links: ['About', 'Careers', 'Blog', 'Press'] },
     { h: 'Resources', links: ['Docs', 'API', 'Guides', 'Status'] },
     { h: 'Legal', links: ['Privacy', 'Terms', 'GSTN Compliance', 'RBI Alignment'] },
@@ -1996,7 +1996,7 @@ function Footer() {
               className="brand-logo"
             />
             <p className="mt-3 text-xs leading-relaxed text-white/45">
-              The Financial Brain of India™ — the world's most premium Financial Operating System for Chartered Accountants and Indian Businesses.
+              The AI Operating System for Business™ — the world's most premium Financial Operating System for Chartered Accountants and Indian Businesses.
             </p>
             <div className="mt-4 flex gap-2">
               {[Twitter, Github, Linkedin].map((Icon, i) => (
@@ -2029,7 +2029,7 @@ function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-white/[0.06] pt-6 sm:flex-row">
-          <p className="text-xs text-white/40">© 2025 GSTPilot Infinity. All rights reserved.</p>
+          <p className="text-xs text-white/40">© 2025 VEYRO. All rights reserved.</p>
           <p className="text-xs text-white/40">Made in India · GSTN Compliant · RBI Aligned</p>
         </div>
       </div>
@@ -2048,7 +2048,7 @@ export default function LandingPage({ onGetStarted, onBookDemo }: LandingPagePro
       <Navbar onGetStarted={onGetStarted} />
       <div className="flex-1">
         <HeroSection onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
-        <WhyGSTPilotSection />
+        <WhyVEYROSection />
         <OracleHeroSection onGetStarted={onGetStarted} onBookDemo={onBookDemo} />
         <FeaturesSection />
         <CapabilitiesSection />

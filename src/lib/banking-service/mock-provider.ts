@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Service — Mock Provider (In-Memory, Production-Quality Seed)
+// VEYRO Banking Service — Mock Provider (In-Memory, Production-Quality Seed)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The BankingService implementation used today. Holds accounts + transactions

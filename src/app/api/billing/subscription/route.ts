@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Subscription API
+// VEYRO Billing™ — Subscription API
 //
 // GET /api/billing/subscription?organizationId=...
 //   Returns the org's active subscription + billing health snapshot.

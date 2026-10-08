@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Compliance Cloud™ (AUTONOMOUS COMPLIANCE ENGINE)
+// VEYRO Infinity™ — Global Compliance Cloud™ (AUTONOMOUS COMPLIANCE ENGINE)
 // Type system — shared contract for all 13 subsystems.
 // Predict. Prepare. Validate. Comply. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════

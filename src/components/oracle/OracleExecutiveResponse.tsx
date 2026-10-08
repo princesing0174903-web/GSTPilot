@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Executive Response Renderer (PROMPT 5: Autonomous AI CFO)
+// VEYRO AI™ — Executive Response Renderer (PROMPT 5: Autonomous AI CFO)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Renders the structured executive output of the pipeline (ADDITIVE — no UI

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Invoice Empty State + Error State (Premium)
+// VEYRO — Invoice Empty State + Error State (Premium)
 //
 // Beautiful states for when there are no invoices, or when something went
 // wrong loading them. Never exposes raw backend errors to the user.
@@ -153,7 +153,7 @@ export function InvoiceEmptyState({
         {[
           { title: 'GST-Compliant', desc: 'CGST/SGST/IGST auto-split' },
           { title: 'Multi-Channel Send', desc: 'Email, WhatsApp, SMS' },
-          { title: 'Oracle AI Insights', desc: 'Payment prediction & risk' },
+          { title: 'VEYRO AI Insights', desc: 'Payment prediction & risk' },
         ].map((f, i) => (
           <motion.div
             key={f.title}
@@ -212,7 +212,7 @@ export function InvoiceErrorState({
       <p className="text-sm text-muted-foreground max-w-md mb-6 leading-relaxed">
         {friendlyMessage}{' '}
         <span className="text-amber-300/80">
-          You can retry, or ask Oracle AI to help diagnose the issue.
+          You can retry, or ask VEYRO AI to help diagnose the issue.
         </span>
       </p>
 
@@ -228,7 +228,7 @@ export function InvoiceErrorState({
           variant="outline"
           className="border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-foreground"
           onClick={() => {
-            // Ask Oracle AI — opens the global Oracle drawer.
+            // Ask VEYRO AI AI — opens the global Oracle drawer.
             const event = new CustomEvent('gstpilot:oracle:ask', {
               detail: { query: `I can't load my invoices. Error: ${friendlyMessage}` },
             });
@@ -236,7 +236,7 @@ export function InvoiceErrorState({
           }}
         >
           <Sparkles className="h-4 w-4 mr-2" />
-          Ask Oracle AI
+          Ask VEYRO AI AI
         </Button>
         {onGoBack && (
           <Button

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Connect (Request OTP) API
+// VEYRO Real GSTN Integration™ — Connect (Request OTP) API
 //
 // POST /api/gstn/connect
 //   Body: { organizationId, gstin, username }

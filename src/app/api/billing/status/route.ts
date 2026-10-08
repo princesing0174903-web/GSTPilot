@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Status API
+// VEYRO Billing™ — Status API
 //
 // GET /api/billing/status
 //   Returns the active payment provider description + health check result.

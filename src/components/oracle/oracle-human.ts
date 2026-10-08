@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Human Intelligence Module
+// VEYRO AI™ — Human Intelligence Module
 // Multilingual detection (10 languages), emotion detection (6 micro-expressions),
 // and dynamic avatar state derivation. Keeps Oracle feeling alive & human.
 // ═══════════════════════════════════════════════════════════════════════════════

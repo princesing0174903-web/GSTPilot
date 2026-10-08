@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Taxes (lookup-only)
+// VEYRO — Zoho Books Sync · Taxes (lookup-only)
 //
-// Zoho Books tax rates are reference data: GSTPilot's existing models embed
+// Zoho Books tax rates are reference data: VEYRO's existing models embed
 // tax amounts directly on invoices/bills/expenses (cgst/sgst/igst/cess), so
 // there's no dedicated Tax table to write into. We still walk the /settings/taxes
 // endpoint and persist a ZohoEntityMap row per tax — this gives the UI an

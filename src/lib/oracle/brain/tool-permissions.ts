@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Tool Permission System (3-tier, server-enforced)
+// VEYRO AI™ — Tool Permission System (3-tier, server-enforced)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Every Oracle tool is classified into one of three permission tiers. The

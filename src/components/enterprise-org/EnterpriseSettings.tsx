@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — EnterpriseSettings
+// VEYRO — EnterpriseSettings
 //
 // The premium Organization Settings console. A left sidebar lists every
 // settings section (General, Branding, Localization, Security, Members,
@@ -225,7 +225,7 @@ const SECTIONS: SectionMeta[] = [
   {
     id: 'ai',
     label: 'AI Settings',
-    description: 'Oracle AI, AI CFO, predictive compliance.',
+    description: 'VEYRO AI, AI CFO, predictive compliance.',
     icon: Sparkles,
     viewPermission: 'ai.settings',
   },
@@ -1510,7 +1510,7 @@ function NotificationsSection() {
     { key: 'emailUpdates', label: 'Email updates', description: 'Product news, summaries, and account emails.' },
     { key: 'gstReminders', label: 'GST reminders', description: 'Upcoming GSTR-1 / GSTR-3B due dates and overdue alerts.' },
     { key: 'clientActivity', label: 'Client activity', description: 'When a client views, comments, or signs a document.' },
-    { key: 'aiInsights', label: 'AI insights', description: 'Oracle AI observations about your books and compliance.' },
+    { key: 'aiInsights', label: 'AI insights', description: 'VEYRO AI observations about your books and compliance.' },
     { key: 'securityAlerts', label: 'Security alerts', description: 'Sign-ins, role changes, and API key activity.' },
     { key: 'marketingUpdates', label: 'Marketing updates', description: 'Occasional product launches and offers (low volume).' },
   ];
@@ -2056,7 +2056,7 @@ function ApiKeysSection() {
   return (
     <SettingsCard
       title="API Keys"
-      description="Scoped tokens for programmatic access to your organization's data via the GSTPilot API."
+      description="Scoped tokens for programmatic access to your organization's data via the VEYRO API."
     >
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
@@ -2134,7 +2134,7 @@ function ApiKeysSection() {
             <div className="space-y-1">
               <p className="text-sm font-medium text-foreground">No API keys yet</p>
               <p className="text-xs text-muted-foreground">
-                Create a key to start integrating GSTPilot with your stack.
+                Create a key to start integrating VEYRO with your stack.
               </p>
             </div>
           </div>
@@ -2329,7 +2329,7 @@ function AiSettingsSection() {
   const toggles: Array<{ key: keyof typeof settings; label: string; description: string }> = [
     {
       key: 'oracleAi',
-      label: 'Oracle AI',
+      label: 'VEYRO AI',
       description: 'Conversational AI workspace for finance, tax, and compliance questions.',
     },
     {
@@ -2352,7 +2352,7 @@ function AiSettingsSection() {
   return (
     <SettingsCard
       title="AI Settings"
-      description="Configure how Oracle AI and the AI CFO operate on your organization's data."
+      description="Configure how VEYRO AI and the AI CFO operate on your organization's data."
     >
       <div className="space-y-3">
         {toggles.map((t) => (
@@ -2460,7 +2460,7 @@ function DangerZoneSection() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
-                  Ownership transfer is a server-side operation that requires verification. Please contact GSTPilot support to complete this action — your request will be logged and verified.
+                  Ownership transfer is a server-side operation that requires verification. Please contact VEYRO support to complete this action — your request will be logged and verified.
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setTransferOpen(false)}>
@@ -2599,7 +2599,7 @@ function sectionTitle(id: SectionId): { title: string; subtitle: string } {
     case 'apikeys':
       return { title: 'API Keys', subtitle: 'Programmatic access tokens.' };
     case 'ai':
-      return { title: 'AI Settings', subtitle: 'Oracle AI, AI CFO, and predictive features.' };
+      return { title: 'AI Settings', subtitle: 'VEYRO AI, AI CFO, and predictive features.' };
     case 'danger':
       return { title: 'Danger Zone', subtitle: 'Transfer ownership, delete organization.' };
     default:

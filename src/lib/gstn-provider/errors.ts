@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Typed Errors
+// VEYRO Real GSTN Integration™ — Typed Errors
 //
 // Every failure mode in the GSTN flow has a dedicated error class so callers
 // can branch on `instanceof` and show the right UX (retry vs re-auth vs

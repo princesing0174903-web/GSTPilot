@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO™ — Global Enterprise Operating System™
 // Security™ — Zero-trust isolation, RBAC, audit logging, approval workflows.
 // Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════

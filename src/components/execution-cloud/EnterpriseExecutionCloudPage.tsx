@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — ENTERPRISE EXECUTION CLOUD™ (MISSION CONTROL)
+// VEYRO™ — ENTERPRISE EXECUTION CLOUD™ (MISSION CONTROL)
 // The world's first Enterprise Execution Cloud. One pipeline for every module.
 // Think. Plan. Execute. Observe. Improve. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -349,7 +349,7 @@ export default function EnterpriseExecutionCloudPage() {
                 <EmptyState
                   icon={Sparkles}
                   title="Enterprise Execution Cloud is in setup phase"
-                  description="The unified pipeline has no jobs yet. As your 22 modules emit actions — AI Executive briefs, autonomous runs, GSTR filings, dev builds, automations, payments — they will materialise here as ExecutionJobs. The Oracle narrative will then read the real stream."
+                  description="The unified pipeline has no jobs yet. As your 22 modules emit actions — AI Executive briefs, autonomous runs, GSTR filings, dev builds, automations, payments — they will materialise here as ExecutionJobs. VEYRO AI narrative will then read the real stream."
                 />
               ) : (
                 <motion.div

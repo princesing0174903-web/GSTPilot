@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Communication Cloud™ — Report Distribution Engine™
+// VEYRO Communication Cloud™ — Report Distribution Engine™
 // GST Summary, Cash Flow, Receivables, Payables, TDS, Payroll, AI CFO Report.
 // Delivery channels: WhatsApp, Email, PDF, Dashboard.
 // Pure TypeScript — importable from both client and server.

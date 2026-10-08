@@ -13,7 +13,7 @@ import { detectAnomalies } from '@/lib/twin/anomaly';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const TWIN_TAGLINE = 'GSTPilot Digital Twin™ — Remember Everything. Understand Everything. Simulate Everything. Predict Everything.';
+const TWIN_TAGLINE = 'VEYRO Digital Twin™ — Remember Everything. Understand Everything. Simulate Everything. Predict Everything.';
 
 // In-memory cache (60s)
 let cached: { data: Awaited<ReturnType<typeof detectAnomalies>>; ts: number } | null = null;

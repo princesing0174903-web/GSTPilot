@@ -51,7 +51,7 @@ export function OracleThinkingAnimation({ compact = false }: { compact?: boolean
         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/15 ring-1 ring-amber-500/25">
           <Brain className="h-3.5 w-3.5 text-amber-400" />
         </div>
-        <span className="text-sm font-semibold tracking-tight text-amber-300">Oracle is thinking</span>
+        <span className="text-sm font-semibold tracking-tight text-amber-300">VEYRO AI is thinking</span>
         <motion.span
           animate={{ opacity: [0.25, 1, 0.25] }}
           transition={{ duration: 1.3, repeat: Infinity, ease: 'easeInOut' }}

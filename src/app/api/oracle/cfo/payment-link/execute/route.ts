@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Payment Link Execute API (the ACT step)
+// VEYRO AI CFO™ — Payment Link Execute API (the ACT step)
 //
 // POST /api/oracle/cfo/payment-link/execute
 //
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     organizationId: String(body.organizationId ?? 'preview-org'),
     firmId: body.firmId ? String(body.firmId) : null,
     userId: String(body.userId ?? 'preview-user'),
-    userEmail: String(body.userEmail ?? 'preview@gstpilot.in'),
+    userEmail: String(body.userEmail ?? 'preview@veyro.com'),
     userRole: (body.userRole as string) ?? 'manager',
   };
 

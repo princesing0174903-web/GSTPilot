@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Production Invoice Execution API
+// VEYRO AI CFO™ — Production Invoice Execution API
 //
 // POST /api/oracle/cfo/invoice/execute
 //
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     organizationId: String(body.organizationId ?? 'preview-org'),
     firmId: body.firmId ? String(body.firmId) : null,
     userId: String(body.userId ?? 'preview-user'),
-    userEmail: String(body.userEmail ?? 'preview@gstpilot.in'),
+    userEmail: String(body.userEmail ?? 'preview@veyro.com'),
   };
 
   const orgId0 = String(body.organizationId ?? body.orgId ?? body.firmId ?? '');
@@ -158,8 +158,8 @@ export async function POST(request: NextRequest) {
     const pdfResult = await generateInvoicePDF({
       summary,
       sellerDetails: {
-        tradeName: sellerDetails?.tradeName ?? 'GSTPilot',
-        legalName: sellerDetails?.legalName ?? sellerDetails?.tradeName ?? 'GSTPilot',
+        tradeName: sellerDetails?.tradeName ?? 'VEYRO',
+        legalName: sellerDetails?.legalName ?? sellerDetails?.tradeName ?? 'VEYRO',
         gstin: sellerGstin,
         address: sellerDetails?.address ?? '',
         state: sellerDetails?.state ?? '',
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
     invoicePdfBase64: pdfBase64,
     grandTotal: gst.grandTotal,
     dueDate: summary.invoice.dueDate,
-    sellerName: sellerDetails?.tradeName ?? 'GSTPilot',
+    sellerName: sellerDetails?.tradeName ?? 'VEYRO',
   });
 
   // ─── STEP 9: WhatsApp ───────────────────────────────────────────────
@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
     invoiceNumber: summary.invoice.number,
     grandTotal: gst.grandTotal,
     dueDate: summary.invoice.dueDate,
-    sellerName: sellerDetails?.tradeName ?? 'GSTPilot',
+    sellerName: sellerDetails?.tradeName ?? 'VEYRO',
     paymentLink: undefined, // Payment links are Phase 1.3
   });
 

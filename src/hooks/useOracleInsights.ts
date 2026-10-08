@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useOracleInsights() Hook
+// VEYRO — useOracleInsights() Hook
 //
 // Reads the persisted "Oracle is alive" insights doc at
 // organizations/{orgId}/oracle/insights via /api/oracle/activation-insights.
@@ -21,7 +21,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrg } from '@/contexts/OrgContext';
 import { fetchWithTimeout } from '@/lib/async';
 
-// Re-export the OracleInsights type from the activation route so any
+// Re-export VEYRO AIInsights type from the activation route so any
 // component can import it from a single, hook-side location.
 export type { OracleInsights } from '@/app/api/oracle/activate/route';
 

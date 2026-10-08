@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Oracle Chat API
+// VEYRO AI Oracle™ & AI CFO™ — Oracle Chat API
 //
 // POST /api/ai/oracle/chat
 //   Body: { organizationId, question: string }
 //
 // Returns: { ok: true, response: ChatResponse }
 //
-// The Oracle answers using REAL Firestore data only — never fabricated. If the
+// VEYRO AI answers using REAL Firestore data only — never fabricated. If the
 // org has no business data yet, the orchestrator returns a graceful "connect
 // data" message rather than throwing.
 //

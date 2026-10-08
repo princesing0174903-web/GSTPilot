@@ -3,10 +3,10 @@ import { Inter, Sora, Poppins, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot™ Brand Fonts
+// VEYRO™ Brand Fonts
 //   • Inter        — body text (UI)
 //   • Sora         — headings (sections, cards)
-//   • Poppins      — logo wordmark (GSTPilot™)
+//   • Poppins      — logo wordmark (VEYRO™)
 //   • JetBrains Mono — monospace / code / numbers
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -38,35 +38,33 @@ const jetbrainsMono = JetBrains_Mono({
 
 // ─── Brand metadata ───────────────────────────────────────────────────────────
 export const metadata: Metadata = {
-  metadataBase: new URL("https://gstpilot.in"),
+  metadataBase: new URL("https://veyro.com"),
   title: {
-    default: "GSTPilot™ — The Financial Brain of India",
-    template: "%s · GSTPilot™",
+    default: "VEYRO™ — The AI Operating System for Business",
+    template: "%s · VEYRO™",
   },
   description:
-    "GSTPilot Infinity™ — the world's most premium Financial Operating System for Chartered Accountants and Indian Businesses. GST, Banking, Invoicing, Reconciliation and an AI CFO in one brain.",
-  applicationName: "GSTPilot",
+    "VEYRO — VEYRO is an AI operating system for modern businesses, combining financial intelligence, operations, invoicing, banking, reporting, automation and compliance in one platform.",
+  applicationName: "VEYRO",
   keywords: [
-    "GSTPilot",
-    "GST software",
-    "Chartered Accountant software",
-    "India GST filing",
-    "AI CFO",
-    "financial operating system",
-    "GST reconciliation",
-    "invoice engine",
-    "India fintech",
+    "VEYRO",
+    "AI Operating System",
+    "Business Intelligence",
+    "Finance",
+    "Invoicing",
+    "Banking",
+    "Compliance",
   ],
-  authors: [{ name: "GSTPilot" }],
-  creator: "GSTPilot",
-  publisher: "GSTPilot",
+  authors: [{ name: "VEYRO" }],
+  creator: "VEYRO",
+  publisher: "VEYRO",
   manifest: "/manifest.json",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
-      { url: "/brand/gstpilot-icon.svg", sizes: "any", type: "image/svg+xml" },
+      { url: "/icon.png", sizes: "any", type: "image/svg+xml" },
     ],
     shortcut: ["/favicon.ico"],
     apple: [
@@ -75,31 +73,31 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "GSTPilot",
+    title: "VEYRO",
     statusBarStyle: "black-translucent",
   },
   openGraph: {
     type: "website",
     locale: "en_IN",
-    url: "https://gstpilot.in",
-    siteName: "GSTPilot",
-    title: "GSTPilot™ — The Financial Brain of India",
+    url: "https://veyro.com",
+    siteName: "VEYRO",
+    title: "VEYRO™ — The AI Operating System for Business",
     description:
-      "The world's most premium Financial Operating System for Chartered Accountants and Indian Businesses.",
+      "VEYRO is an AI operating system for modern businesses, combining financial intelligence, operations, invoicing, banking, reporting, automation and compliance in one platform.",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "GSTPilot — The Financial Brain of India",
+        alt: "VEYRO — The AI Operating System for Business",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "GSTPilot™ — The Financial Brain of India",
+    title: "VEYRO™ — The AI Operating System for Business",
     description:
-      "The world's most premium Financial Operating System for Chartered Accountants and Indian Businesses.",
+      "VEYRO is an AI operating system for modern businesses, combining financial intelligence, operations, invoicing, banking, reporting, automation and compliance in one platform.",
     images: ["/og-image.png"],
   },
   robots: {
@@ -130,16 +128,16 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-        <link rel="icon" type="image/svg+xml" href="/brand/gstpilot-icon.svg" />
+        <link rel="icon" type="image/svg+xml" href="/icon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        <link rel="mask-icon" href="/brand/gstpilot-icon.svg" color="#3B82F6" />
+        <link rel="mask-icon" href="/icon.png" color="#3B82F6" />
         <meta name="theme-color" content="#000000" />
         <meta name="msapplication-TileColor" content="#000000" />
         <meta name="msapplication-config" content="/browserconfig.xml" />
-        <meta name="application-name" content="GSTPilot" />
+        <meta name="application-name" content="VEYRO" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="GSTPilot" />
+        <meta name="apple-mobile-web-app-title" content="VEYRO" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body

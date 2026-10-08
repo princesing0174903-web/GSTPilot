@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GST Reconciliation: shared UI parts
+// VEYRO — GST Reconciliation: shared UI parts
 // ═══════════════════════════════════════════════════════════════════════════════
 // ConfidenceBar, AISummaryCard, TimelineChart, VendorScoreboard,
 // BulkActionsBar, AdvancedFilters, SummaryCard, MatchDistributionCard, ITCRiskCard

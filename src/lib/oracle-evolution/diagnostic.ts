@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Upgrade Phase 1 · Upgrade 2: Multi-Step Reasoning
+// VEYRO AI™ — Upgrade Phase 1 · Upgrade 2: Multi-Step Reasoning
 //
 // Diagnostic chains: predefined multi-step analysis pipelines that Oracle runs
 // automatically when a user asks a complex question. Each chain is a sequence

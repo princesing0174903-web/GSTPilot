@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 4 — Real-Time Alert Center API
+// VEYRO™ — PHASE 2B · MODULE 4 — Real-Time Alert Center API
 //
 // PATCH /api/alerts/[id] → update alert lifecycle
 //   body: { action: 'read' | 'dismiss' | 'archive' | 'resolve' }

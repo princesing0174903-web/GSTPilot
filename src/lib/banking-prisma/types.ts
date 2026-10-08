@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Prisma Type Definitions (TASK 12)
+// VEYRO Banking Module™ — Prisma Type Definitions (TASK 12)
 //
 // The data model for the local-database banking module. Every field maps 1:1 to
 // a Prisma model (BankAccount, BankTransaction, BankReconciliation,

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Data Intelligence Cloud™ — Type System
+// VEYRO Global Data Intelligence Cloud™ — Type System
 // Phase 7 — World Business Brain
 // ═══════════════════════════════════════════════════════════════════════════════
 //

@@ -11,7 +11,7 @@
 //
 // Tabs:
 //   1.  Brain Overview        — 17 module cards + recent activity
-//   2.  Ask Oracle            — chat interface with structured reasoning output
+//   2.  Ask VEYRO AI            — chat interface with structured reasoning output
 //   3.  Unified Memory        — search the unified memory layer
 //   4.  Executive Conversation — multi-AI-executive collaboration timeline
 //   5.  Reasoning History     — past reasoning records with expandable details
@@ -250,7 +250,7 @@ const INSIGHT_CATEGORIES: InsightCategory[] = [
 
 const TABS = [
   { value: 'overview', label: 'Brain Overview', icon: BrainCircuit },
-  { value: 'ask', label: 'Ask Oracle', icon: MessageSquare },
+  { value: 'ask', label: 'Ask VEYRO AI', icon: MessageSquare },
   { value: 'memory', label: 'Unified Memory', icon: Database },
   { value: 'conversation', label: 'Executive Conversation', icon: Users },
   { value: 'reasoning', label: 'Reasoning History', icon: Brain },
@@ -481,7 +481,7 @@ export default function OracleIntelligenceCorePage() {
                 </div>
                 <div className="space-y-1">
                   <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-                    Oracle Intelligence Core™
+                    VEYRO AI Intelligence Core™
                   </h1>
                   <p className="text-sm md:text-base text-muted-foreground">
                     One Brain. Every Decision. Entire Enterprise.
@@ -506,7 +506,7 @@ export default function OracleIntelligenceCorePage() {
               {/* Quick actions */}
               <div className="grid grid-cols-2 lg:flex lg:flex-wrap gap-2">
                 <Button onClick={() => setAskModalOpen(true)} size="sm" className="gap-1.5">
-                  <Sparkles className="h-4 w-4" /> Ask Oracle
+                  <Sparkles className="h-4 w-4" /> Ask VEYRO AI
                 </Button>
                 <Button onClick={() => setPlanModalOpen(true)} size="sm" variant="outline" className="gap-1.5">
                   <Target className="h-4 w-4" /> Plan
@@ -1124,7 +1124,7 @@ function AskOracleTab() {
         <CardContent className="p-4 space-y-3">
           <div>
             <Label htmlFor="ask-question" className="text-sm font-medium">
-              Ask the Oracle Brain anything
+              Ask VEYRO AI Brain anything
             </Label>
             <Textarea
               id="ask-question"
@@ -1161,7 +1161,7 @@ function AskOracleTab() {
             </label>
             <Button onClick={handleSubmit} disabled={loading} className="ml-auto gap-1.5">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {loading ? 'Oracle thinking…' : 'Ask Oracle'}
+              {loading ? 'Oracle thinking…' : 'Ask VEYRO AI'}
             </Button>
           </div>
         </CardContent>
@@ -2183,7 +2183,7 @@ function SelfImprovementTab() {
         }),
       });
       toast.success('Learning recorded', {
-        description: 'The Oracle brain has absorbed a new lesson.',
+        description: 'VEYRO AI brain has absorbed a new lesson.',
       });
       setForm({ ...form, signal: '', lessonLearned: '', evidence: '{}' });
       loadLessons();
@@ -2200,7 +2200,7 @@ function SelfImprovementTab() {
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">Self-Improvement Engine</h2>
-        <p className="text-sm text-muted-foreground">Top lessons learned by the Oracle brain</p>
+        <p className="text-sm text-muted-foreground">Top lessons learned by VEYRO AI brain</p>
       </div>
 
       {loading ? (
@@ -2208,7 +2208,7 @@ function SelfImprovementTab() {
       ) : lessons.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
-            No lessons recorded yet. Use the form below to teach the Oracle brain.
+            No lessons recorded yet. Use the form below to teach VEYRO AI brain.
           </CardContent>
         </Card>
       ) : (
@@ -2768,7 +2768,7 @@ function AskOracleModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto custom-scrollbar">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" /> Ask Oracle
+            <Sparkles className="h-5 w-5 text-primary" /> Ask VEYRO AI
           </DialogTitle>
           <DialogDescription>
             Ask the unified brain anything. Oracle will gather context, consult executives, and deliver structured reasoning.

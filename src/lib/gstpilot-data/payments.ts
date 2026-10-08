@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Payments Firestore Service
+// VEYRO™ — Payments Firestore Service
 //
 // CRUD + real-time subscription for payment documents at:
 //   organizations/{organizationId}/payments/{paymentId}

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Unified Financial Context: Type System
+// VEYRO AI™ — Unified Financial Context: Type System
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // THE single normalized context layer for every Oracle surface. Every Oracle
@@ -82,7 +82,7 @@ export interface DataSourceRef {
   connectionState?: ConnectionState;
   /** Optional period the data covers, e.g. "FY 2024-25", "July 2026", "GSTR-2B July 2026". */
   period?: string;
-  /** Optional deep-link to the relevant GSTPilot view, e.g. "/dashboard?view=invoices". */
+  /** Optional deep-link to the relevant VEYRO view, e.g. "/dashboard?view=invoices". */
   deepLink?: string;
   /** Optional record count the metric was computed from. */
   recordCount?: number;

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Provider Registry (SERVER-ONLY)
+// VEYRO ERP & Accounting Integrations™ — Provider Registry (SERVER-ONLY)
 //
 // The SINGLE place that decides which ERP provider implementation is active.
 //

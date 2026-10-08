@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Service — Barrel Export
+// VEYRO Banking Service — Barrel Export
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Single import surface for the entire Banking module. UI pages, API routes,

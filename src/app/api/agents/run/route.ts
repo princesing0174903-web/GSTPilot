@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — AI Agent Execution API
+// VEYRO — AI Agent Execution API
 // Uses z-ai-web-dev-sdk LLM to power autonomous AI employees
 // ═══════════════════════════════════════════════════════════════════════════════
 

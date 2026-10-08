@@ -1,12 +1,12 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ V16 — Command Bar
+// VEYRO™ V16 — Command Bar
 // Perplexity / ChatGPT / Cursor-style search:
 //   • glass-surface-strong + search-glow on focus
 //   • InfinityMark symbol on the left, ArrowUp submit on the right
 //   • Example prompt chips below — hide while typing, reappear when empty
-//   • Enter → dispatches 'oracle-ask' (the GSTPilot Oracle™ workspace opens + asks)
+//   • Enter → dispatches 'oracle-ask' (the VEYRO AI™ workspace opens + asks)
 //   • "/" focuses the input (when not already typing in one)
 //   • Clicking a chip fills the input + submits immediately
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -47,7 +47,7 @@ export function CommandBar() {
   const ask = (q: string) => {
     const trimmed = q.trim();
     if (!trimmed) return;
-    // Route to the NEW full-screen GSTPilot Oracle™ workspace (listened to by
+    // Route to the NEW full-screen VEYRO AI™ workspace (listened to by
     // OraclePanel). The legacy intelligence palette keeps its own launcher.
     window.dispatchEvent(new CustomEvent('oracle-ask', { detail: trimmed }));
     setValue('');
@@ -94,8 +94,8 @@ export function CommandBar() {
               setValue(v);
               setShowChips(v.trim().length === 0);
             }}
-            placeholder="Ask GSTPilot Oracle…"
-            aria-label="Ask GSTPilot Oracle"
+            placeholder="Ask VEYRO AI…"
+            aria-label="Ask VEYRO AI"
             className="min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground/70"
           />
 

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — useBusinessScore() Hook
+// VEYRO AI Oracle™ & AI CFO™ — useBusinessScore() Hook
 //
 // Composite Business Score + Risk Score for the current organization.
 // Scores are computed on demand by the orchestrator (not persisted by default),

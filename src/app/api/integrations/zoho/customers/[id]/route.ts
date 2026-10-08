@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // PUT /api/integrations/zoho/customers/[id]
 //
-// Update a customer inside GSTPilot:
+// Update a customer inside VEYRO:
 //   1. Look up the local ZohoCustomer row by [id] → get zohoContactId.
 //   2. PUT /books/v3/contacts/{contact_id} to Zoho Books (real API call).
 //   3. Update the local ZohoCustomer row with the returned fields.

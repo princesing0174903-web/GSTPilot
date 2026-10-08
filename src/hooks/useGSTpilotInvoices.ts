@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useGSTpilotInvoices() Hook
+// VEYRO — useGSTpilotInvoices() Hook
 //
 // Real-time invoices list (onSnapshot) + CRUD + search + mark paid + cancel.
 //

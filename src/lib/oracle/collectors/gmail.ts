@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Gmail Collector
+// VEYRO AI Intelligence Engine — Gmail Collector
 //
 // Reads recent Gmail messages via the Google Workspace token store. Classifies
 // messages into loose business buckets (GST notices, vendor invoices, client

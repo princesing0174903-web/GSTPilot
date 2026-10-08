@@ -4,7 +4,7 @@
 // GSTPILOT EXECUTION CLOUD™
 // Phase 8 — Connect. Execute. Automate. Scale.
 //
-// "I don't use software. GSTPilot actually runs my business.
+// "I don't use software. VEYRO actually runs my business.
 //  It files, reminds, reconciles, predicts and executes automatically."
 //
 // Modules rendered here (all 8):
@@ -201,7 +201,7 @@ export default function ExecutionCloudPage() {
           <div>
             <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-foreground md:text-2xl">
               <span className="accent-gradient-soft rounded-lg px-2 py-0.5 text-sm font-bold accent-text">EXECUTION CLOUD™</span>
-              GSTPilot Execution Cloud
+              VEYRO Execution Cloud
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Connect. Execute. Automate. Scale. · Files, reminds, reconciles, predicts &amp; executes automatically.
@@ -302,8 +302,8 @@ export default function ExecutionCloudPage() {
             </div>
             <Separator className="my-3 bg-white/[0.06]" />
             <p className="text-center text-xs text-muted-foreground">
-              <span className="accent-text font-semibold">GSTPilot Infinity™</span> — The Financial Brain of India.{' '}
-              <span className="text-muted-foreground/70">I don't use software. GSTPilot actually runs my business.</span>
+              <span className="accent-text font-semibold">VEYRO™</span> — The AI Operating System for Business.{' '}
+              <span className="text-muted-foreground/70">I don't use software. VEYRO actually runs my business.</span>
             </p>
           </CardContent>
         </Card>

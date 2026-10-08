@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Contextual Follow-up Suggestions
+// VEYRO AI™ — Contextual Follow-up Suggestions
 //
 // After every Oracle answer, generate 3–5 contextual follow-up questions.
 // Priority:
@@ -31,7 +31,7 @@ interface OracleFollowUpsProps {
   smartFollowUps?: OracleSmartFollowUp[];
   /** Legacy string[] follow-ups. */
   followUps?: string[];
-  /** The Oracle answer text — used to generate client-side suggestions if no API follow-ups. */
+  /** VEYRO AI answer text — used to generate client-side suggestions if no API follow-ups. */
   answerText?: string;
   /** The last user prompt — used to generate contextual suggestions. */
   lastUserPrompt?: string;

@@ -1,4 +1,4 @@
-// GSTPilot Infinity™ — Professional Chart Theme
+// VEYRO Infinity™ — Professional Chart Theme
 // ---------------------------------------------------------------------------
 // Use these constants when defining recharts <Line>/<Area>/<Bar> components
 // for consistent brand-aligned colors across every chart.

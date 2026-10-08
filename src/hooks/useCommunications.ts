@@ -2,9 +2,9 @@
 import { isLocalOrgId } from '@/lib/gstpilot-data/local-workspace';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Gmail & WhatsApp Business Automation™ — useCommunications() Hook
+// VEYRO Gmail & WhatsApp Business Automation™ — useCommunications() Hook
 //
-// The SINGLE hook every GSTPilot component uses to interact with communication
+// The SINGLE hook every VEYRO component uses to interact with communication
 // data. Mirrors the useBanking() pattern:
 //
 //   • READ — real-time subscriptions to connections + messages + schedules

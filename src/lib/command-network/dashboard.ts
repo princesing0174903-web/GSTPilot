@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Enterprise Command Network™ (GLOBAL COMMAND CENTER)
+// VEYRO Infinity™ — Enterprise Command Network™ (GLOBAL COMMAND CENTER)
 // Orchestrator — single entry point that bundles all 16 subsystems into one
 // CommandDashboard for the Executive API: /api/command/dashboard
 //

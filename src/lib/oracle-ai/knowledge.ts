@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI™ Intelligence Layer — Knowledge Base
+// VEYRO AI™ Intelligence Layer — Knowledge Base
 //
 // CRUD for the curated firm knowledge base. Entries are categorized (GST,
 // compliance, finance, operations, legal, general), tagged, source-attributed,

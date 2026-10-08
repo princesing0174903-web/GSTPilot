@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
+// VEYRO Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
 // Data Observability™ — freshness / completeness / volume / schema drift / pipeline
 // health for every catalog dataset. Real measurements, no mocks.
 // ═══════════════════════════════════════════════════════════════════════════════

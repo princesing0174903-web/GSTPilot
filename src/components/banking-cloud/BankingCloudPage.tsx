@@ -417,7 +417,7 @@ export default function BankingCloudPage() {
           <div>
             <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-foreground md:text-2xl">
               <span className="accent-gradient-soft rounded-lg px-2 py-0.5 text-sm font-bold accent-text">BANKING CLOUD™</span>
-              GSTPilot Banking Cloud
+              VEYRO Banking Cloud
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Connect. Execute. Automate. Scale. · Live banking, UPI &amp; Account Aggregator — the financial brain.
@@ -564,8 +564,8 @@ export default function BankingCloudPage() {
             </div>
             <Separator className="my-3 bg-white/[0.06]" />
             <p className="text-center text-xs text-muted-foreground">
-              <span className="accent-text font-semibold">GSTPilot Banking Cloud™</span> — Connect. Execute. Automate. Scale.{' '}
-              <span className="text-muted-foreground/70">The Financial Brain of India™</span>
+              <span className="accent-text font-semibold">VEYRO Banking Cloud™</span> — Connect. Execute. Automate. Scale.{' '}
+              <span className="text-muted-foreground/70">The AI Operating System for Business™</span>
             </p>
           </CardContent>
         </Card>
@@ -1032,7 +1032,7 @@ function CashFlowModule({ cashflow }: { cashflow: CashFlowSummary | null }) {
                 <div className="text-xs text-muted-foreground">
                   Projected shortfall of <span className="font-semibold text-red-300">{formatINR(cashflow.shortageAmount)}</span>
                   {cashflow.shortageDate && <> on <span className="font-semibold">{new Date(cashflow.shortageDate).toLocaleDateString('en-IN')}</span></>}.
-                  GSTPilot has scheduled collections recovery to bridge the gap.
+                  VEYRO has scheduled collections recovery to bridge the gap.
                 </div>
               </div>
             </div>

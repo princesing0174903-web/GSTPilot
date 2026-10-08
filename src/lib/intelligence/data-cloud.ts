@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Business Data Cloud™ — Anonymized Data Contribution Layer
+// VEYRO Global Business Data Cloud™ — Anonymized Data Contribution Layer
 // Phase 7 — Subsystem 1
 // ═══════════════════════════════════════════════════════════════════════════════
 //

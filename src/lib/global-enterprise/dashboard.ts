@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO™ — Global Enterprise Operating System™
 // Global Executive Dashboard™ — Aggregates REAL production data into one real-time
 // view: revenue by country, profit by country, compliance score, cash worldwide,
 // tax exposure, currency exposure, payroll costs, country performance, regional

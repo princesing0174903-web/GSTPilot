@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Structured Query API
+// VEYRO AI™ — Structured Query API
 // POST /api/oracle/query
 //
 // Detects whether a free-text message matches a structured query intent

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Live Dashboard Update (PROMPT 5)
+// VEYRO AI™ — Live Dashboard Update (PROMPT 5)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // After Oracle finishes answering, the right-side Insights panel auto-updates

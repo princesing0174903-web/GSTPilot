@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — V13 Workspace Store (Zustand)
+// VEYRO AI™ — V13 Workspace Store (Zustand)
 //
 // Manages the Perplexity-style full-screen Oracle workspace:
 //   • `active`        — whether the workspace is open (replaces dashboard)

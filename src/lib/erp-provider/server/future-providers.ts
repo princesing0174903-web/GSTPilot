@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Future (Real-API) Providers
+// VEYRO ERP & Accounting Integrations™ — Future (Real-API) Providers
 //
 // Placeholder implementations of the four real ERP backends. Every method
 // throws NotImplementedError so the app fails loudly if someone switches

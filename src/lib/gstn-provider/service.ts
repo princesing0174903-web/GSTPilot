@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Client-Safe Firestore Service
+// VEYRO Real GSTN Integration™ — Client-Safe Firestore Service
 //
 // The single entry point for all GST Firestore operations on the CLIENT side.
 // Mirrors the invoice-engine service pattern:

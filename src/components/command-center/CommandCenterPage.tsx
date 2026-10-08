@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot™ — COMMAND CENTER™
+// VEYRO™ — COMMAND CENTER™
 // The Ultimate Layer of the Autonomous Business Operating System™
 //
 // "Good Morning 👋" Morning Brief + 5 Vitals + Today's Actions +
@@ -401,7 +401,7 @@ export default function CommandCenterPage() {
             </h2>
             <p className="mt-0.5 text-xs text-white/40">8 specialist AI agents collaborating on your business 24/7</p>
           </div>
-          <p className="text-xs text-white/40">All agents collaborate through the Oracle brain</p>
+          <p className="text-xs text-white/40">All agents collaborate through VEYRO AI brain</p>
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">

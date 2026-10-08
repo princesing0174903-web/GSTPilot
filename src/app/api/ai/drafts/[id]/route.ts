@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Draft CRUD
+// VEYRO AI Production Pipeline™ — Draft CRUD
 //
 // PATCH  /api/ai/drafts/[id]   { organizationId, ...patch }  — autosave update
 // DELETE /api/ai/drafts/[id]   { organizationId }            — permanent delete

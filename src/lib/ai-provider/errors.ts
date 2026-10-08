@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Typed Errors
+// VEYRO AI Oracle™ & AI CFO™ — Typed Errors
 //
 // Every failure mode in the AI flow has a dedicated error class so callers
 // can branch on `instanceof` and show the right UX (retry vs re-auth vs

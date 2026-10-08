@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — API Key Encryption (SERVER-ONLY)
+// VEYRO AI Production Pipeline™ — API Key Encryption (SERVER-ONLY)
 //
 // AES-256-GCM authenticated encryption for AI provider API keys (OpenAI,
 // Anthropic, etc.). Same security contract as the GSTN crypto module.

@@ -1,4 +1,4 @@
-// GET /api/oracle-brain/dashboard — Full Oracle Intelligence executive dashboard.
+// GET /api/oracle-brain/dashboard — Full VEYRO AI Intelligence executive dashboard.
 // Combines Memory + Graph + Timeline + Reasoning + KPIs in one payload.
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';

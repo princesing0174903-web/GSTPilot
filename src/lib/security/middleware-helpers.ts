@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Enterprise Security Layer: Server-Side Middleware Helpers
+// VEYRO — Enterprise Security Layer: Server-Side Middleware Helpers
 //
 // These helpers run in Next.js route handlers (Node.js runtime — NOT Edge).
 // They provide the `requireAuth` / `requireOrg` / `requireRole` /
@@ -46,7 +46,7 @@ import type {
 // ─── Super-admin resolution ──────────────────────────────────────────────────
 
 /**
- * Returns `true` if the verified user is a GSTPilot staff super-admin.
+ * Returns `true` if the verified user is a VEYRO staff super-admin.
  *
  * A user is a super-admin if EITHER:
  *   1. The Firebase Auth custom claim `{ superAdmin: true }` is set on their

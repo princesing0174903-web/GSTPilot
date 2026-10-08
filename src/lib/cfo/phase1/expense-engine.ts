@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — EXPENSE ENGINE
+// VEYRO AI CFO™ Phase 1 — EXPENSE ENGINE
 //
 // Real expense analytics from connected Expense + PurchaseBill data:
 //   • Categorize: Payroll, GST, Rent, Utilities, Software, Marketing, Travel,

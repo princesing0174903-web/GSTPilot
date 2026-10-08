@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
+// VEYRO Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
 // Data Governance™ — classification / retention / access / masking / residency /
 // compliance frameworks (GDPR / SOC2 / ISO 27001). Real policies, real coverage.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -42,8 +42,8 @@ import { useOrg } from '@/contexts/OrgContext';
  *   Step 4 — Activate Oracle → status = Active
  *
  * On activation, persists an `oracleActivated` flag on the organisation via
- * PUT /api/firm-settings so the Home page (and Ask Oracle card) reflect the
- * new state. The flag gates the Ask Oracle advanced-analysis entry.
+ * PUT /api/firm-settings so the Home page (and Ask VEYRO AI card) reflect the
+ * new state. The flag gates the Ask VEYRO AI advanced-analysis entry.
  */
 
 interface ActivateOracleWizardProps {

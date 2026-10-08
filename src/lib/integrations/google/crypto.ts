@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Google Workspace Token Crypto (server-only)
+// VEYRO™ — Google Workspace Token Crypto (server-only)
 // ═══════════════════════════════════════════════════════════════════════════════
 // AES-256-GCM encryption for Google OAuth tokens at rest.
 //

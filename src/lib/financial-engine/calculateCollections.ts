@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Collections & Receivables Calculator
+// VEYRO — Collections & Receivables Calculator
 //
 // Collection Rate = (Total Collected / Total Invoiced) * 100
 // Receivables = Sum of outstanding invoice balances

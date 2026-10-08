@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Intelligence™ — "The AI CFO" landing page (Obsidian Infinity™)
+// VEYRO Intelligence™ — "The AI CFO" landing page (Obsidian Infinity™)
 //
 // A calm, premium, Perplexity-for-business entry point:
 //   1. Header — "Your AI Chief Financial Officer."
@@ -155,7 +155,7 @@ export function IntelligencePage() {
             type="button"
             onClick={handleSubmit}
             disabled={!query.trim()}
-            aria-label="Ask Oracle"
+            aria-label="Ask VEYRO AI"
             className={cn(
               'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl',
               'accent-gradient text-white',

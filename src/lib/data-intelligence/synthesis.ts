@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™
+// VEYRO Infinity™ — Global Data Intelligence Cloud™
 // Subsystem 10: AI Knowledge Synthesis™ — synthesize executive intelligence from
 // REAL aggregated data. Produces narrative summaries for CEO / CFO / COO / Board
 // audiences covering executive, financial, operational, risk, growth and
@@ -121,7 +121,7 @@ async function synthesizeExecutiveSummary(): Promise<SynthesisInput> {
     totalRevenue,
   )} and total GST liability of ${formatINR(
     totalGSTLiability,
-  )}. ${openRisks} compliance risk(s) remain open and ${activeExecutions} execution job(s) are currently running. The Oracle continues to monitor all connected systems and is positioned to surface the next set of recommended actions as new data lands.`;
+  )}. ${openRisks} compliance risk(s) remain open and ${activeExecutions} execution job(s) are currently running. VEYRO AI continues to monitor all connected systems and is positioned to surface the next set of recommended actions as new data lands.`;
 
   const keyPoints = [
     `Total clients: ${totalClients}`,

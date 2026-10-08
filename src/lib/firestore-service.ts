@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Firebase Workflow Engine
+// VEYRO — Firebase Workflow Engine
 // Every write operation triggers automatic side effects:
 //   - Activity logging
 //   - Counter updates
@@ -41,7 +41,7 @@ function generateId(): string {
 
 function generateARN(): string {
   // DEPRECATED: This function is kept for reference but must NEVER be called.
-  // GSTPilot never simulates successful government filings. A real ARN can
+  // VEYRO never simulates successful government filings. A real ARN can
   // only come from the official GSTN API via the provider's fileReturn method.
   throw new Error(
     'generateARN() must never be called. Real ARNs come from GSTN only. ' +
@@ -470,7 +470,7 @@ export async function updateReturnStatus(returnId: string, status: FilingStatus,
 
 export async function fileReturn(returnId: string): Promise<string> {
   // CRITICAL: This function MUST NOT fake the ARN.
-  // GSTPilot never simulates successful government filings.
+  // VEYRO never simulates successful government filings.
   //
   // The filing is delegated to the server-side API route which:
   //   1. Checks for an active GSTN connection (Firestore gst_connections)

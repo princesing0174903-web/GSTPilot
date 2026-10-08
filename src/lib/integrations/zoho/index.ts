@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Zoho Books Integration (barrel)
+// VEYRO™ — Zoho Books Integration (barrel)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Single import surface for everything Zoho Books. Server-only — these modules
 // touch the database + process.env, so they MUST NOT be imported from client

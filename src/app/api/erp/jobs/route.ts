@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Sync Jobs List API
+// VEYRO ERP & Accounting Integrations™ — Sync Jobs List API
 //
 // GET /api/erp/jobs?organizationId=xxx&limit=20
 //   Returns: { ok: true, jobs: ERPSyncJob[] }

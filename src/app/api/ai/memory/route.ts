@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — AI Memory API
+// VEYRO AI Oracle™ & AI CFO™ — AI Memory API
 //
 // GET /api/ai/memory?orgId=&type=insight|recommendation|alert|analysis|...
 //

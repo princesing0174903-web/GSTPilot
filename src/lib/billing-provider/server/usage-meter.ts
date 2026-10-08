@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Usage Meter (SERVER-ONLY, pure functions)
+// VEYRO Billing™ — Usage Meter (SERVER-ONLY, pure functions)
 //
 // Pure functions for usage tracking:
 //   • Create UsageRecord docs (one per event)

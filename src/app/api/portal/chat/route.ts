@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Client Portal AI Chat Assistant
+// VEYRO — Client Portal AI Chat Assistant
 // Uses z-ai-web-dev-sdk LLM to answer client questions about GST filings
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server';
 import ZAI from 'z-ai-web-dev-sdk';
 
-const SYSTEM_PROMPT = `You are the AI assistant for GSTPilot's Client Portal. You help clients of a Chartered Accountancy firm understand their GST compliance, returns, invoices, and documents.
+const SYSTEM_PROMPT = `You are the AI assistant for VEYRO's Client Portal. You help clients of a Chartered Accountancy firm understand their GST compliance, returns, invoices, and documents.
 
 You can:
 - Explain GST return statuses and what they mean

@@ -5,7 +5,7 @@
 // into an entire AI Company — a hierarchy of specialized AI Employees that
 // continuously collaborate to run the business.
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 //
 // Pure server-side TypeScript. No mock values. No placeholders. Every value
 // flows from REAL connected business data via AI CEO™, AI CFO™, Digital Twin™,
@@ -13,8 +13,8 @@
 // Graph™.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const WORKFORCE_TAGLINE = 'GSTPilot AI Workforce™ — Don\'t just use AI. Build an AI Company.';
-export const WORKFORCE_FOUNDER = 'GSTPilot Oracle™ was founded, developed and owned by Prince Singh.';
+export const WORKFORCE_TAGLINE = 'VEYRO AI Workforce™ — Don\'t just use AI. Build an AI Company.';
+export const WORKFORCE_FOUNDER = 'VEYRO AI™ was founded, developed and owned by Prince Singh.';
 
 // ─── 1. AI ORGANIZATION™ — ROLES & HIERARCHY ────────────────────────────────
 

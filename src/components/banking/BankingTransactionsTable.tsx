@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Transactions Table (Premium Enterprise Edition)
+// VEYRO Banking Module™ — Transactions Table (Premium Enterprise Edition)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Professional data table for banking transactions with:

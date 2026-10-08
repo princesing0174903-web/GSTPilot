@@ -8,7 +8,7 @@ import type { LucideIcon } from 'lucide-react';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot Home — Professional Empty State
+ * VEYRO Home — Professional Empty State
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * Every empty state on the Home page uses this component. Per the stabilization
@@ -24,7 +24,7 @@ import type { LucideIcon } from 'lucide-react';
  * Used by:
  *   - KPI cards (Revenue / Cash / Compliance) when no underlying data exists
  *   - AI Recommendations when Oracle has no business data yet
- *   - Ask Oracle when Oracle is not activated
+ *   - Ask VEYRO AI when Oracle is not activated
  *   - Timeline / Team / Tasks when collections are empty
  */
 

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Intent Classifier
+// VEYRO AI™ — Intent Classifier
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Classifies the user's question into an IntentId using keyword matching.

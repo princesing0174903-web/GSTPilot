@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — useZohoBooks() Hook
+// VEYRO Infinity™ — useZohoBooks() Hook
 // ═══════════════════════════════════════════════════════════════════════════════
 // Client-side hook for the Zoho Books integration.
 //

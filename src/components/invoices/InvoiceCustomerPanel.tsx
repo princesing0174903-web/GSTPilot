@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — InvoiceCustomerPanel
+// VEYRO™ — InvoiceCustomerPanel
 //
 // The LEFT card of the rebuilt Invoice Builder. Shows every customer field
 // clearly without scrolling:

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Notifications Sheet
+// VEYRO™ — Notifications Sheet
 //
 // Stabilization wiring: the top-bar Bell + FloatingDock Notifications buttons
 // previously toggled an orphaned `notificationsOpen` state that rendered nothing.

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Execution Engine™ — MODULE 2: Decision Engine™
+// VEYRO Execution Engine™ — MODULE 2: Decision Engine™
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pipeline:  Event → Rules → AI Reasoning → Priority → Action Plan

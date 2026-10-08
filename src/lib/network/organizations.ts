@@ -583,7 +583,7 @@ export async function resolveOrgId(explicit?: string): Promise<{ orgId: string; 
   }
   // Fall back to the anchor host org
   const host = await db.platformOrganization.findFirst({ orderBy: { createdAt: 'asc' } });
-  return { orgId: host?.id ?? 'anchor', hostNodeName: host?.name ?? 'GSTPilot Network' };
+  return { orgId: host?.id ?? 'anchor', hostNodeName: host?.name ?? 'VEYRO Network' };
 }
 
 // ─── Node ID resolver ────────────────────────────────────────────────────────

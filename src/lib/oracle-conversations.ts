@@ -1,12 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Conversation Store
+// VEYRO AI™ — Conversation Store
 //
 // Multi-conversation store backed by Zustand + localStorage persistence.
 // Each conversation is a sequence of {role, content} messages with an id and
 // created/updated timestamps. Follow-up suggestions are stored per-turn so
 // they can be displayed under the answer even after a reload.
 //
-// The store is UI-only. Streaming happens in the OracleChat component, which
+// The store is UI-only. Streaming happens in VEYRO AIChat component, which
 // calls `appendDelta` as tokens arrive and `finalizeMessage` once the stream
 // closes.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -213,7 +213,7 @@ interface OracleConversationsState {
   conversations: Conversation[]
   activeId: string | null
   /**
-   * A prompt pre-filled from another page (e.g. the "Ask Oracle" button on
+   * A prompt pre-filled from another page (e.g. the "Ask VEYRO AI" button on
    * the Invoices / Customers / Returns workspaces). When OracleChat mounts
    * or when this is set while it is already mounted, it consumes the value
    * via `consumePendingPrompt()` and populates the composer with it.

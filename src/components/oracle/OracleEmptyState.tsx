@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle — Empty State (ChatGPT-Enterprise redesign)
+// VEYRO AI — Empty State (ChatGPT-Enterprise redesign)
 //
 // Centered "How can I help with your business today?" headline (text-display)
 // + 4 suggestion cards in a 2x2 grid. Deep dark bg (#0A0A0A), #111111 cards,

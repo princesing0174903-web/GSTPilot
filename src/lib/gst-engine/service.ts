@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot GST Return Engine™ — Service Layer
+// VEYRO GST Return Engine™ — Service Layer
 //
 // The single entry point for all GST transaction operations. Every function is:
 //   • Multi-tenant — filters on `organizationId`, never crosses org boundaries

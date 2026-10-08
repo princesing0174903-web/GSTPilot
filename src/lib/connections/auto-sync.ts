@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 1 — Auto Sync Engine™
+// VEYRO Infinity™ — PHASE 2B · MODULE 1 — Auto Sync Engine™
 //
 // Always-on background sync orchestrator. Responsibilities:
 //   • Auto-sync every N minutes (default 15) per connection

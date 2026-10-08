@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useGSTpilotExpenses() Hook
+// VEYRO — useGSTpilotExpenses() Hook
 //
 // Real-time expenses list (onSnapshot) + CRUD + search.
 //

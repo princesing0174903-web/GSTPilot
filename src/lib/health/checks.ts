@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Health, Monitoring & Alerting — Individual Checks
+// VEYRO™ — Health, Monitoring & Alerting — Individual Checks
 //
 // SERVER-ONLY. Each check returns a HealthCheck object — NEVER throws. A failed
 // check is part of the system's observed reality, not an exceptional control

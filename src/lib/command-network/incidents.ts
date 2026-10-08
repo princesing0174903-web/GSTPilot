@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Enterprise Incident Center™
+// VEYRO Infinity™ — Enterprise Incident Center™
 //
 // Automatically detect: production failures, revenue drops, compliance violations,
 // cyber threats, connector outages, payment failures, execution failures,

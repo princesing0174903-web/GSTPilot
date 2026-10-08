@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — PermissionGate
+// VEYRO — PermissionGate
 //
 // A full-PAGE permission gate (distinct from RequirePermission, which hides
 // inline UI). When the current user lacks the required permission, this

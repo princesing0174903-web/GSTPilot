@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Structured Query Types (CLIENT-SAFE, no Prisma import)
+// VEYRO AI™ — Structured Query Types (CLIENT-SAFE, no Prisma import)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // This module contains ONLY TypeScript types — no runtime imports — so it is

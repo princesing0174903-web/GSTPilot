@@ -2,11 +2,11 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot Oracle™ — Premium Floating Launcher (SINGLE, CANONICAL)
+ * VEYRO AI™ — Premium Floating Launcher (SINGLE, CANONICAL)
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * This is the ONE and ONLY Oracle floating button in the entire application.
- * It replaces the old GSTPilotIntelligence orb (which opened a popup panel)
+ * It replaces the old VEYROIntelligence orb (which opened a popup panel)
  * and the FloatingDock's Oracle button.
  *
  * BEHAVIOR:
@@ -42,7 +42,7 @@ export function OracleLauncher() {
 
   // Don't render on the /oracle page or the /?view=oracle-brain dashboard view
   // (no need for the launcher when the user is already on Oracle — it would
-  // overlap the Oracle composer's send button at the bottom-right).
+  // overlap VEYRO AI composer's send button at the bottom-right).
   if (typeof window !== 'undefined') {
     const { pathname, search } = window.location;
     if (pathname.startsWith('/oracle')) return null;
@@ -85,7 +85,7 @@ export function OracleLauncher() {
             }
           }}
           onClick={handleClick}
-          aria-label="Open GSTPilot Oracle"
+          aria-label="Open VEYRO AI"
           className={cn(
             'accent-gradient fixed bottom-6 right-6 z-50 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full shadow-lg',
             navigating && 'ring-2 ring-[#2563EB]/50',
@@ -145,7 +145,7 @@ export function OracleLauncher() {
         </motion.button>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={8}>
-        GSTPilot Oracle™ — Open
+        VEYRO AI™ — Open
       </TooltipContent>
     </Tooltip>
   );

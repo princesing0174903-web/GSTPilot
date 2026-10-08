@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Data Intelligence Cloud™ — Shared Helpers
+// VEYRO Data Intelligence Cloud™ — Shared Helpers
 // Safe DB access + JSON parsing + in-memory cache used by all subsystems.
 // ═══════════════════════════════════════════════════════════════════════════════
 

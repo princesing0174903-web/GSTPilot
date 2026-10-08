@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Live Collaboration Network™
+// VEYRO Infinity™ — Live Collaboration Network™
 //
 // Coordinate: executives, departments, countries, partners, vendors, customers,
 // AI agents. Every conversation becomes part of Oracle Memory™.

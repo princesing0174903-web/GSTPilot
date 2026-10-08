@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Speech-to-Text API (Phase 2 — Human Intelligence™)
+// VEYRO AI™ — Speech-to-Text API (Phase 2 — Human Intelligence™)
 //
 // Transcribes the user's spoken audio so they can *talk* to Oracle — like
 // ChatGPT Voice / Claude Voice. Supports Indian English, Hindi, and other

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — useGoogleWorkspace() Hook
+// VEYRO Infinity™ — useGoogleWorkspace() Hook
 // ═══════════════════════════════════════════════════════════════════════════════
 // Client-side hook for the Google Workspace integration.
 //

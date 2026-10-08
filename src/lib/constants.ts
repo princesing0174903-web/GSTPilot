@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Shared Constants
+// VEYRO — Shared Constants
 // Single source of truth for Indian states, GST sections, filing dates, etc.
 // ═══════════════════════════════════════════════════════════════════════════════
 

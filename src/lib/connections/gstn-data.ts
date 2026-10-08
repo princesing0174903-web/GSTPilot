@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GSTN Data Generator
+// VEYRO Infinity™ — GSTN Data Generator
 //
 // REAL IMPLEMENTATION PENDING — returns null. GSTN API integration is a future
 // enterprise phase.

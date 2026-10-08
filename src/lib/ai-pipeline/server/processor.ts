@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Background Processor (SERVER-ONLY)
+// VEYRO AI Production Pipeline™ — Background Processor (SERVER-ONLY)
 //
 // The production job worker. Picks up queued jobs, runs them through the
 // active IGenProvider, persists progress + output to Firestore, handles

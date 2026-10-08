@@ -1,15 +1,15 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Premium AI Identity Avatar
+// VEYRO AI™ — Premium AI Identity Avatar
 //
 // A world-class animated Oracle logo — inspired by Claude, Perplexity,
 // ChatGPT, and Grok. Premium, futuristic, enterprise-grade, minimal, elegant.
 //
-// States (tied to the Oracle reasoning pipeline):
+// States (tied to VEYRO AI reasoning pipeline):
 //   idle      → subtle breathing glow, logo static (ready, waiting)
 //   thinking  → orbit ring spinning, particles traveling, energy ring pulsing,
-//               logo gently rotating, glow bright (Oracle is thinking…)
+//               logo gently rotating, glow bright (VEYRO AI is thinking…)
 //   streaming → orbit ring slow, particles slow, logo gently rotating slowly,
 //               glow active (calm, intelligent — text is being generated)
 //   done      → rotation stops smoothly, subtle breathing glow remains
@@ -20,7 +20,7 @@
 //   • 60 FPS — no layout-affecting properties animated
 //   • Dark + Light mode aware (glow adapts)
 //   • Responsive (size prop scales everything)
-//   • Uses the official Oracle logo image only — no GSTPilot branding
+//   • Uses the official Oracle logo image only — no VEYRO branding
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -165,7 +165,7 @@ export function OracleLogo({
   withGlow = true,
   withOrbit = true,
   withEnergyRing = true,
-  label = 'Oracle AI',
+  label = 'VEYRO AI',
   className,
 }: OracleLogoProps) {
   const cfg = useMemo(() => stateConfig(state), [state]);
@@ -177,7 +177,7 @@ export function OracleLogo({
   const particleSize = Math.max(3, size * 0.1);
   const logoInset = size * 0.18; // padding so logo sits inside the ring
 
-  // Particle colors — complement the Oracle logo's blue/purple palette
+  // Particle colors — complement VEYRO AI logo's blue/purple palette
   const particleColors = ['#3B82F6', '#3B82F6', '#60a5fa'];
   const particles = useMemo(() => {
     if (cfg.particleCount === 0) return [];
@@ -290,7 +290,7 @@ export function OracleLogo({
           />
         ))}
 
-      {/* ─── The Oracle logo (center, gently rotating when active) ─── */}
+      {/* ─── VEYRO AI logo (center, gently rotating when active) ─── */}
       <motion.div
         className="relative z-10 overflow-hidden rounded-full"
         style={{
@@ -308,7 +308,7 @@ export function OracleLogo({
       >
         <img
           src="/oracle-logo.png"
-          alt="Oracle AI"
+          alt="VEYRO AI"
           className="h-full w-full object-cover"
           draggable={false}
         />
@@ -335,9 +335,9 @@ export function OracleLogo({
 // Shows the premium animated Oracle logo + rotating status messages.
 
 const THINKING_MESSAGES = [
-  'Oracle is thinking…',
+  'VEYRO AI is thinking…',
   'Analyzing your business…',
-  'Processing with Oracle Intelligence…',
+  'Processing with VEYRO AI Intelligence…',
 ];
 
 export interface OracleThinkingIndicatorProps {

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Enterprise Organization Audit Log Service
+// VEYRO — Enterprise Organization Audit Log Service
 //
 // Org-scoped audit trail stored in Firestore (`organization_audit_logs`).
 // Every privileged action (member invite/remove/role-change, settings update,

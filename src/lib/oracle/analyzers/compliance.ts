@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Compliance Analyzer
+// VEYRO AI Intelligence Engine — Compliance Analyzer
 //
 // Inspects GST returns, ITC position, and notices to detect compliance risks
 // (pending returns, ITC mismatches, open notices) and opportunities (ITC

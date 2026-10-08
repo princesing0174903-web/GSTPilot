@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — GST Calculation Engine
+// VEYRO™ — GST Calculation Engine
 //
 // Pure functions for Indian GST computation. No I/O, no side effects.
 // Used by the invoice service to derive every money field server-side

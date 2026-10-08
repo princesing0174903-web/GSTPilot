@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books API Client
+// VEYRO — Zoho Books API Client
 //
 // Thin `fetch` wrapper for the Zoho Books REST API with:
 //   • Automatic Bearer-token injection

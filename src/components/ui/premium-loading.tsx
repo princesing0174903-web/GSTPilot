@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Premium Loading System
+// VEYRO — Premium Loading System
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Design philosophy:
@@ -22,11 +22,11 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 
 // ────────────────────────────────────────────────────────────────────────────────
-// GSTPilotLogoMark — inlined logo SVG (matches /public/logo.svg)
+// VEYROLogoMark — inlined logo SVG (matches /public/logo.svg)
 // Inlined so this file is fully self-contained: no <img src="/logo.svg"> fetch
 // during the brief loading window, no FOUC.
 // ────────────────────────────────────────────────────────────────────────────────
-const GSTPilotLogoMark = React.memo(function GSTPilotLogoMark({
+const VEYROLogoMark = React.memo(function VEYROLogoMark({
   className,
   size = 80,
 }: {
@@ -34,61 +34,7 @@ const GSTPilotLogoMark = React.memo(function GSTPilotLogoMark({
   size?: number;
 }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 512 512"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient id="gstpilot-prem-grad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#22D3EE" />
-          <stop offset="100%" stopColor="#3B82F6" />
-        </linearGradient>
-        <linearGradient id="gstpilot-prem-grad-2" x1="512" y1="0" x2="0" y2="512" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#8B5CF6" />
-          <stop offset="100%" stopColor="#3B82F6" />
-        </linearGradient>
-      </defs>
-      <rect width="512" height="512" rx="112" fill="#000000" />
-      <circle
-        cx="256"
-        cy="256"
-        r="150"
-        stroke="url(#gstpilot-prem-grad)"
-        strokeWidth="36"
-        fill="none"
-        strokeLinecap="round"
-        strokeDasharray="708 942"
-        transform="rotate(135 256 256)"
-      />
-      <path
-        d="M256 176 L256 256 L336 256"
-        stroke="url(#gstpilot-prem-grad)"
-        strokeWidth="36"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      <path
-        d="M336 196 L376 156 L336 116"
-        stroke="url(#gstpilot-prem-grad-2)"
-        strokeWidth="30"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      <path
-        d="M376 156 L420 156"
-        stroke="url(#gstpilot-prem-grad-2)"
-        strokeWidth="30"
-        strokeLinecap="round"
-        fill="none"
-      />
-    </svg>
+    <img src="/icon.png" width={size} height={size} alt="VEYRO" className={className} style={{ objectFit: "contain" }} />
   );
 });
 
@@ -130,14 +76,14 @@ function PremiumLoadingStyles() {
 // Renders synchronously (no useEffect) so `next/dynamic({ loading: () => ... })`
 // can use it directly.
 // ────────────────────────────────────────────────────────────────────────────────
-export function PremiumGlobalLoading({ label = 'GSTPilot' }: { label?: string }) {
+export function PremiumGlobalLoading({ label = 'VEYRO' }: { label?: string }) {
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center"
       style={{ background: '#000' }}
       role="status"
       aria-live="polite"
-      aria-label="Loading GSTPilot"
+      aria-label="Loading VEYRO"
     >
       <PremiumLoadingStyles />
 
@@ -180,7 +126,7 @@ export function PremiumGlobalLoading({ label = 'GSTPilot' }: { label?: string })
             willChange: 'transform, opacity',
           }}
         >
-          <GSTPilotLogoMark size={80} />
+          <VEYROLogoMark size={80} />
         </div>
 
         {/* Wordmark */}
@@ -278,7 +224,7 @@ export function PremiumPageLoader({
           willChange: 'transform, opacity',
         }}
       >
-        <GSTPilotLogoMark size={48} />
+        <VEYROLogoMark size={48} />
         {label && (
           <span
             style={{

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Receipts API
+// VEYRO Billing™ — Receipts API
 //
 // GET /api/billing/receipts?organizationId=xxx
 //   Returns: { ok: true, receipts: Receipt[] }

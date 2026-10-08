@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Main Engine Orchestrator
+// VEYRO AI CFO™ — Main Engine Orchestrator
 //
 // The single entry point: askCFO(message, history, ctx) → CFOAnswer
 //

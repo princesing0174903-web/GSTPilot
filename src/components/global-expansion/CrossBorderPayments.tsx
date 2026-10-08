@@ -4,7 +4,7 @@
 // GSTPILOT INFINITY™ — PHASE 14: CROSS-BORDER PAYMENTS™ (Billion-Dollar Grade)
 //
 // Live cross-border payment operations: every wire, collection, payout, and
-// reconciliation flowing between GSTPilot's 10 country entities. Real data from
+// reconciliation flowing between VEYRO's 10 country entities. Real data from
 // /lib/global/data.ts — no mocks, no API calls, no Math.random.
 //
 //   • 5 KPI tiles              — Total / Inbound / Outbound volume, fees, avg FX

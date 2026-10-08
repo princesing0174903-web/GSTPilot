@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Root Page
+// VEYRO — Root Page
 // ═══════════════════════════════════════════════════════════════════════════════
 // Full SaaS application entry point.
 //
@@ -14,7 +14,7 @@
 // AppRouter are themselves lazy, so they only compile when the user
 // authenticates and navigates to them.
 //
-// The Oracle Preview (lightweight, Firebase-free Oracle-only entry) remains
+// VEYRO AI Preview (lightweight, Firebase-free Oracle-only entry) remains
 // available as a separate development route at `/oracle-preview`.
 // ═══════════════════════════════════════════════════════════════════════════════
 

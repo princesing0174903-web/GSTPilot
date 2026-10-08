@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Pipeline Types (PROMPT 5: Autonomous AI CFO)
+// VEYRO AI™ — Pipeline Types (PROMPT 5: Autonomous AI CFO)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Every user message follows this pipeline:

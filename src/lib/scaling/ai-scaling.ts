@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — AI Scaling Layer (SERVER-ONLY)
+// VEYRO™ — AI Scaling Layer (SERVER-ONLY)
 //
-// A scaling layer on top of the Oracle AI orchestrator
+// A scaling layer on top of the VEYRO AI orchestrator
 // (`@/lib/ai-provider/server/orchestrator`). Provides:
 //   • AIContextCache — LRU + TTL cache keyed by SHA-256(prompt + contextFingerprint)
 //   • aiRequestQueue — in-memory priority queue (max 500)

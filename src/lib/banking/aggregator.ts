@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Cloud™ — Module 4: Account Aggregator Cloud
+// VEYRO Banking Cloud™ — Module 4: Account Aggregator Cloud
 // Multi-bank connection, financial data aggregation, consent management.
 // Deterministic engine. No LLM.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -50,7 +50,7 @@ export async function getAAState(): Promise<AAState> {
       const granted = a.lastSyncAt || a.createdAt;
       return {
         id: 'consent_' + a.id.slice(-6),
-        fiu: 'GSTPilot-AA-FIU',
+        fiu: 'VEYRO-AA-FIU',
         fip: AA_FIPS[a.bankName] || 'GENERIC-FIP',
         status: (expiry.getTime() > Date.now() ? 'granted' : 'expired') as AAConsent['status'],
         grantedAt: granted.toISOString(),

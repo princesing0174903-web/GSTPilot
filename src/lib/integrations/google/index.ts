@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Google Workspace Integration (barrel)
+// VEYRO™ — Google Workspace Integration (barrel)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Single import surface for everything Google Workspace. Server-only — these
 // modules touch the database + process.env, so they MUST NOT be imported from

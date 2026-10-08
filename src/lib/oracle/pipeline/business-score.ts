@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Business Score Engine (PROMPT 5)
+// VEYRO AI™ — Business Score Engine (PROMPT 5)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Always calculates 8 dimensions of business health + an overall score:

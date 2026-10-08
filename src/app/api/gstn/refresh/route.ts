@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — Refresh Session API
+// VEYRO Real GSTN Integration™ — Refresh Session API
 //
 // POST /api/gstn/refresh
 //   Body: { organizationId, encryptedSession }

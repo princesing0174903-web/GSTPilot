@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Executive Daily Briefing (Upgraded)
+// VEYRO AI™ — Executive Daily Briefing (Upgraded)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Upgrades the existing daily-briefing.ts into a true executive briefing with
@@ -494,7 +494,7 @@ function buildHeadline(ctx: UnifiedOracleContext): string {
   }
   if (parts.length === 0) {
     return ctx.isDemoWorkspace
-      ? 'Welcome to GSTPilot. Add invoices, customers, or connect integrations to see your business status here.'
+      ? 'Welcome to VEYRO. Add invoices, customers, or connect integrations to see your business status here.'
       : 'No business data yet. Once you add invoices or connect integrations, your daily briefing will appear here.';
   }
   const trend = ctx.revenue.trend.direction !== 'flat'

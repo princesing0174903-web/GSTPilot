@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Workflow Engine: Planner
+// VEYRO AI™ — Workflow Engine: Planner
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Converts a natural-language user message into a WorkflowPlan.
@@ -83,7 +83,7 @@ async function llmBuildPlan(input: WorkflowPlannerInput): Promise<WorkflowPlan |
   const templates = listTemplateSummaries();
   const templateList = templates.map(t => `- ${t.id}: ${t.name} — ${t.description}`).join('\n');
 
-  const systemPrompt = `You are the GSTPilot Oracle Workflow Planner. Your job is to convert a user's natural-language request into a multi-step WorkflowPlan that chains existing Action Engine actions.
+  const systemPrompt = `You are the VEYRO AI Workflow Planner. Your job is to convert a user's natural-language request into a multi-step WorkflowPlan that chains existing Action Engine actions.
 
 Available Action Engine actions (you may ONLY use these as step.actionName):
 ${actionList}

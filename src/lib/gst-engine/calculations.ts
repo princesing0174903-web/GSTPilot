@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot GST Return Engine™ — Calculation Engine
+// VEYRO GST Return Engine™ — Calculation Engine
 //
 // Pure functions for all GST math. NO Firebase imports, NO client-only code.
 // Safe to import from both client and server.

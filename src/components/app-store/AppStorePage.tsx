@@ -68,8 +68,8 @@ const ALL_APPS: StoreApp[] = [
     rating: 4.8, reviews: 1243, downloads: 45200,
     price: '₹499/mo', priceValue: 499, isFree: false,
     shortDescription: 'AI-powered tax query resolution with 98.5% accuracy on Indian tax law.',
-    fullDescription: 'TaxBot Pro is India\'s most advanced AI tax assistant, trained on over 2 lakh tax judgments, circulars, and notifications. It provides instant answers to complex tax queries with source citations, making it indispensable for CAs and tax professionals.\n\nBuilt on a custom fine-tuned LLM specifically for Indian taxation, TaxBot Pro understands context across direct and indirect taxes. It can draft responses to notices, suggest tax-saving strategies, and even predict likely audit areas.\n\nWith seamless integration into GSTPilot, all query responses are automatically saved to your client files for complete audit trails.',
-    features: ['Trained on 2L+ Indian tax judgments', 'Instant query resolution with citations', 'Notice response drafting', 'Tax planning suggestions', 'GSTPilot workspace integration'],
+    fullDescription: 'TaxBot Pro is India\'s most advanced AI tax assistant, trained on over 2 lakh tax judgments, circulars, and notifications. It provides instant answers to complex tax queries with source citations, making it indispensable for CAs and tax professionals.\n\nBuilt on a custom fine-tuned LLM specifically for Indian taxation, TaxBot Pro understands context across direct and indirect taxes. It can draft responses to notices, suggest tax-saving strategies, and even predict likely audit areas.\n\nWith seamless integration into VEYRO, all query responses are automatically saved to your client files for complete audit trails.',
+    features: ['Trained on 2L+ Indian tax judgments', 'Instant query resolution with citations', 'Notice response drafting', 'Tax planning suggestions', 'VEYRO workspace integration'],
     iconColor: 'bg-emerald-500', iconInitials: 'TB',
     version: '3.2.1', lastUpdated: '28 Feb 2026',
     permissions: ['Client data read', 'Document generation', 'Email notifications'],
@@ -271,7 +271,7 @@ const ALL_APPS: StoreApp[] = [
     rating: 4.6, reviews: 1102, downloads: 35600,
     price: '₹299/mo', priceValue: 299, isFree: false,
     shortDescription: 'Real-time bank feed integration with 200+ Indian banks and auto-reconciliation.',
-    fullDescription: 'BankSync connects to over 200 Indian banks including SBI, HDFC, ICICI, and all cooperative banks. It provides real-time transaction feeds, auto-categorization, and seamless reconciliation with your GSTPilot books.\n\nSmart matching algorithms handle one-to-many and many-to-one matches with 95%+ accuracy.',
+    fullDescription: 'BankSync connects to over 200 Indian banks including SBI, HDFC, ICICI, and all cooperative banks. It provides real-time transaction feeds, auto-categorization, and seamless reconciliation with your VEYRO books.\n\nSmart matching algorithms handle one-to-many and many-to-one matches with 95%+ accuracy.',
     features: ['200+ Indian bank connections', 'Real-time transaction feeds', 'Auto-categorization', 'Smart reconciliation matching', 'Multi-account dashboard'],
     iconColor: 'bg-blue-500', iconInitials: 'BS',
     version: '4.2.0', lastUpdated: '27 Feb 2026',
@@ -430,7 +430,7 @@ const ALL_APPS: StoreApp[] = [
     rating: 4.1, reviews: 345, downloads: 11200,
     price: '₹399/mo', priceValue: 399, isFree: false,
     shortDescription: 'Automated ROC filing — annual returns, charge creation, and company law compliance.',
-    fullDescription: 'ROC Filer handles all MCA/ROC filings including annual returns (AOC-4, MGT-7), charge creation/satisfaction, director KYC, and company incorporation forms.\n\nPre-filling from your GSTPilot data reduces manual entry by 80%, and built-in validation ensures error-free submissions.',
+    fullDescription: 'ROC Filer handles all MCA/ROC filings including annual returns (AOC-4, MGT-7), charge creation/satisfaction, director KYC, and company incorporation forms.\n\nPre-filling from your VEYRO data reduces manual entry by 80%, and built-in validation ensures error-free submissions.',
     features: ['AOC-4 & MGT-7 auto-fill', 'Charge creation/filing', 'Director KYC management', 'Form validation engine', 'MCA portal integration'],
     iconColor: 'bg-red-500', iconInitials: 'RF',
     version: '2.7.0', lastUpdated: '21 Feb 2026',
@@ -568,13 +568,13 @@ const ALL_APPS: StoreApp[] = [
     rating: 4.6, reviews: 890, downloads: 26400,
     price: '₹349/mo', priceValue: 349, isFree: false,
     shortDescription: 'Client relationship management built for Indian CA and tax firms.',
-    fullDescription: 'ClientHub is a CRM specifically designed for Indian CA and tax firms. It tracks client interactions, manages service agreements, handles renewal reminders, and provides a 360-degree client view integrated with GSTPilot data.\n\nAutomated communication workflows ensure no client is neglected, and the referral tracking system helps grow your practice.',
+    fullDescription: 'ClientHub is a CRM specifically designed for Indian CA and tax firms. It tracks client interactions, manages service agreements, handles renewal reminders, and provides a 360-degree client view integrated with VEYRO data.\n\nAutomated communication workflows ensure no client is neglected, and the referral tracking system helps grow your practice.',
     features: ['360-degree client view', 'Service agreement tracking', 'Renewal automation', 'Referral tracking', 'Communication workflows'],
     iconColor: 'bg-emerald-700', iconInitials: 'CH',
     version: '3.4.0', lastUpdated: '24 Feb 2026',
     permissions: ['Client data read/write', 'Email integration', 'Calendar access'],
     appReviews: [
-      { id: 'r68', userName: 'Arvind Kejriwal', rating: 5, date: '22 Feb 2026', comment: 'Best CRM for CAs. Period. The GSTPilot integration is seamless.' },
+      { id: 'r68', userName: 'Arvind Kejriwal', rating: 5, date: '22 Feb 2026', comment: 'Best CRM for CAs. Period. The VEYRO integration is seamless.' },
       { id: 'r69', userName: 'Supriya Pathak', rating: 4, date: '15 Feb 2026', comment: 'Great for managing 200+ clients. Renewal tracking alone justifies the price.' },
       { id: 'r70', userName: 'Farhan Sheikh', rating: 5, date: '8 Feb 2026', comment: 'Referral tracking helped us grow 25% this year. Excellent tool.' },
     ],
@@ -681,17 +681,17 @@ const ALL_APPS: StoreApp[] = [
 const OFFICIAL_APPS: StoreApp[] = [
   {
     id: 'gstpilot-ai-copilot',
-    name: 'GSTPilot AI Copilot',
-    developer: 'GSTPilot Official',
+    name: 'VEYRO AI Copilot',
+    developer: 'VEYRO Official',
     category: 'AI Agents',
     rating: 4.9, reviews: 2345, downloads: 50000,
     price: 'Free', priceValue: 0, isFree: true,
     shortDescription: 'Your AI-powered business assistant — ask anything about GST, taxes, and compliance.',
-    fullDescription: 'The official GSTPilot AI Copilot is your intelligent business assistant. Ask questions in plain English or Hindi, get instant answers with citations, and automate routine tasks with natural language commands.\n\nDeeply integrated with all GSTPilot modules, it provides contextual assistance across your entire workflow.',
+    fullDescription: 'The official VEYRO AI Copilot is your intelligent business assistant. Ask questions in plain English or Hindi, get instant answers with citations, and automate routine tasks with natural language commands.\n\nDeeply integrated with all VEYRO modules, it provides contextual assistance across your entire workflow.',
     features: ['Natural language queries', 'Hindi & English support', 'Cross-module integration', 'Task automation', 'Context-aware assistance'],
     iconColor: 'bg-emerald-600', iconInitials: 'GP',
     version: '5.0.0', lastUpdated: '28 Feb 2026',
-    permissions: ['All GSTPilot data read', 'Task automation'],
+    permissions: ['All VEYRO data read', 'Task automation'],
     appReviews: [
       { id: 'r81', userName: 'Sunil Goyal', rating: 5, date: '26 Feb 2026', comment: 'The AI Copilot is like having a senior CA available 24/7.' },
       { id: 'r82', userName: 'Kavitha Raman', rating: 5, date: '19 Feb 2026', comment: 'Hindi support is amazing. My team uses it constantly.' },
@@ -700,13 +700,13 @@ const OFFICIAL_APPS: StoreApp[] = [
   },
   {
     id: 'gstpilot-recon',
-    name: 'GSTPilot Reconcile',
-    developer: 'GSTPilot Official',
+    name: 'VEYRO Reconcile',
+    developer: 'VEYRO Official',
     category: 'Tax Automation',
     rating: 4.8, reviews: 1876, downloads: 45000,
     price: 'Free', priceValue: 0, isFree: true,
     shortDescription: 'Official 2A/2B reconciliation engine with AI-powered mismatch resolution.',
-    fullDescription: 'The official GSTPilot reconciliation engine provides best-in-class GSTR-2A/2B matching with AI-powered suggestions for resolving mismatches. It handles ITC claims, tracks supplier compliance, and generates reconciliation reports.\n\nBuilt directly into the GSTPilot core for the fastest and most reliable reconciliation experience.',
+    fullDescription: 'The official VEYRO reconciliation engine provides best-in-class GSTR-2A/2B matching with AI-powered suggestions for resolving mismatches. It handles ITC claims, tracks supplier compliance, and generates reconciliation reports.\n\nBuilt directly into the VEYRO core for the fastest and most reliable reconciliation experience.',
     features: ['Best-in-class matching', 'AI mismatch resolution', 'ITC claim tracking', 'Supplier compliance monitoring', 'Auto-reconciliation rules'],
     iconColor: 'bg-emerald-500', iconInitials: 'GR',
     version: '4.2.0', lastUpdated: '27 Feb 2026',
@@ -719,13 +719,13 @@ const OFFICIAL_APPS: StoreApp[] = [
   },
   {
     id: 'gstpilot-notice',
-    name: 'GSTPilot Notices',
-    developer: 'GSTPilot Official',
+    name: 'VEYRO Notices',
+    developer: 'VEYRO Official',
     category: 'Legal',
     rating: 4.7, reviews: 1234, downloads: 38000,
     price: 'Free', priceValue: 0, isFree: true,
     shortDescription: 'Official notice management — auto-detection, response drafting, and tracking.',
-    fullDescription: 'The official GSTPilot notice management system automatically detects notices from GST and IT portals, categorizes them by urgency, and provides AI-assisted response drafting.\n\nTrack all notices from receipt to resolution with complete audit trails and deadline management.',
+    fullDescription: 'The official VEYRO notice management system automatically detects notices from GST and IT portals, categorizes them by urgency, and provides AI-assisted response drafting.\n\nTrack all notices from receipt to resolution with complete audit trails and deadline management.',
     features: ['Auto-notice detection', 'Urgency classification', 'AI response drafting', 'Deadline management', 'Complete audit trail'],
     iconColor: 'bg-emerald-400', iconInitials: 'GN',
     version: '3.8.0', lastUpdated: '26 Feb 2026',
@@ -738,13 +738,13 @@ const OFFICIAL_APPS: StoreApp[] = [
   },
   {
     id: 'gstpilot-docs',
-    name: 'GSTPilot Docs',
-    developer: 'GSTPilot Official',
+    name: 'VEYRO Docs',
+    developer: 'VEYRO Official',
     category: 'AI Agents',
     rating: 4.8, reviews: 1567, downloads: 42000,
     price: 'Free', priceValue: 0, isFree: true,
     shortDescription: 'Official document intelligence — OCR, extraction, and auto-categorization.',
-    fullDescription: 'The official GSTPilot document intelligence system provides OCR, data extraction, and auto-categorization for all your business documents. It reads invoices, receipts, bank statements, and compliance documents with 99%+ accuracy.\n\nExtracted data flows directly into GSTPilot workflows, eliminating manual data entry entirely.',
+    fullDescription: 'The official VEYRO document intelligence system provides OCR, data extraction, and auto-categorization for all your business documents. It reads invoices, receipts, bank statements, and compliance documents with 99%+ accuracy.\n\nExtracted data flows directly into VEYRO workflows, eliminating manual data entry entirely.',
     features: ['99%+ OCR accuracy', 'Multi-format support', 'Auto-categorization', 'Workflow integration', 'Batch processing'],
     iconColor: 'bg-emerald-700', iconInitials: 'GD',
     version: '4.0.0', lastUpdated: '28 Feb 2026',
@@ -1240,12 +1240,12 @@ function FeaturedBrowseTab({ apps, onAppClick }: { apps: StoreApp[]; onAppClick:
         </div>
       </div>
 
-      {/* Made by GSTPilot */}
+      {/* Made by VEYRO */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-sm text-slate-900 flex items-center gap-2">
             <Shield className="h-4 w-4 text-emerald-500" />
-            Made by GSTPilot
+            Made by VEYRO
           </h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1267,7 +1267,7 @@ function FeaturedBrowseTab({ apps, onAppClick }: { apps: StoreApp[]; onAppClick:
                         <h3 className="font-semibold text-sm text-slate-900 truncate">{app.name}</h3>
                         <CheckCircle className="h-3 w-3 text-emerald-500 shrink-0" />
                       </div>
-                      <p className="text-xs text-slate-500">GSTPilot Official</p>
+                      <p className="text-xs text-slate-500">VEYRO Official</p>
                     </div>
                   </div>
                   <p className="text-xs text-slate-500 line-clamp-2">{app.shortDescription}</p>
@@ -1487,7 +1487,7 @@ function MyAppsTab({ apps, onAppClick }: { apps: StoreApp[]; onAppClick: (app: S
           </div>
           <div>
             <h3 className="font-bold">You Earn 70% of All App Revenue</h3>
-            <p className="text-sm text-emerald-100">As a GSTPilot partner, you earn a 70% revenue share from every app you build and publish.</p>
+            <p className="text-sm text-emerald-100">As a VEYRO partner, you earn a 70% revenue share from every app you build and publish.</p>
           </div>
         </div>
       </div>
@@ -1817,7 +1817,7 @@ function DeveloperPortalTab() {
                 'Must comply with Indian data protection regulations',
                 'Secure API communication (HTTPS only)',
                 'Proper error handling and user feedback',
-                'GSTPilot API usage within rate limits',
+                'VEYRO API usage within rate limits',
                 'No unauthorized data collection or sharing',
               ].map((guideline, i) => (
                 <div key={i} className="flex items-start gap-2">

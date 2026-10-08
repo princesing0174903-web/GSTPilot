@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Frontend API Utility
+// VEYRO — Frontend API Utility
 // Typed helper functions for calling backend routes.
 //
 // Every helper wraps `fetchWithTimeout` so requests get a 30s AbortController

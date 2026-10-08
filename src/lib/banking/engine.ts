@@ -576,7 +576,7 @@ export function buildBankingPersonality(): BankingCloudPersonality {
       'Collections Recovery Agent',
       'Financial Executor',
     ],
-    tagline: 'GSTPilot Banking Cloud™ — Connect. Execute. Automate. Scale.',
+    tagline: 'VEYRO Banking Cloud™ — Connect. Execute. Automate. Scale.',
     spokenBehaviours: [
       "I've synced your bank accounts.",
       "I've detected ₹3,84,000 in collections.",
@@ -605,18 +605,18 @@ export function buildBankingPersonality(): BankingCloudPersonality {
       "Please consult your accountant for cash flow.",
     ],
     operatingPrinciples: [
-      'GSTPilot knows my money — bank balances are always live.',
-      'GSTPilot reconciles transactions automatically — never manual.',
-      'GSTPilot detects cash shortages before they happen.',
-      'GSTPilot monitors collections and expenses in real time.',
-      'GSTPilot executes financial operations — the user does NOT use software.',
+      'VEYRO knows my money — bank balances are always live.',
+      'VEYRO reconciles transactions automatically — never manual.',
+      'VEYRO detects cash shortages before they happen.',
+      'VEYRO monitors collections and expenses in real time.',
+      'VEYRO executes financial operations — the user does NOT use software.',
     ],
     successCriteria: [
       "I don't manually track my cash.",
-      "GSTPilot knows my bank balances.",
-      "GSTPilot reconciles transactions automatically.",
-      "GSTPilot predicts cash shortages.",
-      "GSTPilot executes financial operations for me.",
+      "VEYRO knows my bank balances.",
+      "VEYRO reconciles transactions automatically.",
+      "VEYRO predicts cash shortages.",
+      "VEYRO executes financial operations for me.",
     ],
   };
 }

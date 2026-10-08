@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Copilot Modes
+// VEYRO AI™ — Copilot Modes
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Oracle can be invoked in different "modes" — each mode shapes the system

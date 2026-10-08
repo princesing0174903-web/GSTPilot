@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Downgrade API
+// VEYRO Billing™ — Downgrade API
 // POST /api/billing/downgrade
 //   Body: { organizationId, subscriptionId, newPlanId, applyImmediately? }
 // ═══════════════════════════════════════════════════════════════════════════════

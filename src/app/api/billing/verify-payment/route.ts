@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Verify Payment API
+// VEYRO Billing™ — Verify Payment API
 //
 // POST /api/billing/verify-payment
 //   Body: { organizationId, sessionId }

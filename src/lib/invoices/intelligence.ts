@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Module 10: Revenue Intelligence™
+// VEYRO Real Invoice Engine™ — Module 10: Revenue Intelligence™
 // Pipeline: Invoices → Payments → Expenses → Receivables → Forecast → Profitability
 // Deterministic forecast engine. Reads Prisma. No LLM. Persists RevenueForecast.
 // ═══════════════════════════════════════════════════════════════════════════════

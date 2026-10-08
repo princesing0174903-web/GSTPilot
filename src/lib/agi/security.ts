@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — INFINITY AGI™ — AGI SECURITY™
+// VEYRO Infinity™ — INFINITY AGI™ — AGI SECURITY™
 //
 // RBAC, organization isolation, human approval, explainable reasoning, audit
 // trails, cryptographic decision signing, zero-trust validation, emergency

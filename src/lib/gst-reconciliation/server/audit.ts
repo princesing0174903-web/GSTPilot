@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GST Audit Logger (SERVER-ONLY)
+// VEYRO — GST Audit Logger (SERVER-ONLY)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Lightweight audit trail for every GST operation. Writes to the existing

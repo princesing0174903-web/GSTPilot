@@ -1,13 +1,13 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Professional UI Rebuild
+// VEYRO AI™ — Professional UI Rebuild
 // A FULL-SCREEN, SOLID workspace. No popup. No overlay. No transparency.
 //
 // Layout (Claude 70% · ChatGPT 20% · Perplexity 10%):
 //   ┌──────────┬────────────────┬───────────────────────────────┐
 //   │  Rail    │  History       │  Chat                         │
-//   │  (icons) │  New Chat      │  GSTPilot Oracle™             │
+//   │  (icons) │  New Chat      │  VEYRO AI™             │
 //   │  Home    │  Today         │  Ask anything. Run everything.│
 //   │  Intel   │  Yesterday     │  ───────────────────────────  │
 //   │  Auto    │  Prev 7 days   │  Messages (scroll)            │
@@ -194,7 +194,7 @@ export function OracleWorkspace({
   const [activeLanguage, setActiveLanguage] = useState<OracleMessage['language']>('english');
   // Mobile: history drawer open state
   const [historyOpen, setHistoryOpen] = useState(false);
-  // Oracle AI Evolution panel (Upgrade Phase 1) — overlay, not a nav change
+  // VEYRO AI Evolution panel (Upgrade Phase 1) — overlay, not a nav change
   const [evolutionOpen, setEvolutionOpen] = useState(false);
   // Oracle CFO production layer — approval requests keyed by assistant message ID
   // (Upgrade Phase 1: Production Functionality). Rendered inline below each
@@ -476,7 +476,7 @@ export function OracleWorkspace({
             organizationId: orgId,
             firmId: orgCtx.organization?.firmId ?? null,
             userId: userId ?? 'preview-user',
-            userEmail: userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@gstpilot.in` : 'preview@gstpilot.in',
+            userEmail: userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@veyro.com` : 'preview@veyro.com',
             userRole: role,
           }),
         });
@@ -521,7 +521,7 @@ export function OracleWorkspace({
           emotion: 'success',
           createdAt: new Date().toISOString(),
           streaming: false,
-          followUps: ['Who founded GSTPilot?', 'What can Oracle do?', 'GST kya hota hai?'],
+          followUps: ['Who founded VEYRO?', 'What can Oracle do?', 'GST kya hota hai?'],
         };
         setMessages((prev) => [...prev, userMsg, oracleMsg]);
         setLastEmotion('success');
@@ -647,7 +647,7 @@ export function OracleWorkspace({
               // The server emits this as the FIRST SSE event when the user's
               // message matches a structured-query intent. Store it on the
               // oracle message so it can be rendered above the text answer
-              // by the OracleMessageBubble component.
+              // by VEYRO AIMessageBubble component.
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === oracleId
@@ -831,7 +831,7 @@ export function OracleWorkspace({
             className="flex h-full w-14 shrink-0 flex-col items-center gap-1 border-r py-3 md:w-16 md:gap-1.5 lg:w-56 lg:items-stretch lg:px-2.5"
             style={{ borderColor: 'rgba(255,255,255,0.08)' }}
           >
-            {/* Brand — Official GSTPilot™ logo */}
+            {/* Brand — Official VEYRO™ logo */}
             <div className="brand-logo mb-2 flex items-center justify-center gap-2 px-1 lg:mb-4 lg:px-2">
               <BrandLogo variant="icon" theme="dark" size={28} disableGlow />
               <div className="hidden lg:block">
@@ -839,7 +839,7 @@ export function OracleWorkspace({
                   className="text-[13px] font-semibold leading-tight tracking-tight text-white"
                   style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif' }}
                 >
-                  GSTPilot<span style={{ color: '#3B82F6' }}>™</span>
+                  VEYRO<span style={{ color: '#3B82F6' }}>™</span>
                 </p>
                 <p className="text-[10px] font-bold uppercase leading-tight tracking-wider text-white/50">
                   Oracle
@@ -889,7 +889,7 @@ export function OracleWorkspace({
             {/* Footer mini brand */}
             <div className="mt-auto hidden px-2 pb-1 lg:block">
               <p className="text-[9px] font-medium uppercase tracking-wider text-white/30">
-                The Financial Brain
+                The AI Operating System
               </p>
               <p className="text-[9px] font-medium uppercase tracking-wider text-white/30">
                 of India
@@ -995,7 +995,7 @@ export function OracleWorkspace({
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-0.5">
                   <span className="text-sm font-semibold tracking-tight text-white md:text-base">
-                    GSTPilot Oracle
+                    VEYRO AI
                   </span>
                   <sup className="text-[9px] font-medium text-white/40">™</sup>
                 </div>
@@ -1033,7 +1033,7 @@ export function OracleWorkspace({
                 type="button"
                 onClick={() => setEvolutionOpen(true)}
                 className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-emerald-400/80 transition-colors hover:bg-emerald-500/10 hover:text-emerald-400"
-                title="Oracle AI Evolution — Forecasting, Specialists, Diagnostics, Accuracy"
+                title="VEYRO AI Evolution — Forecasting, Specialists, Diagnostics, Accuracy"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Evolution</span>
@@ -1082,7 +1082,7 @@ export function OracleWorkspace({
                       communicationUserMessage={communicationUserMessages[m.id]}
                       cfoOrgId={orgCtx.organization?.id ?? 'preview-org'}
                       cfoUserId={userId ?? 'preview-user'}
-                      cfoUserEmail={userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@gstpilot.in` : 'preview@gstpilot.in'}
+                      cfoUserEmail={userName ? `${userName.toLowerCase().replace(/\s+/g, '.')}@veyro.com` : 'preview@veyro.com'}
                       cfoFirmName={firmName}
                       cfoGstin={gstin}
                       onCfoExecuted={() => {
@@ -1142,7 +1142,7 @@ export function OracleWorkspace({
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
                     rows={1}
-                    placeholder="Ask Oracle anything — GST, returns, cash flow, ITC…"
+                    placeholder="Ask VEYRO AI anything — GST, returns, cash flow, ITC…"
                     className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent px-2.5 py-1.5 text-sm leading-relaxed text-white placeholder:text-white/40 focus:outline-none custom-scrollbar"
                     disabled={isStreaming}
                   />
@@ -1179,7 +1179,7 @@ export function OracleWorkspace({
                     Oracle replies in your language · Enter to send · Shift+Enter for newline
                   </span>
                   <span className="hidden sm:inline">
-                    GSTPilot Oracle™ · Founded by Prince Singh
+                    VEYRO AI™ · Founded by Prince Singh
                   </span>
                 </div>
               </div>
@@ -1200,7 +1200,7 @@ export function OracleWorkspace({
             )}
           </AnimatePresence>
 
-          {/* Oracle AI Evolution panel (Upgrade Phase 1) — overlay triggered from header */}
+          {/* VEYRO AI Evolution panel (Upgrade Phase 1) — overlay triggered from header */}
           <OracleEvolutionPanel open={evolutionOpen} onClose={() => setEvolutionOpen(false)} />
         </motion.div>
       )}
@@ -1297,7 +1297,7 @@ function OracleAvatar({
           : 'bg-emerald-400';
   return (
     <div className="relative shrink-0">
-      <OracleLogo size={size} state={logoState} withGlow withOrbit withEnergyRing label="Oracle AI" />
+      <OracleLogo size={size} state={logoState} withGlow withOrbit withEnergyRing label="VEYRO AI" />
       <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
         {(state === 'speaking' || isStreaming) && (
           <span className={cn('absolute inline-flex h-full w-full animate-ping rounded-full opacity-75', dotColor)} />
@@ -1380,7 +1380,7 @@ function MessageBubble({
           withGlow
           withOrbit={message.streaming}
           withEnergyRing
-          label="Oracle AI"
+          label="VEYRO AI"
         />
       </div>
 
@@ -1484,13 +1484,13 @@ function MessageBubble({
             organizationId={cfoOrgId ?? 'preview-org'}
             firmId={null}
             userId={cfoUserId ?? 'preview-user'}
-            userEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
+            userEmail={cfoUserEmail ?? 'preview@veyro.com'}
             sellerDetails={{
-              tradeName: cfoFirmName ?? 'GSTPilot',
+              tradeName: cfoFirmName ?? 'VEYRO',
               gstin: cfoGstin ?? '',
               state: null,
               stateCode: cfoGstin ? cfoGstin.slice(0, 2) : null,
-              email: cfoUserEmail ?? 'preview@gstpilot.in',
+              email: cfoUserEmail ?? 'preview@veyro.com',
             }}
           />
         )}
@@ -1506,7 +1506,7 @@ function MessageBubble({
             organizationId={cfoOrgId ?? 'preview-org'}
             firmId={null}
             userId={cfoUserId ?? 'preview-user'}
-            userEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
+            userEmail={cfoUserEmail ?? 'preview@veyro.com'}
           />
         )}
         {/* ─── Upgrade Phase 1.4: Production Email & WhatsApp Execution ──
@@ -1523,9 +1523,9 @@ function MessageBubble({
             organizationId={cfoOrgId ?? 'preview-org'}
             firmId={null}
             userId={cfoUserId ?? 'preview-user'}
-            userEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
-            sellerName={cfoFirmName ?? 'GSTPilot'}
-            sellerEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
+            userEmail={cfoUserEmail ?? 'preview@veyro.com'}
+            sellerName={cfoFirmName ?? 'VEYRO'}
+            sellerEmail={cfoUserEmail ?? 'preview@veyro.com'}
           />
         )}
         {!message.streaming && !invoiceUserMessage && !paymentLinkUserMessage && !communicationUserMessage && cfoApprovals && cfoApprovals.length > 0 && (
@@ -1533,7 +1533,7 @@ function MessageBubble({
             approvalRequests={cfoApprovals}
             organizationId={cfoOrgId ?? 'preview-org'}
             userId={cfoUserId ?? 'preview-user'}
-            userEmail={cfoUserEmail ?? 'preview@gstpilot.in'}
+            userEmail={cfoUserEmail ?? 'preview@veyro.com'}
             onExecuted={onCfoExecuted}
           />
         )}

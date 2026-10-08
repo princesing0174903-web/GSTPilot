@@ -49,7 +49,7 @@ import { cn } from '@/lib/utils';
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const FOUNDER = 'Prince Singh';
-const TAGLINE = 'GSTPilot Infinity™ — Global Enterprise Operating System';
+const TAGLINE = 'VEYRO™ — Global Enterprise Operating System';
 const SUBTAGLINE = 'The World\'s First Global Enterprise Operating System — One Platform. Every Country. Every Company. Every Decision.';
 
 // ─── Types (mirrors of src/lib/global-enterprise/types.ts) ────────────────────

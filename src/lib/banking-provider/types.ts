@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Type Definitions
+// VEYRO Real Banking Foundation™ — Type Definitions
 //
 // The single source of truth for the banking data model. Every field maps 1:1 to
 // a Firestore collection. All types are PURE (no Firebase imports) so they are

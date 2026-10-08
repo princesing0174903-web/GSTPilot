@@ -670,7 +670,7 @@ function MemoryTab({ summary, recent, onSearch }: {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <div className="flex items-center gap-2 shrink-0">
               <Search className="h-4 w-4 text-amber-300" />
-              <span className="text-sm font-semibold">Search Oracle Memory</span>
+              <span className="text-sm font-semibold">Search VEYRO AI Memory</span>
             </div>
             <Input value={q} onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') doSearch(); }}
@@ -1953,7 +1953,7 @@ export default function AGIDashboardPage() {
       } else {
         toast({
           title: action === 'approve' ? 'Decision approved' : action === 'reject' ? 'Decision rejected' : 'Execution triggered',
-          description: action === 'execute' ? 'Coordinated execution in progress. Audit trail recorded.' : 'Recorded in Oracle Memory for future learning.',
+          description: action === 'execute' ? 'Coordinated execution in progress. Audit trail recorded.' : 'Recorded in VEYRO AI Memory for future learning.',
         });
       }
       fetchDashboard(true);
@@ -2182,7 +2182,7 @@ export default function AGIDashboardPage() {
         <footer className="mt-6 pt-4 border-t border-white/[0.06]">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
             <div>
-              <p className="text-sm font-semibold tracking-tight">GSTPilot Infinity™ — {AGI_TAGLINE}</p>
+              <p className="text-sm font-semibold tracking-tight">VEYRO™ — {AGI_TAGLINE}</p>
               <p className="text-[11px] text-muted-foreground">{AGI_SUBTAGLINE}</p>
               <p className="text-[11px] text-muted-foreground/70">Founder & Owner: {AGI_FOUNDER}</p>
             </div>

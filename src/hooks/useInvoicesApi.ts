@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — useInvoicesApi() Hook  (Prisma-backed tenant-scoped invoices)
+// VEYRO — useInvoicesApi() Hook  (Prisma-backed tenant-scoped invoices)
 //
 // Replaces the Firestore-backed `useFireInvoices()` hook for the Invoice
 // Workspace page. Reads from `GET /api/invoices?cloud=true&organizationId=X`
@@ -12,7 +12,7 @@
 //   The previous implementation used Firestore `onSnapshot` subscriptions that
 //   fail with "Missing or insufficient permissions" when the user is not
 //   Firebase-authenticated. The Prisma REST API uses tenant-scoped queries
-//   (organizationId) and is the production data layer for GSTPilot.
+//   (organizationId) and is the production data layer for VEYRO.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -93,7 +93,7 @@ export interface CreateInvoicePayload {
   recurringCycle?: string;
 }
 
-/** Shape of an Oracle AI insight payload returned by `/api/invoices/[id]/insights`. */
+/** Shape of an VEYRO AI insight payload returned by `/api/invoices/[id]/insights`. */
 export interface InvoiceInsights {
   paymentPrediction: { likelyPayDate: string | null; confidence: number; reasoning: string };
   latePaymentRisk: { level: 'low' | 'medium' | 'high' | 'critical'; score: number; factors: string[] };
@@ -120,7 +120,7 @@ export interface UseInvoicesApiResult {
   markPaid: (id: string, paidAmount?: number, paymentMode?: string, paymentDate?: string) => Promise<ApiInvoice | null>;
   /** Duplicate an invoice via POST /api/invoices/duplicate. */
   duplicateInvoice: (id: string) => Promise<ApiInvoice | null>;
-  /** Fetch Oracle AI insights for an invoice via GET /api/invoices/[id]/insights. */
+  /** Fetch VEYRO AI insights for an invoice via GET /api/invoices/[id]/insights. */
   fetchInsights: (id: string) => Promise<InvoiceInsights | null>;
   /** Send an invoice (email/whatsapp/sms) via POST /api/invoices/send.
    *  Returns the invoice + delivery status (delivered, deliveryNote). */
@@ -435,7 +435,7 @@ export function useInvoicesApi(): UseInvoicesApiResult {
     [orgId],
   );
 
-  // ── Fetch Oracle AI insights (GET /api/invoices/[id]/insights) ──
+  // ── Fetch VEYRO AI insights (GET /api/invoices/[id]/insights) ──
   const fetchInsights = useCallback(
     async (id: string): Promise<InvoiceInsights | null> => {
       if (!orgId) return null;

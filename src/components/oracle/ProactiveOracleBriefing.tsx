@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Proactive Oracle Briefing (Task 12 · Step 3)
+// VEYRO — Proactive Oracle Briefing (Task 12 · Step 3)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Oracle does NOT wait for prompts. Oracle wakes up with knowledge.
@@ -14,10 +14,10 @@
 //   ✓ I auto-matched 54 transactions → [Approve all]
 //
 // The design feels like an intelligent CFO giving a morning brief — NOT a
-// chatbot. No input bar, no "Ask Oracle" prompt. Oracle speaks FIRST.
+// chatbot. No input bar, no "Ask VEYRO AI" prompt. Oracle speaks FIRST.
 //
 // Data source: useOracleDailyBriefing() → /api/oracle/daily-briefing
-// Theme: pure-black GSTPilot dark. Gold/amber Oracle brand. Glass surfaces.
+// Theme: pure-black VEYRO dark. Gold/amber Oracle brand. Glass surfaces.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import React, { useMemo } from 'react';
@@ -364,7 +364,7 @@ function ProactiveOracleBriefingImpl({
             className="gap-1.5 h-7 px-2.5 text-[11px] font-semibold text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
           >
             <Brain className="size-3" />
-            Ask Oracle
+            Ask VEYRO AI
             <ArrowRight className="size-3" />
           </Button>
         </footer>

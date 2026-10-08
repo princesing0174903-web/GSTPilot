@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Action Engine (Autopilot Actions)
+// VEYRO AI™ — Action Engine (Autopilot Actions)
 //
 // Turns Oracle's answers into real, executable actions:
 //   • generate reports
@@ -11,7 +11,7 @@
 //
 // Two responsibilities:
 //   1. detectActions(userMessage, oracleResponse, liveData) — scan the exchange
-//      and propose 0–N actions as cards under the Oracle message.
+//      and propose 0–N actions as cards under VEYRO AI message.
 //   2. executeAction(action) — persist + (where applicable) create real records
 //      (AITask, Notification, ExecutiveReport) so the action is traceable.
 // ═══════════════════════════════════════════════════════════════════════════════

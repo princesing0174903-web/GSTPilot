@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Production Assistant Panel
+// VEYRO AI CFO™ — Production Assistant Panel
 //
 // Renders inline BELOW an Oracle assistant message when the CFO analyze
 // endpoint detects an actionable intent. This is NOT a new page, NOT a

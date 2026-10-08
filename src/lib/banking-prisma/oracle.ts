@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Oracle AI Insights Engine (TASK 12)
+// VEYRO Banking Module™ — Oracle AI Insights Engine (TASK 12)
 //
 // Deterministic heuristics for banking intelligence. SERVER-ONLY.
 // NO LLM in the engine layer — every insight is computed from DB state using

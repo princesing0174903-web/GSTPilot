@@ -79,7 +79,7 @@ export async function ensureDevelopersSeeded(): Promise<void> {
     if (existing > 0) return;
 
     const canonical: Array<{ email: string; name: string; handle: string; tier: DeveloperTier }> = [
-      { email: 'labs@gstpilot.ai', name: 'GSTPilot Labs', handle: 'gstpilot-labs', tier: 'strategic' },
+      { email: 'labs@gstpilot.ai', name: 'VEYRO Labs', handle: 'gstpilot-labs', tier: 'strategic' },
       { email: 'dev@cloudreach.in', name: 'CloudReach Partners', handle: 'cloudreach', tier: 'certified' },
       { email: 'dev@finflow.in', name: 'FinFlow Systems', handle: 'finflow', tier: 'certified' },
       { email: 'dev@peopleworks.in', name: 'PeopleWorks India', handle: 'peopleworks', tier: 'partner' },

@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       fromNodeName: hostNodeName,
       toNodeName: toOrgName,
       relationshipType: body.relationshipType ?? 'partner',
-      message: body.message ?? `Invitation to join the GSTPilot Global Enterprise Network™`,
+      message: body.message ?? `Invitation to join the VEYRO Global Enterprise Network™`,
       initiatedBy: hostNodeName,
     });
 

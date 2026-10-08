@@ -5,7 +5,7 @@
 // ENTERPRISE API GATEWAY™ — 13 Service Domains · 478 Endpoints ·
 //                              48.4B Calls/24h · 99.98% Avg Uptime
 //
-// Single-pane-of-glass console for all 13 GSTPilot service APIs. Each domain
+// Single-pane-of-glass console for all 13 VEYRO service APIs. Each domain
 // renders as a large card with latency / error-rate / uptime telemetry; a
 // sortable leaderboard ranks services by p95 latency; an error-rate heatmap
 // makes degraded services instantly visible.

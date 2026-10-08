@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — REVENUE ENGINE
+// VEYRO AI CFO™ Phase 1 — REVENUE ENGINE
 //
 // Real revenue analytics computed from connected Invoice data:
 //   • Monthly / Quarterly / Yearly revenue with growth %

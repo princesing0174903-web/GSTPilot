@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Cash Flow API (TASK 12)
+// VEYRO Banking Module™ — Cash Flow API (TASK 12)
 //
 // GET /api/banking/cashflow?organizationId=...&period=7d|30d|90d|1y
 //   → getCashFlow(orgId, period)

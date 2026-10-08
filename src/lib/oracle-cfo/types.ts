@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Production Type System
+// VEYRO AI CFO™ — Production Type System
 //
 // Every Oracle response is a structured `CFOAnswer` containing:
 //   • reasoning trace      — the multi-step pipeline that produced the answer

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — GST & ITC Calculator
+// VEYRO — GST & ITC Calculator
 //
 // GST Output Tax = CGST + SGST + IGST + Cess collected on sales invoices
 // GST Input Tax (ITC) = GST paid on purchase bills + claimable GST on expenses

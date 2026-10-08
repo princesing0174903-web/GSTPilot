@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Auto-Reconciliation Engine
+// VEYRO Real Banking Foundation™ — Auto-Reconciliation Engine
 //
 // Matches bank_transactions (from connected bank accounts) against the firm's
 // book entries (invoices, payments, expenses) using a transparent, deterministic

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — /api/scaling/storage-usage
+// VEYRO™ — /api/scaling/storage-usage
 //
 // GET /api/scaling/storage-usage?orgId=...
 //   Returns per-org storage usage: total bytes, file count, and per-category

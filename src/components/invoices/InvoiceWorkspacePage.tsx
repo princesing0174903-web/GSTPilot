@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Invoice Workspace (Billion-Dollar Enterprise Edition)
+// VEYRO — Invoice Workspace (Billion-Dollar Enterprise Edition)
 //
 // A production-grade invoicing surface comparable to Zoho Books / TallyPrime /
 // QuickBooks. Composed entirely from premium sub-components:
@@ -13,7 +13,7 @@
 //   • InvoiceBuilder         — premium Create/Edit dialog with smart GST items
 //   • InvoiceA4Preview       — A4 paper preview (used inside the details Sheet)
 //   • InvoiceDetailsSheet    — slide-over with Overview/Items/GST/Payments/Preview/History
-//   • InvoiceOraclePanel     — Oracle AI insights (payment prediction, risk, fixes)
+//   • InvoiceOraclePanel     — VEYRO AI insights (payment prediction, risk, fixes)
 //   • InvoiceSkeletons       — premium shimmer
 //   • InvoiceEmptyState      — beautiful onboarding empty state
 //   • InvoiceErrorState      — never exposes raw backend errors
@@ -680,7 +680,7 @@ export default function InvoiceWorkspacePage() {
   // ── Loading state ──
   const isLoading = invoicesLoading || clientsLoading;
 
-  // ── Determine the selected invoice for the Oracle panel ──
+  // ── Determine the selected invoice for VEYRO AI panel ──
   const oracleInvoiceId = detailsInvoice?.id ?? null;
 
   // ── Selected client for the details sheet ──
@@ -832,7 +832,7 @@ export default function InvoiceWorkspacePage() {
             </AnimatePresence>
           </div>
 
-          {/* Right column: Oracle AI panel (sticky on desktop) */}
+          {/* Right column: VEYRO AI panel (sticky on desktop) */}
           <aside className="hidden xl:block">
             <div className="sticky top-20 space-y-4">
               {isLoading ? (
@@ -854,7 +854,7 @@ export default function InvoiceWorkspacePage() {
         <div className="px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-2">
             <Sparkles className="h-3 w-3 text-blue-400" />
-            <span>Powered by GSTPilot Infinity™ · Oracle AI™ insights</span>
+            <span>Powered by VEYRO™ · VEYRO AI™ insights</span>
           </div>
           <div className="flex items-center gap-3">
             <button

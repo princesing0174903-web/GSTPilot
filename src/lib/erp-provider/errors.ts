@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Error Hierarchy (CLIENT-SAFE)
+// VEYRO ERP & Accounting Integrations™ — Error Hierarchy (CLIENT-SAFE)
 //
 // A typed error hierarchy so callers can branch on `instanceof` for proper UX.
 // All errors are PURE classes (no Firebase / node:crypto imports) — safe for

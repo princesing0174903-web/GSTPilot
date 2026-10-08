@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — useAIAlerts() Hook
+// VEYRO AI Oracle™ & AI CFO™ — useAIAlerts() Hook
 //
 // Live alerts for the current organization. Alerts are NOT persisted to
 // `ai_memory` by default — they are recomputed live by the orchestrator from

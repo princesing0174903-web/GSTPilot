@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Firestore Scaling Layer (SERVER-ONLY)
+// VEYRO™ — Firestore Scaling Layer (SERVER-ONLY)
 //
 // A collection of scaling helpers for Firestore:
 //   • Deterministic sharding (write-spread for hot documents / counters)

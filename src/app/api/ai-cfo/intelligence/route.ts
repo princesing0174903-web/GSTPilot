@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — FINANCIAL INTELLIGENCE API
+// VEYRO AI CFO™ Phase 1 — FINANCIAL INTELLIGENCE API
 // GET /api/ai-cfo/intelligence
 //
 // Returns the complete Phase 1 Financial Intelligence Bundle:
@@ -17,7 +17,7 @@
 //   • AI CFO Recommendations (with Reason/Impact/Priority/Confidence)
 //
 // No mock data. No placeholder analytics. Everything from connected business data.
-// Tagline: GSTPilot AI CFO™ — Every business deserves a world-class CFO.
+// Tagline: VEYRO AI CFO™ — Every business deserves a world-class CFO.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
       {
         error: 'Failed to compute financial intelligence bundle',
         message: error instanceof Error ? error.message : 'Unknown error',
-        tagline: 'GSTPilot AI CFO™ — Every business deserves a world-class CFO.',
+        tagline: 'VEYRO AI CFO™ — Every business deserves a world-class CFO.',
       },
       { status: 500 },
     );

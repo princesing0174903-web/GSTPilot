@@ -353,7 +353,7 @@ export function ConnectBankModal({
                 <p className="text-[11px] text-blue-300/80 leading-relaxed">
                   After clicking “Connect Bank”, a new tab will open for Setu consent
                   approval. Approve the data-sharing request there, then return to
-                  GSTPilot — your bank connection will complete automatically.
+                  VEYRO — your bank connection will complete automatically.
                 </p>
               </div>
             )}

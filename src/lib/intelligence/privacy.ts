@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Data Intelligence Cloud™ — Privacy & Security Layer
+// VEYRO Global Data Intelligence Cloud™ — Privacy & Security Layer
 // Phase 7 — Security™ subsystem
 // ═══════════════════════════════════════════════════════════════════════════════
 //

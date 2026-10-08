@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Dynamic Recommendations API (PT-1-b)
+// VEYRO AI™ — Dynamic Recommendations API (PT-1-b)
 // GET /api/oracle/recommendations?userId=<firebase_uid>
 //
 // Returns 3-5 actionable recommendations computed dynamically from REAL DB

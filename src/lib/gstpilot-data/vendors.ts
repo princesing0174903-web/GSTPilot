@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Vendors Firestore Service
+// VEYRO™ — Vendors Firestore Service
 //
 // CRUD + real-time subscription for vendor documents at:
 //   organizations/{organizationId}/vendors/{vendorId}

@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Banking Oracle API (TASK 12)
+// VEYRO Banking Module™ — Banking Oracle API (TASK 12)
 //
 // GET /api/banking/oracle?organizationId=...
 //   → getBankingOracleInsights(orgId)
 //
-// Returns the full Oracle AI insights payload (10 sections):
+// Returns the full VEYRO AI insights payload (10 sections):
 //   cashFlowAnalysis, largeWithdrawals, duplicatePayments, gstPaymentReadiness,
 //   collectionEfficiency, unmatchedTransactions, lateCollections,
 //   fraudIndicators, nextMonthPrediction, recommendations.

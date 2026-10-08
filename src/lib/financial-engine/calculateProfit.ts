@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Profit Calculator
+// VEYRO — Profit Calculator
 //
 // Profit = Revenue - Expenses
 // This is the ONLY place in the entire codebase where profit is calculated.

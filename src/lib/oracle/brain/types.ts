@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — AI Business Brain Types (PROMPT 6)
+// VEYRO AI™ — AI Business Brain Types (PROMPT 6)
 //
 // Type definitions for the persistent memory system. These mirror the
 // OracleBrain* Prisma models and are shared by the engine, API routes,

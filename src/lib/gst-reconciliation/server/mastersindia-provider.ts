@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — MastersIndia GSP Provider (SERVER-ONLY)
+// VEYRO — MastersIndia GSP Provider (SERVER-ONLY)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // A REAL production GSP provider implementation that calls the MastersIndia

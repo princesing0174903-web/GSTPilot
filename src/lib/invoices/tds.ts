@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — TDS Cloud™
+// VEYRO Real Invoice Engine™ — TDS Cloud™
 // Tax Deducted at Source section detection, calculation, quarterly roll-ups.
 // Pure TypeScript.
 // ═══════════════════════════════════════════════════════════════════════════════

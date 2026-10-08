@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Cloud™ — Module 8: Payment Intelligence
+// VEYRO Banking Cloud™ — Module 8: Payment Intelligence
 // Payment behaviour, risk scoring, late payer prediction, collection probability.
 // Deterministic engine. No LLM.
 // ═══════════════════════════════════════════════════════════════════════════════

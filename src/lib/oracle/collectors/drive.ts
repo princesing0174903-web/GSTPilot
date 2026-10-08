@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Google Drive Collector
+// VEYRO AI Intelligence Engine — Google Drive Collector
 //
 // Lists recently modified Drive files (app-created only, per the drive.file
 // scope). Classifies by mime type so the productivity analyzer can surface

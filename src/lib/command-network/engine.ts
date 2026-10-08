@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Enterprise Command Engine™ (CORE)
+// VEYRO Infinity™ — Enterprise Command Engine™ (CORE)
 //
 // One global command engine. Every module communicates through it. Oracle™ is
 // the real-time command center of the entire enterprise. The fabric connects:

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Provider Registry (SERVER-ONLY)
+// VEYRO AI Production Pipeline™ — Provider Registry (SERVER-ONLY)
 //
 // The SINGLE switch-point between providers. Today returns MockGenProvider;
 // when AI_PROVIDER=official env var is set, returns FutureOfficialGenProvider.

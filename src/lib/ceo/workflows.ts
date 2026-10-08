@@ -17,7 +17,7 @@
 // Real execution (sending emails, generating PDFs) is wired by the
 // integration layer after approval.
 //
-// Tagline: GSTPilot AI CEO™ — Run Your Business. Not Your Software.
+// Tagline: VEYRO AI CEO™ — Run Your Business. Not Your Software.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type {

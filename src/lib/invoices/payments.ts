@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Payment Execution Engine
+// VEYRO Real Invoice Engine™ — Payment Execution Engine
 // Record, reconcile, and analyze customer/vendor payments. Pure TypeScript.
 // ═══════════════════════════════════════════════════════════════════════════════
 

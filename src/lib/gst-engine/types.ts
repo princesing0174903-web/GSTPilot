@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot GST Return Engine™ — Type Definitions
+// VEYRO GST Return Engine™ — Type Definitions
 //
 // The single source of truth for the GST transaction data model. Every field
 // maps 1:1 to the `gst_transactions` Firestore collection. All types are PURE

@@ -347,7 +347,7 @@ export default function APIPlatformPage() {
                     <Key className="size-8 opacity-50" />
                     <p className="font-medium text-foreground">No API keys yet</p>
                     <p className="text-xs max-w-sm text-center">
-                      Generate your first API key to start integrating with the GSTPilot platform.
+                      Generate your first API key to start integrating with the VEYRO platform.
                       Keys are managed by the backend API gateway.
                     </p>
                   </div>
@@ -518,9 +518,9 @@ export default function APIPlatformPage() {
                 <div className="rounded-lg border bg-slate-950 text-slate-100 p-4 overflow-x-auto">
                   <pre className="text-xs font-mono whitespace-pre">
 {`// JavaScript Example
-import GSTPilot from '@gstpilot/sdk';
+import VEYRO from '@gstpilot/sdk';
 
-const client = new GSTPilot({
+const client = new VEYRO({
   apiKey: 'gpk_live_...',
 });
 
@@ -538,9 +538,9 @@ await client.returns.file({
                 <div className="rounded-lg border bg-slate-950 text-slate-100 p-4 overflow-x-auto">
                   <pre className="text-xs font-mono whitespace-pre">
 {`# Python Example
-from gstpilot import GSTPilotClient
+from gstpilot import VEYROClient
 
-client = GSTPilotClient(
+client = VEYROClient(
     api_key="gpk_live_..."
 )
 

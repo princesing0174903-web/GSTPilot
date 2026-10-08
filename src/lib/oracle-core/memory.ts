@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle Intelligence Core™ — Unified Memory Engine
+// VEYRO AI Intelligence Core™ — Unified Memory Engine
 // Oracle remembers everything. Every module writes here. Everything is searchable.
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -107,7 +107,7 @@ export async function writeMemoryBatch(inputs: WriteMemoryInput[]): Promise<numb
       await writeMemory(input);
       count++;
     } catch (e) {
-      console.warn('[Oracle Memory] batch write failed for one record:', e);
+      console.warn('[VEYRO AI Memory] batch write failed for one record:', e);
     }
   }
   return count;

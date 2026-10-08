@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO™ — Global Enterprise Operating System™
 // Cross-Border Digital Twin™ — Simulates opening a new country, acquiring a company,
 // hiring globally, currency shocks, tax changes, economic downturns, supply chain
 // disruptions, and expansion strategies. Predicts revenue/profit/risk/compliance/ROI.

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Type Definitions
+// VEYRO Real Invoice Engine™ — Type Definitions
 //
 // The single source of truth for the invoice data model. Every field here maps
 // 1:1 to the Firestore `invoices` collection. All calculations (subtotal,

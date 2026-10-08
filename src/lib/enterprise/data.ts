@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Phase 13: Enterprise Collaboration & Multi-Company
+// VEYRO Infinity™ — Phase 13: Enterprise Collaboration & Multi-Company
 // Data Layer — companies, org tree, workflows, roles, notifications, documents
 // ═══════════════════════════════════════════════════════════════════════════════
 

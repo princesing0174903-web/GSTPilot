@@ -401,7 +401,7 @@ export function OnboardingFlow({
             className="text-2xl font-bold tracking-tight text-white"
             style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif' }}
           >
-            Welcome to GSTPilot<span style={{ color: '#22D3EE' }}>™</span>
+            Welcome to VEYRO<span style={{ color: '#22D3EE' }}>™</span>
           </motion.h1>
           <motion.p
             initial={{ y: 20, opacity: 0 }}
@@ -409,7 +409,7 @@ export function OnboardingFlow({
             transition={{ delay: 0.3 }}
             className="text-white/55 mt-2 max-w-sm"
           >
-            The Financial Brain of India™ — let’s set up your workspace in less than 2 minutes.
+            The AI Operating System for Business™ — let’s set up your workspace in less than 2 minutes.
           </motion.p>
           <motion.div
             initial={{ y: 20, opacity: 0 }}
@@ -875,7 +875,7 @@ export function OnboardingFlow({
           <div className="space-y-6">
             {/* Referral Source */}
             <div className="space-y-2">
-              <Label>How did you hear about GSTPilot?</Label>
+              <Label>How did you hear about VEYRO?</Label>
               <Select
                 value={formData.referralSource}
                 onValueChange={(v) => updateField('referralSource', v)}
@@ -895,7 +895,7 @@ export function OnboardingFlow({
 
             {/* Trial Reasons */}
             <div className="space-y-3">
-              <Label>Why are you trying GSTPilot?</Label>
+              <Label>Why are you trying VEYRO?</Label>
               <div className="flex flex-wrap gap-2">
                 {TRIAL_REASONS.map((reason) => (
                   <MultiSelectChip
@@ -959,7 +959,7 @@ export function OnboardingFlow({
           transition={{ delay: 0.2 }}
           className="text-2xl font-bold tracking-tight"
         >
-          Your GSTPilot Workspace Is Ready
+          Your VEYRO Workspace Is Ready
         </motion.h2>
         <motion.p
           initial={{ y: 20, opacity: 0 }}

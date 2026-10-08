@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Refresh API
+// VEYRO Real Banking Foundation™ — Refresh API
 //
 // POST /api/banking/refresh
 //   Body: { encryptedConnection }

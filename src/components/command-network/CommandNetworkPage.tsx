@@ -1413,7 +1413,7 @@ export default function CommandNetworkPage() {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || 'Reject failed');
-      toast({ title: 'Decision rejected', description: 'Rejection recorded in Oracle Memory for future learning.' });
+      toast({ title: 'Decision rejected', description: 'Rejection recorded in VEYRO AI Memory for future learning.' });
       fetchDashboard(true);
     } catch (e) {
       toast({ title: 'Reject failed', description: e instanceof Error ? e.message : 'Error', variant: 'destructive' });
@@ -1713,7 +1713,7 @@ export default function CommandNetworkPage() {
         <footer className="mt-6 pt-4 border-t border-white/[0.06]">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
             <div>
-              <p className="text-sm font-semibold tracking-tight">GSTPilot Infinity™ — {COMMAND_TAGLINE}</p>
+              <p className="text-sm font-semibold tracking-tight">VEYRO™ — {COMMAND_TAGLINE}</p>
               <p className="text-[11px] text-muted-foreground">One Command. Every Team. Entire Enterprise.</p>
               <p className="text-[11px] text-muted-foreground/70">Founder & Owner: {COMMAND_FOUNDER}</p>
             </div>

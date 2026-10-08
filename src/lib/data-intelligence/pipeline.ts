@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
+// VEYRO Infinity™ — Global Data Intelligence Cloud™ (UNIFIED ENTERPRISE DATA BRAIN)
 // Real-Time Data Pipeline™ — streaming / batch / CDC / connector ingestion events.
 // Every ingest, transform, and sync flows through here. Real DB rows. No mocks.
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Customers Sync Panel (Phase 4)
+// VEYRO — Zoho Customers Sync Panel (Phase 4)
 //
 // Premium customer-sync UI inside the Zoho Books integration page. Surfaces:
 //   • "Sync Customers" primary button — pulls every customer from Zoho Books

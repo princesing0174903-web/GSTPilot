@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // GSTPILOT MARKETPLACE™ & APP ECOSYSTEM™ — Data Layer
-// Phase 10: Turn GSTPilot from a SaaS into a Platform.
+// Phase 10: Turn VEYRO from a SaaS into a Platform.
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // ── PRODUCTION SAFETY ──────────────────────────────────────────────────────

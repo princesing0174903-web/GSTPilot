@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — Communication Create API (the THINK step)
+// VEYRO AI CFO™ — Communication Create API (the THINK step)
 //
 // POST /api/oracle/cfo/communicate/create
 //
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     organizationId: String(body.organizationId ?? 'preview-org'),
     firmId: body.firmId ? String(body.firmId) : null,
     userId: String(body.userId ?? 'preview-user'),
-    userEmail: String(body.userEmail ?? 'preview@gstpilot.in'),
+    userEmail: String(body.userEmail ?? 'preview@veyro.com'),
     userRole: (body.userRole as string) ?? 'manager',
   };
 
@@ -63,8 +63,8 @@ export async function POST(request: NextRequest) {
   const orgResult = await requireOrgMembership(uid, orgId0);
   if (orgResult instanceof NextResponse) return orgResult;
 
-  const sellerName: string = String(body.sellerName ?? 'GSTPilot');
-  const sellerEmail: string = String(body.sellerEmail ?? 'noreply@gstpilot.in');
+  const sellerName: string = String(body.sellerName ?? 'VEYRO');
+  const sellerEmail: string = String(body.sellerEmail ?? 'noreply@veyro.com');
 
   try {
     // ── 1. Extract intent ──

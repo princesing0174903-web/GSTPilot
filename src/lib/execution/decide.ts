@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Execution Engine™ — MODULE 3: Decide (Decision Orchestration)
+// VEYRO Execution Engine™ — MODULE 3: Decide (Decision Orchestration)
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // ═══════════════════════════════════════════════════════════════════════════════
 // Sits between think.ts (Decision Engine) and execute.ts (Execution Engine).

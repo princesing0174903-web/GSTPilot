@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Communication Cloud™ — AI Communication Engine™ + Collection Recovery
+// VEYRO Communication Cloud™ — AI Communication Engine™ + Collection Recovery
 //
 // The flagship engine. Implements two workflows:
 //
@@ -369,7 +369,7 @@ export function generateMessage(
   channel: CommunicationChannel,
   data: Record<string, string | number>,
 ): GeneratedMessage {
-  const firmName = (data.firm_name as string) ?? 'GSTPilot';
+  const firmName = (data.firm_name as string) ?? 'VEYRO';
 
   switch (channel) {
     case 'whatsapp': {
@@ -390,8 +390,8 @@ export function generateMessage(
       }
       return {
         channel: 'email',
-        subject: `GSTPilot Notification — ${eventType}`,
-        body: `<p>${String(data.message ?? 'You have a new notification from GSTPilot.')}</p>`,
+        subject: `VEYRO Notification — ${eventType}`,
+        body: `<p>${String(data.message ?? 'You have a new notification from VEYRO.')}</p>`,
         templateName: null,
       };
     }
@@ -400,7 +400,7 @@ export function generateMessage(
         const otp = generateOtp();
         return {
           channel: 'sms',
-          body: `${otp} is your GSTPilot verification code. Valid for 10 minutes. Do not share with anyone. — GSTpilot`,
+          body: `${otp} is your VEYRO verification code. Valid for 10 minutes. Do not share with anyone. — GSTpilot`,
           templateName: 'otp_sms',
         };
       }
@@ -411,7 +411,7 @@ export function generateMessage(
     case 'notification': {
       const notif = buildNotification({
         type: mapEventToNotificationType(eventType),
-        title: data.title as string ?? `GSTPilot Alert — ${eventType}`,
+        title: data.title as string ?? `VEYRO Alert — ${eventType}`,
         message: data.message as string ?? 'You have a new notification.',
       });
       return {
@@ -426,7 +426,7 @@ export function generateMessage(
       // Return a plain-text summary suitable for rendering in those contexts.
       return {
         channel,
-        body: String(data.message ?? `GSTPilot report ready: ${eventType}`),
+        body: String(data.message ?? `VEYRO report ready: ${eventType}`),
         templateName: null,
       };
     }

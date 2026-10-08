@@ -1,4 +1,4 @@
-// GET /api/oracle/dashboard — Oracle Intelligence Core™ unified dashboard
+// GET /api/oracle/dashboard — VEYRO AI Intelligence Core™ unified dashboard
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requireOrgMembership, friendlyApiError } from '@/lib/auth/session';
 import { getOracleDashboard } from '@/lib/oracle-core/orchestrator';

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Typed Errors
+// VEYRO Real Banking Foundation™ — Typed Errors
 //
 // Every failure mode in the banking flow has a dedicated error class so callers
 // can branch on `instanceof` and show the right UX (retry vs re-auth vs

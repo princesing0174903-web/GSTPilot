@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — Single Job
+// VEYRO AI Production Pipeline™ — Single Job
 //
 // GET /api/ai/jobs/[id]?orgId=  — fetch a single job by id
 // ═══════════════════════════════════════════════════════════════════════════════

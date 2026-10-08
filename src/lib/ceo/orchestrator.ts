@@ -17,7 +17,7 @@
 // a partial bundle with empty states so the API never breaks. Every value
 // comes from REAL connected business data.
 //
-// Tagline: "GSTPilot AI CEO™ — Run Your Business. Not Your Software."
+// Tagline: "VEYRO AI CEO™ — Run Your Business. Not Your Software."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { fetchCEOData } from './data';

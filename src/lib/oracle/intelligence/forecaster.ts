@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Intelligence Module: Forecaster
+// VEYRO AI™ — Intelligence Module: Forecaster
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Forecasts future business metrics using REAL historical data only.

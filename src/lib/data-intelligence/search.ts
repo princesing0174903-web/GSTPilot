@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Data Intelligence Cloud™
+// VEYRO Infinity™ — Global Data Intelligence Cloud™
 // Subsystem 9: Enterprise Search™ — unified search across ALL enterprise records.
 // Indexes invoices, clients, employees, payments, bills, filings, memory,
 // knowledge nodes, compliance filings, execution jobs and global entities into a

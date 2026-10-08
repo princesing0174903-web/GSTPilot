@@ -1,10 +1,10 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Workflow UI Cards
+// VEYRO AI™ — Workflow UI Cards
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Two inline cards rendered in the Oracle chat thread for the Autonomous
+// Two inline cards rendered in VEYRO AI chat thread for the Autonomous
 // Workflow Engine (Priority 2):
 //
 //   1. WorkflowPlanCard      — shows the plan (title, category, steps, risk)

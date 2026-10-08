@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — InvoiceLineItems
+// VEYRO™ — InvoiceLineItems
 //
 // Full-width enterprise line-item grid. Built on `.gst-table` so it inherits
 // sticky headers, hover, premium borders automatically.

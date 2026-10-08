@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Centralized Sample Dataset
+// VEYRO — Centralized Sample Dataset
 // Single source of truth for all data across the app.
 // All components read from the Zustand store, which initializes from here.
 // No Fortune 500 companies. Realistic SME data for Indian CA firm clients.

@@ -276,7 +276,7 @@ export function OracleChat() {
             </div>
             <div>
               <h1 className="flex items-center gap-1.5 text-base font-semibold leading-tight text-white">
-                <span className="oracle-gradient-text">Oracle</span>
+                <span className="oracle-gradient-text">VEYRO AI</span>
                 <span className="rounded bg-emerald-400/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-300">
                   AI CFO
                 </span>
@@ -539,7 +539,7 @@ function WelcomeScreen({ onPick }: { onPick: (q: string) => void }) {
           Oracle
         </h1>
         <p className="mb-3 text-sm font-medium uppercase tracking-[0.2em] text-emerald-400/80">
-          The Financial Brain of India
+          The AI Operating System for Business
         </p>
         <p className="max-w-md text-sm leading-relaxed text-zinc-400">
           Your AI Chief Financial Officer. I answer exclusively from your real business data —

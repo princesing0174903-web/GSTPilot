@@ -1,5 +1,5 @@
 /**
- * Oracle AI — chat endpoint (FinOS legacy).
+ * VEYRO AI — chat endpoint (FinOS legacy).
  *
  * Returns an LLM response with real business context sourced from the
  * Business Snapshot service (@/lib/business/snapshot). The snapshot is
@@ -85,7 +85,7 @@ NOTE: These numbers come from the real database. If a value is 0, it means
 there is genuinely no data for that metric — do NOT invent a value.`
 }
 
-const BASE_INSTRUCTIONS = `You are Oracle AI — the chief financial advisor embedded inside GSTPilot FinOS, the AI Financial Operating System for Indian businesses.
+const BASE_INSTRUCTIONS = `You are VEYRO AI — the chief financial advisor embedded inside VEYRO FinOS, the AI Financial Operating System for Indian businesses.
 
 # Your role
 - Be concise, decisive, and finance-literate. Speak like a McKinsey-trained CFO who's also a CA.

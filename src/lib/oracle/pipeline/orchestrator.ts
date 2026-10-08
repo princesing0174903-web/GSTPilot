@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Pipeline Orchestrator (PROMPT 5: Autonomous AI CFO)
+// VEYRO AI™ — Pipeline Orchestrator (PROMPT 5: Autonomous AI CFO)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // The orchestrator implements the full autonomous CFO pipeline:

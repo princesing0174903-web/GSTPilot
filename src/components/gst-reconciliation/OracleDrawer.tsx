@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Premium Oracle AI Drawer
+// VEYRO — Premium VEYRO AI Drawer
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Slide-in drawer with:
@@ -228,7 +228,7 @@ export function OracleDrawer({
                 <Sparkles className="h-5 w-5 text-[#60A5FA]" />
               </div>
               <div>
-                <h2 className="gst-card-title">Oracle AI Analysis</h2>
+                <h2 className="gst-card-title">VEYRO AI Analysis</h2>
                 <p className="gst-caption">Mismatch breakdown + recommended action</p>
               </div>
             </div>

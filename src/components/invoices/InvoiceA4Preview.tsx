@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — InvoiceA4Preview
+// VEYRO™ — InvoiceA4Preview
 //
 // A pixel-crafted, GST-compliant A4 invoice preview that looks like a real
 // invoice from a billion-dollar enterprise. Shown inside a Sheet/Dialog when
@@ -77,7 +77,7 @@ interface InvoiceA4Item {
 }
 
 /** Optional organization branding override. When not provided, the component
- *  falls back to "GSTPilot Infinity™" + the invoice's sellerGstin. */
+ *  falls back to "VEYRO™" + the invoice's sellerGstin. */
 interface InvoiceA4Organization {
   name: string;
   gstin: string;
@@ -294,7 +294,7 @@ export function InvoiceA4Preview({
   const org: InvoiceA4Organization = useMemo(
     () =>
       organization ?? {
-        name: 'GSTPilot Infinity™',
+        name: 'VEYRO™',
         gstin: invoice.sellerGstin || '—',
         address: 'Bengaluru · Karnataka · India',
       },
@@ -876,7 +876,7 @@ export function InvoiceA4Preview({
                       G
                     </div>
                     <span>
-                      Powered by <span className="font-bold text-zinc-600">GSTPilot Infinity™</span>
+                      Powered by <span className="font-bold text-zinc-600">VEYRO™</span>
                     </span>
                   </div>
                 </div>

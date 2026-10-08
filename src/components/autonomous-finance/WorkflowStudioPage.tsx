@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Workflow Studio (Phase Delta · 1)
+// VEYRO — Workflow Studio (Phase Delta · 1)
 // Visual workflow automation: templates + active runs with live step timeline.
 // ═══════════════════════════════════════════════════════════════════════════════
 

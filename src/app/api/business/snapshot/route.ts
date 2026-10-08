@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // GET /api/business/snapshot
 //
-// The SINGLE source of truth for every dashboard metric in GSTPilot.
+// The SINGLE source of truth for every dashboard metric in VEYRO.
 //
 // Returns a UNIFIED Business Snapshot that merges TWO engines:
 //   1. `rich` (src/lib/business/snapshot.ts) — reads BOTH native Prisma tables

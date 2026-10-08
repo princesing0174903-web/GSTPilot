@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Sales Invoice Cloud™
+// VEYRO Real Invoice Engine™ — Sales Invoice Cloud™
 // Create, Number, Total, Track, Collect. Prisma-backed server module.
 // ═══════════════════════════════════════════════════════════════════════════════
 

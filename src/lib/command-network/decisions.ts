@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Enterprise Decision Network™
+// VEYRO Infinity™ — Enterprise Decision Network™
 //
 // Every major decision flows through Oracle in stages:
 //   Sales Forecast → Marketing Impact → Operations Capacity → Finance Review →

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ Brain — Context Wrapper
+// VEYRO AI™ Brain — Context Wrapper
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // This is a thin wrapper that reads the organization from OrgContext and
@@ -19,7 +19,7 @@
 // the user through the SaaS without touching the sidebar.
 //
 // AUTH: this wrapper builds `getAuthHeaders` from useAuth + useOrg and passes
-// it down to OracleBrainCore. This is REQUIRED because the Oracle routes
+// it down to OracleBrainCore. This is REQUIRED because VEYRO AI routes
 // (/api/oracle/brain, /api/oracle/brain/confirm, /api/oracle/brain/sessions,
 // /api/oracle/brain/memory, /api/oracle/executive-briefing) all use
 // requireAuth() + requireOrgMembership(). Without the Bearer token + org

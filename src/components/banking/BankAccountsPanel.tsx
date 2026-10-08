@@ -1,14 +1,14 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Bank Accounts Panel (Premium Edition)
+// VEYRO Banking Module™ — Bank Accounts Panel (Premium Edition)
 //
 // Premium bank account cards grid with Add/Edit slide-over sheet, delete
 // confirmation dialog, sync action, and per-account dropdown menu. Self-contained:
 // if no callbacks are provided, falls back to `useBankingApi()` for create/update/
 // delete/sync. Parent owns the accounts list (fetched separately) and passes it in.
 //
-// Design tokens: pure-black GSTPilot theme. Cards: `glass-surface rounded-2xl
+// Design tokens: pure-black VEYRO theme. Cards: `glass-surface rounded-2xl
 // border border-white/[0.06]`. Primary emerald — NO indigo/blue.
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -442,7 +442,7 @@ function AccountSheet({ open, onOpenChange, initial, onSave, saving }: AccountSh
           <SheetDescription>
             {initial
               ? 'Update the account details below.'
-              : 'Connect a new bank account or wallet to GSTPilot.'}
+              : 'Connect a new bank account or wallet to VEYRO.'}
           </SheetDescription>
         </SheetHeader>
         <form onSubmit={handleSubmit} className="space-y-4 px-4 pb-6">

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Execution Engine™ — MODULE 6: Learning Engine™
+// VEYRO Execution Engine™ — MODULE 6: Learning Engine™
 // Phase 8 Step 5 — Observe. Think. Decide. Execute. Confirm. Learn.
 // ═══════════════════════════════════════════════════════════════════════════════
 // Remembers user-specific preferences + behavioural patterns so the engine gets
@@ -86,8 +86,8 @@ export function seedUserBehaviours(): UserBehaviour[] {
 
 // ─── LEARNING_INSIGHTS — per-action insight-text generators ───────────────────
 // Each function takes a UserBehaviour and returns a human-readable insight
-// sentence suitable for Oracle responses, dashboards, or audit logs. The Oracle
-// uses these to explain *why* GSTPilot is taking a particular action ("because
+// sentence suitable for Oracle responses, dashboards, or audit logs. VEYRO AI
+// uses these to explain *why* VEYRO is taking a particular action ("because
 // you've approved filings after ITC review 14 times with 92% consistency").
 export const LEARNING_INSIGHTS: Record<BehaviourAction, (b: UserBehaviour) => string> = {
   approve_filing: (b) =>

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — GST Report Export API
+// VEYRO AI CFO™ — GST Report Export API
 //
 // GET /api/oracle/cfo/report/export?reportId=X&format=pdf|excel|csv
 //

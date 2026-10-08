@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Upgrade Phase 1 · Upgrade 4: Financial Forecasting
+// VEYRO AI™ — Upgrade Phase 1 · Upgrade 4: Financial Forecasting
 //
 // Multi-horizon forecasting engine for 8 financial metrics:
 //   Revenue · GST Liability · Cash Flow · Expenses · Working Capital

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Billing™ — Create Payment Session API
+// VEYRO Billing™ — Create Payment Session API
 //
 // POST /api/billing/create-payment
 //   Body: { organizationId, invoiceId }

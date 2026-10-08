@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global AI App Marketplace™ — App Installation Engine™
+// VEYRO Global AI App Marketplace™ — App Installation Engine™
 // One-click Install · Uninstall · Version Updates · Rollback · Dependencies
 // Permission Validation · Org/Dept/Workspace-scoped Installation · Auto Upgrade
 // ═══════════════════════════════════════════════════════════════════════════════

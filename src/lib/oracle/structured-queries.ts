@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Structured Query Engine (SERVER-ONLY)
+// VEYRO AI™ — Structured Query Engine (SERVER-ONLY)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// The Oracle chat streams natural-language answers from the LLM, but for
+// VEYRO AI chat streams natural-language answers from the LLM, but for
 // specific structured questions ("show unpaid invoices", "top customers",
 // "GST payable", etc.) we ALSO return a structured data card so the user
 // gets an instant, accurate, table-grade answer alongside the prose.

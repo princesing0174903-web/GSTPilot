@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Production Pipeline™ — MockGenProvider (SERVER-ONLY)
+// VEYRO AI Production Pipeline™ — MockGenProvider (SERVER-ONLY)
 //
 // The default provider. Produces DETERMINISTIC, realistic-looking AI content
 // seeded by the prompt — the same prompt always returns the same output. This

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle Intelligence Engine — Productivity Analyzer
+// VEYRO AI Intelligence Engine — Productivity Analyzer
 //
 // Inspects Gmail + Calendar + Drive signals to surface productivity blockers:
 // calendar conflicts, heavy meeting load, GST notices sitting unread in the

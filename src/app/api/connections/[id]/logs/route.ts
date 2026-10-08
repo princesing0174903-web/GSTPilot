@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2A · Sync Logs API
+// VEYRO™ — PHASE 2A · Sync Logs API
 //
 // GET /api/connections/[id]/logs → recent SyncLog rows for a connection.
 //   • Default limit = 20

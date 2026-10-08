@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Expenses → Expense
+// VEYRO — Zoho Books Sync · Expenses → Expense
 //
 // Syncs Zoho Books expenses into the existing `Expense` Prisma model.
-// Oracle Memory Engine + Oracle Chat read db.expense.findMany — so synced
+// VEYRO AI Memory Engine + Oracle Chat read db.expense.findMany — so synced
 // Zoho expenses appear in Oracle's memory snapshot and search_expenses tool
 // ("What were this month's expenses?", "Which vendor costs increased?").
 //

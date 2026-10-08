@@ -1,14 +1,14 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Data Engine™ — Connections Page
+// VEYRO Real Data Engine™ — Connections Page
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Manage all real data connections: GSTN, Bank, Gmail, WhatsApp, Tally/Zoho/QB.
 // Each connector shows connection status, last sync, record count, and capabilities.
 // Connect buttons trigger real OAuth flows (Gmail) or validation (GSTIN).
 //
-// Design: matches the existing GSTPilot premium design system (black bg, glass,
+// Design: matches the existing VEYRO premium design system (black bg, glass,
 // blue→purple gradients). This is a NEW page — does not redesign any existing UI.
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -719,7 +719,7 @@ function ConnectModal({
             <div className="space-y-3">
               <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.05] p-3">
                 <p className="text-xs text-white/70">
-                  Account Aggregator (AA) consent lets GSTPilot securely fetch
+                  Account Aggregator (AA) consent lets VEYRO securely fetch
                   your bank transactions via the RBI-regulated AA framework.
                 </p>
               </div>
@@ -806,7 +806,7 @@ function ConnectModal({
             <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.05] p-4">
               <p className="text-sm text-white/70">
                 Click <strong className="text-white">Connect</strong> to open Google's secure OAuth consent screen.
-                GSTPilot will read GST-related emails (notices, invoices, tax communications) with{' '}
+                VEYRO will read GST-related emails (notices, invoices, tax communications) with{' '}
                 <code className="rounded bg-white/10 px-1 text-[11px]">gmail.readonly</code> scope.
               </p>
               <p className="mt-2 text-[11px] text-white/40">

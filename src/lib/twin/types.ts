@@ -5,7 +5,7 @@
 // real business in real time, remembers every event, and can replay history,
 // simulate decisions, and predict the future — all from REAL connected data.
 //
-// Tagline: "GSTPilot Digital Twin™ — Remember Everything. Understand Everything.
+// Tagline: "VEYRO Digital Twin™ — Remember Everything. Understand Everything.
 //           Simulate Everything. Predict Everything."
 //
 // Pure server-side TypeScript. No mock values. No placeholders. Everything is
@@ -371,7 +371,7 @@ export interface TwinForecast {
   generatedAt: string;
 }
 
-export const TWIN_TAGLINE = 'GSTPilot Digital Twin™ — Remember Everything. Understand Everything. Simulate Everything. Predict Everything.';
+export const TWIN_TAGLINE = 'VEYRO Digital Twin™ — Remember Everything. Understand Everything. Simulate Everything. Predict Everything.';
 
 // ─── 9. ORACLE INTEGRATION ───────────────────────────────────────────────────
 // Compact summary injected into Oracle chat context (kept small to avoid token bloat).

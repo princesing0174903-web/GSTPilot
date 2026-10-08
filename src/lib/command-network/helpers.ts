@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Enterprise Command Network™ — Shared Helpers
+// VEYRO Enterprise Command Network™ — Shared Helpers
 // Safe DB access + JSON parsing + in-memory cache + command signatures.
 // One Command. Every Team. Entire Enterprise. Founder & Owner: Prince Singh.
 // ═══════════════════════════════════════════════════════════════════════════════

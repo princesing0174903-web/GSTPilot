@@ -4,7 +4,7 @@ import React from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Loading Skeletons (Premium Shimmer)
+// VEYRO Banking Module™ — Loading Skeletons (Premium Shimmer)
 //
 // Premium shimmer placeholders matching the final layout for no-shift loading.
 // Each skeleton mirrors the exact card / table / chart structure it replaces.

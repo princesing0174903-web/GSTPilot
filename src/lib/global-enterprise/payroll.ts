@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Global Enterprise Operating System™
+// VEYRO™ — Global Enterprise Operating System™
 // Global Payroll Engine™ — Country-specific salary/benefits/taxes/leave/
 // social-security/retirement/local-labor-law. Oracle applies correct structure.
 // Founder & Owner: Prince Singh.
@@ -243,7 +243,7 @@ export async function getGlobalPayrollSummary(
     try {
       const employees = await db.employee.findMany({ where: { status: 'active' } });
       // Employee has clientId — derive country from client's state if no country code
-      // We treat India as default country (GSTPilot root) for employees without explicit country
+      // We treat India as default country (VEYRO root) for employees without explicit country
       positions = employees.map((e) => {
         const salary = (e as { salary?: number }).salary ?? 0;
         const roleTitle = ((e as { role?: string }).role ?? '').toLowerCase();

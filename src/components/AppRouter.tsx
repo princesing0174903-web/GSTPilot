@@ -2,7 +2,7 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * GSTPilot Infinity™ — AppRouter (top-level screen routing)
+ * VEYRO™ — AppRouter (top-level screen routing)
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * PRODUCTION AUTH FLOW (no infinite loading):
@@ -349,7 +349,7 @@ function AutoProvisionWorkspace() {
             <Zap className="h-4 w-4 text-white" />
           </div>
           <span className="text-sm font-semibold tracking-tight text-foreground">
-            GSTPilot Infinity<span className="accent-text">™</span>
+            VEYRO<span className="accent-text">™</span>
           </span>
         </div>
       </header>

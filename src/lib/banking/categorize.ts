@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Banking Foundation™ — Transaction Categorization Engine
+// VEYRO Real Banking Foundation™ — Transaction Categorization Engine
 //
 // Automatically assigns a TransactionCategory to every bank transaction based
 // on its description, amount, type (credit/debit), and counterparty. This is a

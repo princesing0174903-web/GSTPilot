@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Semantic Search (PROMPT 6)
+// VEYRO AI™ — Semantic Search (PROMPT 6)
 //
 // Top-k cosine-similarity retrieval over OracleBrainMemory embeddings.
 // Combines the speed of local feature-hash embeddings with the recall of

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — Receivables Cloud™
+// VEYRO Real Invoice Engine™ — Receivables Cloud™
 // Aging buckets, collection forecasting, automated reminder scheduling.
 // Prisma-backed server module.
 // ═══════════════════════════════════════════════════════════════════════════════

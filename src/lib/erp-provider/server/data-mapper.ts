@@ -1,11 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Data Mapping Engine (SERVER-ONLY)
+// VEYRO ERP & Accounting Integrations™ — Data Mapping Engine (SERVER-ONLY)
 //
-// Maps ERP records to GSTPilot's canonical entities:
-//   • ERP Customer  → GSTPilot Client
-//   • ERP Invoice   → GSTPilot Invoice
-//   • ERP Ledger    → GSTPilot Ledger
-//   • ERP Inventory → GSTPilot Inventory
+// Maps ERP records to VEYRO's canonical entities:
+//   • ERP Customer  → VEYRO Client
+//   • ERP Invoice   → VEYRO Invoice
+//   • ERP Ledger    → VEYRO Ledger
+//   • ERP Inventory → VEYRO Inventory
 //
 // Pure functions — safe to call from both orchestrator (server) and service
 // (client). No Firebase imports.
@@ -28,7 +28,7 @@ import type {
 export interface CustomerMapping {
   /** The ERP customer being mapped. */
   erpCustomer: ERPCustomer;
-  /** Proposed GSTPilot client payload (new or update). */
+  /** Proposed VEYRO client payload (new or update). */
   clientPayload: {
     name: string;
     gstin: string | null;
@@ -121,7 +121,7 @@ export interface InventoryMapping {
 // ─── Customer → Client mapping ────────────────────────────────────────────────
 
 /**
- * Map an ERP customer to a GSTPilot client payload.
+ * Map an ERP customer to a VEYRO client payload.
  *
  * Match strategy (highest priority first):
  *   1. GSTIN exact match → confidence 1.0
@@ -129,7 +129,7 @@ export interface InventoryMapping {
  *   3. Phone match → confidence 0.7
  *   4. No match → new client (confidence 0)
  *
- * `existingClients` is the list of existing GSTPilot clients to match against.
+ * `existingClients` is the list of existing VEYRO clients to match against.
  */
 export function mapCustomerToClient(
   erpCustomer: ERPCustomer,

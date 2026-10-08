@@ -8,7 +8,7 @@
  * `NODE_ENV !== 'production'`) to enable. Real tenant data should be created
  * via the normal onboarding flow — this seed file is a dev-only bootstrap that
  * previously persisted synthetic users (Prince Singh, Arjun Mehta, Priya Nair,
- * Rohan Kapoor), org hierarchy (GSTPilot Global Holding → India Pvt Ltd →
+ * Rohan Kapoor), org hierarchy (VEYRO Global Holding → India Pvt Ltd →
  * Delhi Branch → Sales Dept), subscriptions, integrations, API keys, 30 days
  * of usage events, billing invoices, audit logs, security events, policies,
  * approvals, and backups. All synthetic. Now no-ops unless explicitly enabled.
@@ -54,10 +54,10 @@ export async function seedEnterprise(): Promise<void> {
     const existingOrgs = await db.organization.count({ where: { tenantId: tenant.id } })
     if (existingOrgs === 0) {
       const holding = await db.organization.create({
-        data: { tenantId: tenant.id, name: 'GSTPilot Global Holding', type: 'holding', code: 'GHL' },
+        data: { tenantId: tenant.id, name: 'VEYRO Global Holding', type: 'holding', code: 'GHL' },
       })
       const india = await db.organization.create({
-        data: { tenantId: tenant.id, parentId: holding.id, name: 'GSTPilot India Pvt Ltd', type: 'company', code: 'IND' },
+        data: { tenantId: tenant.id, parentId: holding.id, name: 'VEYRO India Pvt Ltd', type: 'company', code: 'IND' },
       })
       const delhi = await db.organization.create({
         data: { tenantId: tenant.id, parentId: india.id, name: 'Delhi Branch', type: 'branch', code: 'DEL' },
@@ -99,18 +99,18 @@ export async function seedEnterprise(): Promise<void> {
         data: [
           {
             tenantId: tenant.id, organizationId: rootOrg?.id, firmId: firstFirm?.id,
-            legalName: 'GSTPilot Global Holding Ltd', tradeName: 'GSTPilot Global',
+            legalName: 'VEYRO Global Holding Ltd', tradeName: 'VEYRO Global',
             pan: 'AABCG1234H', isHolding: true, industry: 'Technology', state: 'Maharashtra', stateCode: '27',
           },
           {
             tenantId: tenant.id, organizationId: indiaOrg?.id, firmId: firstFirm?.id,
-            legalName: 'GSTPilot India Pvt Ltd', tradeName: 'GSTPilot India',
+            legalName: 'VEYRO India Pvt Ltd', tradeName: 'VEYRO India',
             gstin: firstFirm?.gstin ?? '27AABCG1234H1Z5', pan: 'AABCG1234H',
             industry: 'Technology', state: 'Maharashtra', stateCode: '27', address: 'BKC, Mumbai',
           },
           {
             tenantId: tenant.id, organizationId: indiaOrg?.id,
-            legalName: 'GSTPilot Delhi Services Pvt Ltd', tradeName: 'GSTPilot Delhi',
+            legalName: 'VEYRO Delhi Services Pvt Ltd', tradeName: 'VEYRO Delhi',
             gstin: '07AABCG1234H1Z2', pan: 'AABCG1234H',
             industry: 'Services', state: 'Delhi', stateCode: '07', address: 'Connaught Place, New Delhi',
           },
@@ -268,7 +268,7 @@ export async function seedEnterprise(): Promise<void> {
             tax: inv.total - inv.total / 1.18,
             total: inv.total,
             currency: 'INR',
-            items: JSON.stringify([{ description: 'GSTPilot Enterprise — Yearly', quantity: 1, amount: inv.total }]),
+            items: JSON.stringify([{ description: 'VEYRO Enterprise — Yearly', quantity: 1, amount: inv.total }]),
             issuedAt: issued,
             dueAt: due,
             paidAt: inv.status === 'paid' ? new Date(issued.getTime() + 86400000 * 3) : null,

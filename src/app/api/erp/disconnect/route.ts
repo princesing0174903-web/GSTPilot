@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot ERP & Accounting Integrations™ — Disconnect API
+// VEYRO ERP & Accounting Integrations™ — Disconnect API
 //
 // POST /api/erp/disconnect
 //   Body: { organizationId, connectionId, encryptedConnection }

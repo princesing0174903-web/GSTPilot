@@ -11,7 +11,7 @@
 //     Disconnect button. Below that, Gmail / Drive / Calendar tabs backed by
 //     REAL Google API responses (no mock data).
 //   • Uses the existing dark theme (bg-black + text-white + white/[0.04]
-//     surfaces) consistent with every other GSTPilot page.
+//     surfaces) consistent with every other VEYRO page.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -215,7 +215,7 @@ export function GoogleWorkspacePage() {
                 Google Workspace
               </h1>
               <p className="mt-0.5 text-sm text-white/50">
-                Connect Gmail, Drive &amp; Calendar to GSTPilot.
+                Connect Gmail, Drive &amp; Calendar to VEYRO.
               </p>
             </div>
           </div>
@@ -356,7 +356,7 @@ function DisconnectedCard({
       <div className="flex flex-col items-center gap-2">
         <h2 className="text-lg font-semibold">Connect to Google Workspace</h2>
         <p className="max-w-md text-sm text-white/50">
-          Authorize GSTPilot to read your Gmail inbox, list Drive files, and
+          Authorize VEYRO to read your Gmail inbox, list Drive files, and
           show upcoming Calendar events. You can disconnect at any time — tokens
           are encrypted and stored server-side only.
         </p>
@@ -642,7 +642,7 @@ function DriveTab({
     <section className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-6">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-white/80">
-          Files created or opened by GSTPilot
+          Files created or opened by VEYRO
         </h3>
         <Button
           variant="ghost"
@@ -664,7 +664,7 @@ function DriveTab({
 
       {files && files.length === 0 && (
         <p className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-6 text-center text-sm text-white/50">
-          No Drive files yet. Documents created by GSTPilot will appear here.
+          No Drive files yet. Documents created by VEYRO will appear here.
         </p>
       )}
 

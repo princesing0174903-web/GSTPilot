@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ Phase 1 — BUSINESS RISK ENGINE v2
+// VEYRO AI CFO™ Phase 1 — BUSINESS RISK ENGINE v2
 //
 // Automatically detects 10 business risks and assigns Low/Medium/High/Critical:
 //   1. Cash Shortage

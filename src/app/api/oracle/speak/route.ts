@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Read-Aloud (TTS) API
+// VEYRO AI™ — Read-Aloud (TTS) API
 // POST /api/oracle/speak  → { text } → audio/wav Response
 //
 // Splits long text into ≤1000-char chunks at sentence boundaries, synthesizes

@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — TrustBar
+// VEYRO — TrustBar
 // Phase 9 trust indicator: surfaces real connection status, last sync time,
 // and recent activity count so users can trust the numbers they see.
 //
@@ -14,7 +14,7 @@
 //
 // The relative-time label auto-refreshes every 30s so "12s ago" stays accurate
 // without re-fetching. Uses framer-motion with the standard ease curve and
-// respects the GSTPilot dark-theme palette (emerald/amber/rose/zinc only —
+// respects the VEYRO dark-theme palette (emerald/amber/rose/zinc only —
 // no indigo, no blue).
 // ═══════════════════════════════════════════════════════════════════════════════
 

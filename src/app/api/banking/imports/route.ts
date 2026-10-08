@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Imports List API (TASK 12)
+// VEYRO Banking Module™ — Imports List API (TASK 12)
 //
 // GET /api/banking/imports?organizationId=...
 //   → listImports(orgId)

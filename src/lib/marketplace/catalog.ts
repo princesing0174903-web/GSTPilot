@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Global Integration Marketplace™ — Connector Catalog
+// VEYRO Global Integration Marketplace™ — Connector Catalog
 // 2,000+ connectors across 25 categories. Priority connectors are fully detailed;
 // the catalog is expanded programmatically to cover the full business tech stack.
 // ═══════════════════════════════════════════════════════════════════════════════

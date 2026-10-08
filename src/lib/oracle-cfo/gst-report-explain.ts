@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle CFO™ — GST Report Explanation Layer
+// VEYRO AI CFO™ — GST Report Explanation Layer
 //
 // Turns the structured GSTReport into plain-English insights.
 // Every insight references real records (invoice IDs, customer names, vendor names).

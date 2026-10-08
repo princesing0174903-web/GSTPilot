@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Core Prisma Service (TASK 12)
+// VEYRO Banking Module™ — Core Prisma Service (TASK 12)
 //
 // The persistence + query layer for the banking module. SERVER-ONLY.
 //

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real GSTN Integration™ — FutureOfficialGSTProvider (SERVER-ONLY)
+// VEYRO Real GSTN Integration™ — FutureOfficialGSTProvider (SERVER-ONLY)
 //
 // The placeholder for the real production GSTN API integration. Every method
 // throws `NotImplementedError` so the system fails LOUDLY if you switch to this

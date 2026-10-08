@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI CFO™ — Type Definitions
+// VEYRO AI CFO™ — Type Definitions
 // Shared types for the AI CFO Operating System (Phase 3).
 // ═══════════════════════════════════════════════════════════════════════════════
 

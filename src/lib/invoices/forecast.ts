@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Real Invoice Engine™ — AI Cash Conversion Engine
+// VEYRO Real Invoice Engine™ — AI Cash Conversion Engine
 // Revenue / cash-flow forecasting, delayed collection detection, surplus/deficit
-// prediction. The Oracle reads this output and phrases it conversationally.
+// prediction. VEYRO AI reads this output and phrases it conversationally.
 // Pure TypeScript.
 // ═══════════════════════════════════════════════════════════════════════════════
 

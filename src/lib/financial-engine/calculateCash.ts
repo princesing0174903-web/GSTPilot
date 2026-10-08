@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Cash & Bank Balance Calculator
+// VEYRO — Cash & Bank Balance Calculator
 //
 // Cash = sum of all connected bank account balances.
 // This is the ONLY place where bank balance is computed.

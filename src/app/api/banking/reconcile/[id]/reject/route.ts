@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — Reject Reconciliation API (TASK 12)
+// VEYRO Banking Module™ — Reject Reconciliation API (TASK 12)
 //
 // POST /api/banking/reconcile/:id/reject?organizationId=...
 //   body: { reason: string }

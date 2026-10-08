@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot GST Return Engine™ — Return Preparation
+// VEYRO GST Return Engine™ — Return Preparation
 //
 // Pure functions that prepare GSTR-1, GSTR-3B, and GSTR-9 draft data from
 // GSTTransactions. These are DRAFT ONLY — they are NOT filed to GSTN.

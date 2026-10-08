@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Recommendations API
+// VEYRO — Recommendations API
 // GET /api/recommendations?organizationId=...
 //
 // Returns REAL recommendations generated from the Business Snapshot + Prisma

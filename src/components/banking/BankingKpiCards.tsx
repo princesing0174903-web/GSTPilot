@@ -17,7 +17,7 @@ import {
 import type { BankingDashboardSummary, CashFlowPoint } from '@/lib/banking-prisma/types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Module™ — KPI Cards (Premium Edition)
+// VEYRO Banking Module™ — KPI Cards (Premium Edition)
 //
 // 8 KPI cards laid out in a responsive grid (2 cols mobile → 4 cols md → 8 cols xl).
 // Each card carries an icon chip, label, formatted value, and one of:

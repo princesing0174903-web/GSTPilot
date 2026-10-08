@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Oracle™ — Streaming Chat API (PROMPT 5: Autonomous AI CFO)
+// VEYRO AI™ — Streaming Chat API (PROMPT 5: Autonomous AI CFO)
 // POST /api/oracle/chat
 //
 // PIPELINE (every message):
@@ -193,7 +193,7 @@ export async function POST(req: Request): Promise<Response> {
   const { uid } = authResult;
 
   // ── SECURITY (POLISH-06): rate limit per IP — 20 Oracle requests/min. ──
-  // The Oracle pipeline is expensive (Prisma queries + LLM call + memory
+  // VEYRO AI pipeline is expensive (Prisma queries + LLM call + memory
   // writes). Unauthenticated flooders would exhaust the sandbox budget.
   const rl = rateLimit(req, RATE_LIMIT_PRESETS.oracle, 'oracle-chat');
   if (rl.denied) {

@@ -691,8 +691,8 @@ function buildPdfHtml(opts: {
     <div class="brand">
       <span class="brand-mark">∞</span>
       <div>
-        <div class="brand-name">GSTPilot™ Infinity</div>
-        <div class="brand-tag">The Financial Brain of India™</div>
+        <div class="brand-name">VEYRO™ Infinity</div>
+        <div class="brand-tag">The AI Operating System for Business™</div>
       </div>
     </div>
     <h1>${escapeHtml(title)}</h1>
@@ -701,7 +701,7 @@ function buildPdfHtml(opts: {
   </div>
   ${sectionHtml}
   ${tableHtml}
-  <div class="footer">Confidential — GSTPilot™ Infinity Report Engine • ${escapeHtml(generatedAt)}</div>
+  <div class="footer">Confidential — VEYRO™ Infinity Report Engine • ${escapeHtml(generatedAt)}</div>
   <script>
     window.onload = function () {
       setTimeout(function () { window.print(); }, 250);
@@ -1431,7 +1431,7 @@ export default function ReportsPage() {
 
       const ok = openPrintWindow(html);
       if (!ok) {
-        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
+        toast.error('Pop-up blocked. Allow pop-ups for VEYRO to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
 
@@ -1535,7 +1535,7 @@ export default function ReportsPage() {
 
       const ok = openPrintWindow(html);
       if (!ok) {
-        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
+        toast.error('Pop-up blocked. Allow pop-ups for VEYRO to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
 
@@ -1673,7 +1673,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
+        toast.error('Pop-up blocked. Allow pop-ups for VEYRO to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({
@@ -1761,7 +1761,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
+        toast.error('Pop-up blocked. Allow pop-ups for VEYRO to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({
@@ -1853,7 +1853,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
+        toast.error('Pop-up blocked. Allow pop-ups for VEYRO to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({
@@ -1956,7 +1956,7 @@ export default function ReportsPage() {
       });
       const ok = openPrintWindow(html);
       if (!ok) {
-        toast.error('Pop-up blocked. Allow pop-ups for GSTPilot to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
+        toast.error('Pop-up blocked. Allow pop-ups for VEYRO to export PDF reports.', { description: 'Update your browser settings to permit pop-ups from this site, then try again.' });
         return;
       }
       addRecentExport({

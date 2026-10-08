@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Banking Service — Categorization Rules Engine (Pure Helpers)
+// VEYRO Banking Service — Categorization Rules Engine (Pure Helpers)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Pure functions used by the MockBankingProvider (and any future provider) to:

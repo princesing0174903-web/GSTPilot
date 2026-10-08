@@ -7,7 +7,7 @@
 //   AI Monitors Performance · Scaling · Security · Costs · Reliability ·
 //   Developer Experience
 //
-// An always-on autonomous AI that observes the entire GSTPilot platform across
+// An always-on autonomous AI that observes the entire VEYRO platform across
 // six dimensions and takes corrective action without human intervention —
 // 640 autonomous actions / 24h, $848K cost savings MTD, weighted-avg health
 // 95.2% (Optimal). Last human override: 14 days ago.

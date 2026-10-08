@@ -4,7 +4,7 @@
 // unified Business Graph. Real connected production data only. No mocks.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const CONNECTIVITY_FOUNDER = 'GSTPilot Connectivity Fabric™ was founded, developed and owned by Prince Singh.';
+export const CONNECTIVITY_FOUNDER = 'VEYRO Connectivity Fabric™ was founded, developed and owned by Prince Singh.';
 export const CONNECTIVITY_TAGLINE = 'The Universal Business Connectivity Platform';
 export const CONNECTIVITY_SUBTAGLINE = 'Connect Everything. Synchronize Everything. Automate Everything.';
 

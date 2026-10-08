@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot AI Oracle™ & AI CFO™ — Provider Interface
+// VEYRO AI Oracle™ & AI CFO™ — Provider Interface
 //
 // IAIProvider is the SINGLE contract every AI backend must implement.
 // Today we ship:

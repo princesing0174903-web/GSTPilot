@@ -1,8 +1,8 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Phase 9 Demo Preview Panel
-// The Financial Brain of India™
+// VEYRO Infinity™ — Phase 9 Demo Preview Panel
+// The AI Operating System for Business™
 //
 // Rendered on dashboards that have no live data yet, so the product always
 // feels alive (Revenue · GST · Invoices · Collections · Clients · Forecasts ·

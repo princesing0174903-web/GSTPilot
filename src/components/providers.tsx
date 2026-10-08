@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Root Providers (chunk-split for low-memory sandbox)
+// VEYRO — Root Providers (chunk-split for low-memory sandbox)
 //
 // Provider hierarchy (outer → inner):
 //   ThemeProvider          — light/dark theming            (static, light)
@@ -70,7 +70,7 @@ function ProviderLoader({ label }: { label: string }) {
           <Zap className="h-5 w-5 accent-text" />
         </div>
         <div className="flex flex-col items-center gap-1">
-          <span className="text-sm font-medium text-foreground">Loading GSTPilot…</span>
+          <span className="text-sm font-medium text-foreground">Loading VEYRO…</span>
           <span className="text-xs text-muted-foreground">{label}</span>
         </div>
       </div>

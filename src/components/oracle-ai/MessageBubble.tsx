@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Oracle AI™ — Message Bubble
+// VEYRO AI™ — Message Bubble
 //
 // Renders a single message (user / assistant / tool) with markdown content,
 // inline artifacts, tool-call chips, and citations. Used in the chat thread.

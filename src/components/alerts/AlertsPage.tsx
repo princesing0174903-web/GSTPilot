@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — PHASE 2B · MODULE 4 — Real-Time Alert Center™
+// VEYRO™ — PHASE 2B · MODULE 4 — Real-Time Alert Center™
 //
 // Command center for every alert raised by the change-detection engine.
 // API: GET /api/alerts, POST /api/alerts (mark-all-read), PATCH /api/alerts/[id].
@@ -643,7 +643,7 @@ function EmptyAlerts({ tab }: { tab: FilterTab }) {
       <p className="mt-1.5 max-w-xs text-xs text-muted-foreground">
         {isArchived
           ? 'Alerts you archive will appear here for your records.'
-          : 'When GSTPilot detects changes in your connected data, alerts will appear here in real time.'}
+          : 'When VEYRO detects changes in your connected data, alerts will appear here in real time.'}
       </p>
     </motion.div>
   );

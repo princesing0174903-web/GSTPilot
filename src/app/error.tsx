@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Root error.tsx (Next.js route boundary)
+// VEYRO — Root error.tsx (Next.js route boundary)
 //
 // Catches unhandled render errors thrown anywhere in the `/` route subtree
 // that aren't caught by <ViewErrorBoundary> (which wraps each dashboard

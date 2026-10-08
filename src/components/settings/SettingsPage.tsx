@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Enterprise Settings Module
+// VEYRO Infinity™ — Enterprise Settings Module
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Production-grade enterprise settings. Every field reads from and writes to
@@ -11,7 +11,7 @@
 //
 // DESIGN — premium dark enterprise (Vercel / Linear / Stripe inspired):
 //   • Black background, dark-gray cards, white typography, BLUE accent
-//   • (The green theme used elsewhere in GSTPilot is intentionally NOT used
+//   • (The green theme used elsewhere in VEYRO is intentionally NOT used
 //     here — Settings is a focused, neutral control surface.)
 //
 // SECTIONS:
@@ -116,13 +116,13 @@ const SECTIONS: NavSection[] = [
 const SECTION_META: Record<SectionId, { title: string; subtitle: string }> = {
   organization: { title: 'Organization', subtitle: 'Your firm\u2019s identity, tax registration, and contact details.' },
   gst: { title: 'GST / GSTN', subtitle: 'Connect a GSP to fetch live GSTR-2B, verify GSTINs, and reconcile purchase data.' },
-  appearance: { title: 'Appearance', subtitle: 'Choose how GSTPilot looks. Synced across devices.' },
+  appearance: { title: 'Appearance', subtitle: 'Choose how VEYRO looks. Synced across devices.' },
   profile: { title: 'Profile', subtitle: 'Your personal account information.' },
   security: { title: 'Security', subtitle: 'Manage your password, active sessions, and account security.' },
-  integrations: { title: 'OAuth Connections', subtitle: 'Connect external services to sync data into GSTPilot.' },
+  integrations: { title: 'OAuth Connections', subtitle: 'Connect external services to sync data into VEYRO.' },
   notifications: { title: 'Notifications', subtitle: 'Choose what updates you want to receive and how.' },
   team: { title: 'Users & Team', subtitle: 'Manage who has access to your organization.' },
-  apikeys: { title: 'API Keys', subtitle: 'Generate keys to access the GSTPilot API programmatically.' },
+  apikeys: { title: 'API Keys', subtitle: 'Generate keys to access the VEYRO API programmatically.' },
   audit: { title: 'Audit Logs', subtitle: 'A chronological record of actions taken in your account.' },
   billing: { title: 'Billing', subtitle: 'Manage your subscription, usage, and payment method.' },
   data: { title: 'Data & Backup', subtitle: 'Export, back up, or permanently delete your workspace data.' },
@@ -409,7 +409,7 @@ function SettingsSidebar({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SHARED UI PRIMITIVES (premium dark enterprise — aligned to GSTPilot design system)
+// SHARED UI PRIMITIVES (premium dark enterprise — aligned to VEYRO design system)
 //   • Cards:        .gst-card base  → bg #0A0A0A, border #1F1F1F, p-6, rounded-xl
 //   • Buttons:      .gst-btn base   → h-9, blue accent #2563EB
 //   • Status pills: .gst-status     → success / neutral variants
@@ -857,7 +857,7 @@ function AppearanceSection() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="Appearance" subtitle="Choose how GSTPilot looks. Your preference is saved and syncs across devices." />
+      <SectionHeader title="Appearance" subtitle="Choose how VEYRO looks. Your preference is saved and syncs across devices." />
 
       <SettingsCard title="Theme" description="Applied instantly. Persisted to your account.">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1375,7 +1375,7 @@ function IntegrationsSection() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="Integrations" subtitle="Connect external services to sync data into GSTPilot." />
+      <SectionHeader title="Integrations" subtitle="Connect external services to sync data into VEYRO." />
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
@@ -1936,7 +1936,7 @@ function ApiKeysSection() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="API Keys" subtitle="Generate keys to access the GSTPilot API programmatically." />
+      <SectionHeader title="API Keys" subtitle="Generate keys to access the VEYRO API programmatically." />
 
       <SettingsCard
         title="Your Keys"
@@ -2604,7 +2604,7 @@ function DangerZoneSection() {
 
       <SettingsCard
         title="Sign Out"
-        description="Sign out of your account on this device. You will need to sign in again to access GSTPilot."
+        description="Sign out of your account on this device. You will need to sign in again to access VEYRO."
       >
         <div className="flex items-center justify-between p-4 rounded-lg bg-zinc-900 border border-zinc-800">
           <div className="flex items-center gap-3">
@@ -2612,7 +2612,7 @@ function DangerZoneSection() {
               <Power className="h-5 w-5 text-zinc-400" />
             </div>
             <div>
-              <p className="text-sm font-medium text-white">Sign out of GSTPilot</p>
+              <p className="text-sm font-medium text-white">Sign out of VEYRO</p>
               <p className="text-xs text-zinc-500 mt-0.5">
                 {user?.email ? `Signed in as ${user.email}` : 'Clears your session and redirects to login.'}
               </p>

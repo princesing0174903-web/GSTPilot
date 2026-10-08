@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ — Phase Gamma-7: OCR Engine API
+// VEYRO™ — Phase Gamma-7: OCR Engine API
 //
 // POST /api/ocr/extract
 //

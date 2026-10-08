@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot — Zoho Books Sync · Bills → PurchaseBill
+// VEYRO — Zoho Books Sync · Bills → PurchaseBill
 //
 // Syncs Zoho Books bills into the existing `PurchaseBill` Prisma model.
-// Oracle Memory Engine reads db.purchaseBill.findMany — so synced Zoho bills
+// VEYRO AI Memory Engine reads db.purchaseBill.findMany — so synced Zoho bills
 // appear in Oracle's memory snapshot ("Which vendor costs increased?",
 // "What are my total payables?").
 //

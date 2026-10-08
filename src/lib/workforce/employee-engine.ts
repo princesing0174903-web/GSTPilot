@@ -7,7 +7,7 @@
 // for every one of the 17 roles. No mock values — every number traces back to
 // REAL connected business data.
 //
-// Tagline: "GSTPilot AI Workforce™ — Don't just use AI. Build an AI Company."
+// Tagline: "VEYRO AI Workforce™ — Don't just use AI. Build an AI Company."
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { ORGANIZATION, getRoleDefinition } from './organization';

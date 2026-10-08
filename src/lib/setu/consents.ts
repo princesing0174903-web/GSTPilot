@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Setu SDK — Consent Helpers (creation, polling, account extraction)
+// VEYRO Setu SDK — Consent Helpers (creation, polling, account extraction)
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // Thin wrappers over `SetuClient` for the consent lifecycle. The polling

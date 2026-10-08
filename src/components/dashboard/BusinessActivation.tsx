@@ -1,7 +1,7 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GSTPilot Infinity™ V13 — Business Activation
+// VEYRO™ V13 — Business Activation
 //
 // V13 spec: "Business Activation: Connect GSTN · Connect Bank · Invite Team ·
 //   Enable AI. Simple progress tracker. No huge cards."
@@ -91,7 +91,7 @@ export function BusinessActivation() {
       return;
     }
     if (step.id === 'ai') {
-      // "Enable AI" opens the Oracle with an activation query
+      // "Enable AI" opens VEYRO AI with an activation query
       openWorkspace('Enable AI autopilot for my business');
       setConnected((s) => ({ ...s, [step.id]: true }));
       toast({

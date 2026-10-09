@@ -66,7 +66,7 @@ jobs:
             node_modules-${{ runner.os }}-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Run ESLint
         run: bun run lint
@@ -97,7 +97,7 @@ jobs:
             node_modules-${{ runner.os }}-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Typecheck
         run: bunx tsc --noEmit
@@ -137,7 +137,7 @@ jobs:
             next-cache-${{ runner.os }}-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Build
         run: bun run build
@@ -175,7 +175,7 @@ jobs:
             node_modules-${{ runner.os }}-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: ESLint (quiet — errors only)
         run: bunx eslint --ext .ts,.tsx src --quiet

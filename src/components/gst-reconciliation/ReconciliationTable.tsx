@@ -19,7 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useMemo, useCallback, useState } from 'react';
-import { List, type ListImperativeAPI } from 'react-window';
+import { FixedSizeList as List } from 'react-window';
 import {
   CheckCircle2, Sparkles, Zap, Loader2, Download, FileCheck2,
 } from 'lucide-react';
@@ -161,7 +161,7 @@ interface VirtualizedTableProps {
 export function VirtualizedReconciliationTable({
   matches, selectedIds, onToggleRow, onToggleAll, onOpenMatch, onResolve, busyId, loading, total, onLoadMore,
 }: VirtualizedTableProps) {
-  const [, setListRef] = useState<ListImperativeAPI | null>(null);
+  const [, setListRef] = useState<any>(null);
   const [showAll, setShowAll] = useState(false);
 
   const rowCount = showAll ? matches.length : Math.min(matches.length, 500);
@@ -258,10 +258,10 @@ export function VirtualizedReconciliationTable({
       {/* Virtualized list */}
       <div style={{ height: Math.max(rowCount * ROW_HEIGHT, 280), maxHeight: 600 }}>
         <List
-          rowComponent={Row}
-          rowCount={rowCount}
-          rowHeight={ROW_HEIGHT}
-          rowProps={rowProps}
+          children={Row}
+          itemCount={rowCount}
+          itemSize={ROW_HEIGHT}
+          itemData={rowProps}
           overscanCount={8}
           onRowsRendered={handleRowsRendered}
           listRef={setListRef as never}

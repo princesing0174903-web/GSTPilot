@@ -19,7 +19,7 @@
 
 import { NextResponse } from 'next/server';
 import { requireAuth, requireOrgMembership } from '@/lib/auth/session';
-import { getValidAccessToken, resolveOrgUserFromHeaders, loadTokens } from './oauth';
+import { getValidAccessToken, resolveOrgFromHeaders, loadTokens } from './oauth';
 
 export interface ResolvedZohoAuth {
   accessToken: string | null;
@@ -39,7 +39,8 @@ export interface ResolvedZohoAuth {
  *   - `{ response: null, accessToken: <valid>, orgId, userId, zohoOrgId }` — caller proceeds.
  */
 export async function resolveZohoAuth(req: Request): Promise<ResolvedZohoAuth> {
-  const { orgId, userId } = resolveOrgUserFromHeaders(req);
+  const orgId = resolveOrgFromHeaders(req) || '';
+  const userId = req.headers.get('x-gstpilot-userid') || '';
   const { accessToken, error } = await getValidAccessToken(orgId, userId);
   if (!accessToken) {
     return {

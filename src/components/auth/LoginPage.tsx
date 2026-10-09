@@ -13,7 +13,7 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
-  const { isInitializing, signInWithGoogle, signInWithGitHub, signInWithEmail, signUpWithEmail, resetPassword, signInDemo } = useAuth();
+  const { isInitializing, signInWithGoogle, signInWithGitHub, signInWithEmail, signUpWithEmail, resetPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -255,12 +255,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             </Button>
           </form>
 
-          <div className="mt-4 pt-4 border-t border-zinc-800/50 w-full text-center">
-            <button type="button" onClick={signInDemo} className="text-xs text-zinc-600 hover:text-zinc-300 font-mono transition-colors">
-              [DEV MODE] Bypass Login &rarr;
-            </button>
-          </div>
-          <div className="mt-4 text-sm">
+          <div className="mt-8 text-sm">
             {mode === 'login' ? (
               <p className="text-zinc-400">Don't have an account? <button type="button" onClick={() => setMode('signup')} className="text-white font-medium ml-1">Sign up</button></p>
             ) : (

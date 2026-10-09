@@ -1,23 +1,21 @@
-'use client';
-
 import React, { useState } from 'react';
-import { BrandLogo } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { BrandLogo } from '@/components/BrandLogo';
+import { Eye, EyeOff, AlertTriangle, ArrowLeft } from 'lucide-react';
 
 interface LoginPageProps {
-  onBack?: () => void;
-  onGetStarted?: () => void;
+  onBack: () => void;
+  onGetStarted: () => void;
 }
 
 export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
-  const { isInitializing, signInWithGoogle, signInWithGitHub, signInWithEmail, signUpWithEmail, resetPassword } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithGitHub, resetPassword } = useAuth();
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [isLoading, setIsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [githubLoading, setGithubLoading] = useState(false);
@@ -26,25 +24,19 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   const [localError, setLocalError] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
 
-  if (isInitializing) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#030303] text-zinc-200 font-sans gap-8">
-        <BrandLogo variant="icon" size={48} animated={false} disableGlow={true} />
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-zinc-300 text-sm font-medium">Signing you in...</p>
-          <div className="animate-[spin_1.1s_linear_infinite] flex items-center justify-center shrink-0 w-6 h-6">
-            <svg viewBox="0 0 100 100" className="w-full h-full text-zinc-500">
-              <circle cx="50" cy="50" r="44" stroke="currentColor" strokeWidth="8" fill="none" className="opacity-20" />
-              <circle cx="50" cy="50" r="44" stroke="currentColor" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray="276" strokeDashoffset="100" />
-            </svg>
-          </div>
-          <p className="text-zinc-500 text-xs tracking-wide">Securing your workspace</p>
-        </div>
-      </div>
+  // If redirected from a failed GitHub OAuth
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const githubError = urlParams?.get('github_error');
+  
+  if (githubError && !localError && !isLoading) {
+    setLocalError(
+      githubError === 'email_exists' 
+        ? 'An account with this email already exists. Please sign in with email and password first, then link your GitHub account in settings.'
+        : 'GitHub authentication failed. Please try again.'
     );
   }
 
-      const handleGoogle = async () => {
+  const handleGoogle = async () => {
     setLocalError(null);
     setGoogleLoading(true);
     try {
@@ -65,26 +57,29 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       setGoogleLoading(false);
     }
   };
+
   const handleGitHub = async () => {
     setLocalError(null);
     setGithubLoading(true);
     try {
       const res = await signInWithGitHub();
-      if (res && res.authUrl) {
+      if (res && res.error) {
+        setLocalError(res.error);
+        setGithubLoading(false);
+      } else if (res && res.authUrl) {
         window.location.href = res.authUrl;
       } else {
-        setLocalError(res?.error || 'Failed to start GitHub sign-in.');
         setGithubLoading(false);
       }
     } catch (err: any) {
-      setLocalError(err.message || 'Failed to sign in with GitHub');
+      setLocalError(err.message || 'Failed to initialize GitHub sign in');
       setGithubLoading(false);
     }
   };
 
   const handleResetPassword = async () => {
     if (!email) {
-      setLocalError('Please enter your email address first.');
+      setLocalError('Please enter your email address first');
       return;
     }
     setLocalError(null);
@@ -92,12 +87,13 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     try {
       const res = await resetPassword(email);
       if (res && res.error) {
-        setLocalError("EMAIL_SIGN_IN_ERROR: " + res.error);
+        setLocalError(res.error);
       } else {
         setResetSent(true);
+        setLocalError(null);
       }
     } catch (err: any) {
-      setLocalError(err.message || 'Failed to send reset link');
+      setLocalError(err.message || 'Failed to send reset email');
     } finally {
       setIsLoading(false);
     }
@@ -105,9 +101,10 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setLocalError(null);
-    
+    setIsLoading(true);
+    setResetSent(false);
+
     try {
       if (mode === 'login') {
         const res = await signInWithEmail(email, password);
@@ -154,6 +151,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             </div>
           )}
 
+          {!linkEmail && (
           <div className="w-full space-y-3">
             <Button
               type="button"
@@ -196,7 +194,9 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               )}
             </Button>
           </div>
+          )}
 
+          {!linkEmail && (
           <div className="relative w-full my-8">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-zinc-800/80"></div>
@@ -205,6 +205,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               <span className="bg-[#030303] px-3 text-zinc-500 font-medium tracking-widest uppercase">or</span>
             </div>
           </div>
+          )}
 
           <form onSubmit={handleSubmit} className="w-full space-y-4">
             <div className="space-y-1.5">
@@ -212,10 +213,11 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               <Input
                 type="email"
                 required
+                disabled={!!linkEmail}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
-                className="bg-[#0A0A0A] border-zinc-800 h-11 focus-visible:ring-1 focus-visible:ring-zinc-700 text-white placeholder:text-zinc-600"
+                className="bg-[#0A0A0A] border-zinc-800 h-11 focus-visible:ring-1 focus-visible:ring-zinc-700 text-white placeholder:text-zinc-600 disabled:opacity-50"
               />
             </div>
             

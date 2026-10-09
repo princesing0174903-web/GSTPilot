@@ -21,8 +21,6 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [githubLoading, setGithubLoading] = useState(false);
-  const [linkEmail, setLinkEmail] = useState('');
-  const [linkEmail, setLinkEmail] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
@@ -52,16 +50,13 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       const result = await signInWithGoogle();
       if (result && result.error) {
         if (result.error.includes('Email or password is incorrect')) {
-          setLocalError('Account Conflict: An account with this email may already exist. Please sign in with your password to link your Google account.');
+          setLocalError('GOOGLE_ACCOUNT_CONFLICT: This email already exists in the database as a password-only account. Firebase security is blocking Google login. Please delete the user in Firebase Console or use the Email/Password form.');
         } else {
-          setLocalError("Google sign in failed: " + result.error);
+          setLocalError("GOOGLE_SIGN_IN_ERROR: " + result.error);
         }
         setGoogleLoading(false);
       } else if (result && result.needsAccountLink) {
-        setLinkEmail(result.linkingEmail || '');
-        setLocalError('Please enter your password to link your Google account to ' + (result.linkingEmail || 'your email') + '.');
-        if (result.linkingEmail) setEmail(result.linkingEmail);
-        setMode('login');
+        setLocalError('ACCOUNT_LINK_REQUIRED: This email is already associated with an email account. Please sign in with email and password to link your Google account.');
         setGoogleLoading(false);
       }
       // Otherwise keep loading state true while AppRouter transitions
@@ -160,8 +155,6 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             </div>
           )}
 
-          {!linkEmail && (
-          {!linkEmail && (
           <div className="w-full space-y-3">
             <Button
               type="button"
@@ -204,21 +197,8 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               )}
             </Button>
           </div>
-          )}
-          )}
 
-          {!linkEmail && (
-          {!linkEmail && (
           <div className="relative w-full my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-zinc-800/80"></div>
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-[#030303] px-3 text-zinc-500 font-medium tracking-widest uppercase">or</span>
-            </div>
-          </div>
-          )}
-          )}
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-zinc-800/80"></div>
             </div>
@@ -233,11 +213,10 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               <Input
                 type="email"
                 required
-                disabled={!!linkEmail}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
-                className="bg-[#0A0A0A] border-zinc-800 h-11 focus-visible:ring-1 focus-visible:ring-zinc-700 text-white placeholder:text-zinc-600 disabled:opacity-50"
+                className="bg-[#0A0A0A] border-zinc-800 h-11 focus-visible:ring-1 focus-visible:ring-zinc-700 text-white placeholder:text-zinc-600"
               />
             </div>
             
@@ -272,7 +251,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               disabled={isAnyLoading}
               className="w-full bg-white text-black hover:bg-zinc-200 h-11 mt-2 font-medium"
             >
-              {showSuccess ? 'Done' : isLoading ? 'Signing in...' : linkEmail ? 'Link Account & Sign In' : mode === 'login' ? 'Sign in' : 'Sign up'}
+              {showSuccess ? 'Done' : isLoading ? 'Signing in...' : mode === 'login' ? 'Sign in' : 'Sign up'}
             </Button>
           </form>
 

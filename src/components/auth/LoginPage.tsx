@@ -22,6 +22,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [githubLoading, setGithubLoading] = useState(false);
   const [linkEmail, setLinkEmail] = useState('');
+  const [googleNewTabNeeded, setGoogleNewTabNeeded] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
@@ -40,10 +41,14 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
 
   const handleGoogle = async () => {
     setLocalError(null);
+    setGoogleNewTabNeeded(false);
     setGoogleLoading(true);
     try {
       const result = await signInWithGoogle();
-      if (result && result.error) {
+      if (result && result.needsNewTab) {
+        setGoogleNewTabNeeded(true);
+        setGoogleLoading(false);
+      } else if (result && result.error) {
         setLocalError(result.error);
         setGoogleLoading(false);
       } else if (result && result.needsAccountLink) {
@@ -148,8 +153,23 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           </div>
 
           {localError && (
-            <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-lg text-center">
+            <div role="alert" className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-lg text-center">
               {localError}
+            </div>
+          )}
+
+          {googleNewTabNeeded && (
+            <div role="status" className="w-full mb-4 p-3 bg-zinc-900 border border-zinc-800 text-zinc-300 text-sm rounded-lg text-center">
+              Google sign-in needs a full browser tab.{' '}
+              <a
+                href={typeof window !== 'undefined' ? window.location.href : '/'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-4 text-white"
+              >
+                Open VEYRO in a new tab
+              </a>
+              , then select Continue with Google.
             </div>
           )}
 

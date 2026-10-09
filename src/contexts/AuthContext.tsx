@@ -404,7 +404,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
              setPendingGoogleCredential(null);
           }
         }
-        return result;
+        return {
+          user: result.user ? firebaseToAuthUser(result.user) : null,
+          error: result.error,
+        };
     } catch (err) {
       console.error('[Auth] Login exception:', err);
       setError(friendlyAuthError(err));
@@ -427,7 +430,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         console.log('[Auth] Sign up successful — waiting for onAuthStateChanged');
       }
-      return result;
+      return {
+        user: result.user ? firebaseToAuthUser(result.user) : null,
+        error: result.error,
+      };
     } catch (err) {
       console.error('[Auth] Sign up exception:', err);
       setError(friendlyAuthError(err));
@@ -461,7 +467,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
         console.log('[Auth] Google sign-in successful — waiting for onAuthStateChanged');
       }
-      return result;
+      if (result.error) {
+        console.warn('[Auth] Google sign-in failed', {
+          code: result.errorCode || 'unknown',
+          message: result.error,
+          // Deliberately omit emails, credentials, tokens, and secret values.
+        });
+      }
+      return {
+        user: result.user ? firebaseToAuthUser(result.user) : null,
+        error: result.error,
+        errorCode: result.errorCode,
+        needsNewTab: result.needsNewTab,
+        needsAccountLink: result.needsAccountLink,
+        linkingEmail: result.linkingEmail,
+      };
     } catch (err) {
       console.error('[Auth] Google sign-in exception:', err);
       setError(friendlyAuthError(err));

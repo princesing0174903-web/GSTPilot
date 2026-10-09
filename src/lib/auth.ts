@@ -93,7 +93,15 @@ async function safeSetPersistence(rememberMe: boolean): Promise<void> {
  */
 export async function signInWithGoogle(
   rememberMe = true
-): Promise<{ user: User | null; error: string | null; needsNewTab?: boolean; needsAccountLink?: boolean; linkingEmail?: string; credential?: OAuthCredential | null }> {
+): Promise<{
+  user: User | null;
+  error: string | null;
+  errorCode?: string;
+  needsNewTab?: boolean;
+  needsAccountLink?: boolean;
+  linkingEmail?: string;
+  credential?: OAuthCredential | null;
+}> {
   if (isInsideIframe()) {
     console.log('[Auth] Inside iframe - Google OAuth requires a new tab');
     return { user: null, error: null, needsNewTab: true };
@@ -105,18 +113,46 @@ export async function signInWithGoogle(
     return { user: result.user, error: null };
   } catch (error: unknown) {
     const code = (error as { code?: string })?.code || '';
-    if (code === 'auth/account-exists-with-different-credential') {
-      const credential = GoogleAuthProvider.credentialFromError(error as any);
-      return { 
-        user: null, 
-        error: null, 
-        needsAccountLink: true, 
-        linkingEmail: (error as any)?.customData?.email || '',
-        credential
+    const credential = GoogleAuthProvider.credentialFromError(error as any);
+    const linkingEmail = (error as { customData?: { email?: string } })?.customData?.email || '';
+
+    // Only enter account-linking mode when Firebase supplies a recoverable
+    // Google credential and the associated email. Never infer a conflict from
+    // the text of a generic error message.
+    const providerConflict = code === 'auth/account-exists-with-different-credential';
+    const recoverableMaskedConflict =
+      code === 'auth/invalid-credential' && Boolean(credential) && Boolean(linkingEmail);
+
+    if ((providerConflict || recoverableMaskedConflict) && credential && linkingEmail) {
+      return {
+        user: null,
+        error: null,
+        needsAccountLink: true,
+        linkingEmail,
+        credential,
       };
     }
 
-    if (code === 'auth/popup-blocked' ||
+    if (providerConflict) {
+      return {
+        user: null,
+        error: 'Firebase reported a Google account-provider conflict but did not return a recoverable credential. Sign in using the existing account method, then link Google from the signed-in account. No account was deleted or merged.',
+        errorCode: code,
+      };
+    }
+
+    // auth/invalid-credential may arise in several contexts. It must not be
+    // translated into an Email/Password error when the user chose Google OAuth.
+    if (code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
+      return {
+        user: null,
+        error: 'Google sign-in was rejected by Firebase (invalid credential). This does not by itself prove an Email/Password account conflict. Please retry; if it persists, inspect the production Firebase project/provider configuration and sanitized runtime logs.',
+        errorCode: code,
+      };
+    }
+
+    if (
+      code === 'auth/popup-blocked' ||
       code === 'auth/cancelled-popup-request' ||
       code === 'auth/popup-closed-by-user'
     ) {
@@ -124,11 +160,20 @@ export async function signInWithGoogle(
         await signInWithRedirect(auth, googleProvider);
         return { user: null, error: null };
       } catch (redirectError: unknown) {
-        return { user: null, error: friendlyAuthError(redirectError) };
+        const redirectCode = (redirectError as { code?: string })?.code || '';
+        return {
+          user: null,
+          error: friendlyAuthError(redirectError),
+          errorCode: redirectCode || undefined,
+        };
       }
     }
 
-    return { user: null, error: friendlyAuthError(error) };
+    return {
+      user: null,
+      error: friendlyAuthError(error),
+      errorCode: code || undefined,
+    };
   }
 }
 

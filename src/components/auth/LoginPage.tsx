@@ -1,13 +1,15 @@
+'use client';
+
 import React, { useState } from 'react';
+import { BrandLogo } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { BrandLogo } from '@/components/BrandLogo';
-import { Eye, EyeOff, AlertTriangle, ArrowLeft } from 'lucide-react';
 
 interface LoginPageProps {
-  onBack: () => void;
-  onGetStarted: () => void;
+  onBack?: () => void;
+  onGetStarted?: () => void;
 }
 
 export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {

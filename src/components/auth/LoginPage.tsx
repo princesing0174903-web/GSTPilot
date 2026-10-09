@@ -21,6 +21,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [githubLoading, setGithubLoading] = useState(false);
+  const [linkEmail, setLinkEmail] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
@@ -43,20 +44,19 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
     );
   }
 
-  const handleGoogle = async () => {
+      const handleGoogle = async () => {
     setLocalError(null);
     setGoogleLoading(true);
     try {
       const result = await signInWithGoogle();
       if (result && result.error) {
-        if (result.error.includes('Email or password is incorrect')) {
-          setLocalError('GOOGLE_ACCOUNT_CONFLICT: This email already exists in the database as a password-only account. Firebase security is blocking Google login. Please delete the user in Firebase Console or use the Email/Password form.');
-        } else {
-          setLocalError("GOOGLE_SIGN_IN_ERROR: " + result.error);
-        }
+        setLocalError(result.error);
         setGoogleLoading(false);
       } else if (result && result.needsAccountLink) {
-        setLocalError('ACCOUNT_LINK_REQUIRED: This email is already associated with an email account. Please sign in with email and password to link your Google account.');
+        setLinkEmail(result.linkingEmail || '');
+        setLocalError('ACCOUNT CONFLICT: Please enter your password to link your Google account to ' + (result.linkingEmail || 'your email') + '.');
+        if (result.linkingEmail) setEmail(result.linkingEmail);
+        setMode('login');
         setGoogleLoading(false);
       }
       // Otherwise keep loading state true while AppRouter transitions
@@ -65,7 +65,6 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       setGoogleLoading(false);
     }
   };
-
   const handleGitHub = async () => {
     setLocalError(null);
     setGithubLoading(true);
@@ -251,7 +250,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
               disabled={isAnyLoading}
               className="w-full bg-white text-black hover:bg-zinc-200 h-11 mt-2 font-medium"
             >
-              {showSuccess ? 'Done' : isLoading ? 'Signing in...' : mode === 'login' ? 'Sign in' : 'Sign up'}
+              {showSuccess ? 'Done' : isLoading ? 'Signing in...' : linkEmail ? 'Link Account & Sign In' : mode === 'login' ? 'Sign in' : 'Sign up'}
             </Button>
           </form>
 

@@ -82,7 +82,7 @@ interface AuthContextType {
   signUpWithEmail: (name: string, email: string, password: string) => Promise<{ user: AuthUser | null; error: string | null }>;
   /** Google OAuth sign-in. Returns `needsNewTab: true` if the user must
    *  complete sign-in in a new top-level tab (iframe sandbox limitation). */
-  signInWithGoogle: () => Promise<{ user: AuthUser | null; error: string | null; needsNewTab?: boolean; needsAccountLink?: boolean; linkingEmail?: string }>;
+  signInWithGoogle: () => Promise<{ user: AuthUser | null; error: string | null; errorCode?: string; needsNewTab?: boolean; needsAccountLink?: boolean; linkingEmail?: string }>;
   /** GitHub OAuth sign-in. Redirects the browser to GitHub's consent page.
    *  On success, the callback sets a session cookie + redirects back to
    *  `?github_connected=1`, which AuthContext detects on mount and uses to
@@ -446,7 +446,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { signInWithGoogle: firebaseSignInWithGoogle } = await loadAuth();
       const result = await firebaseSignInWithGoogle();
-      if (result.needsAccountLink) {
+      if (result.needsNewTab) {
+          // OAuth popup/redirect flows cannot reliably run inside an iframe.
+          // Release loading state so the UI can offer a top-level tab.
+          setIsLoading(false);
+        } else if (result.needsAccountLink) {
           console.log('[Auth] Google sign-in requires account linking for:', result.linkingEmail);
           setPendingGoogleCredential(result.credential);
           setIsLoading(false);

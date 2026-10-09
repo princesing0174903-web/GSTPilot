@@ -49,7 +49,8 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
         setGoogleNewTabNeeded(true);
         setGoogleLoading(false);
       } else if (result && result.error) {
-        setLocalError(result.error);
+        const codeSuffix = result.errorCode ? ` (${result.errorCode})` : '';
+        setLocalError(`Google sign-in failed${codeSuffix}: ${result.error}`);
         setGoogleLoading(false);
       } else if (result && result.needsAccountLink) {
         setLinkEmail(result.linkingEmail || '');

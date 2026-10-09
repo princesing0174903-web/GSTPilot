@@ -160,7 +160,6 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
           )}
 
           {!linkEmail && (
-          {!linkEmail && (
           <div className="w-full space-y-3">
             <Button
               type="button"
@@ -204,9 +203,7 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
             </Button>
           </div>
           )}
-          )}
 
-          {!linkEmail && (
           {!linkEmail && (
           <div className="relative w-full my-8">
             <div className="absolute inset-0 flex items-center">

@@ -10,9 +10,10 @@ import { useAuth } from '@/contexts/AuthContext';
 interface LoginPageProps {
   onBack?: () => void;
   onGetStarted?: () => void;
+  onNavigatePage?: (page: 'product' | 'solutions' | 'resources' | 'pricing' | 'company' | 'legal' | 'privacy' | 'security' | 'terms') => void;
 }
 
-export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
+export default function LoginPage({ onBack, onGetStarted, onNavigatePage }: LoginPageProps) {
   const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithGitHub, resetPassword } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -269,11 +270,32 @@ export default function LoginPage({ onBack, onGetStarted }: LoginPageProps) {
       </div>
 
       <div className="py-6 flex justify-center items-center gap-4 text-xs font-medium text-zinc-500">
-        <a href="#" className="hover:text-white transition-colors">Privacy</a>
+        <a 
+          href="/privacy" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="hover:text-white transition-colors cursor-pointer"
+        >
+          Privacy
+        </a>
         <span>-</span>
-        <a href="#" className="hover:text-white transition-colors">Terms</a>
+        <a 
+          href="/terms" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="hover:text-white transition-colors cursor-pointer"
+        >
+          Terms
+        </a>
         <span>-</span>
-        <a href="#" className="hover:text-white transition-colors">Security</a>
+        <a 
+          href="/security" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="hover:text-white transition-colors cursor-pointer"
+        >
+          Security
+        </a>
       </div>
     </div>
   );

@@ -45,12 +45,11 @@ export default function LandingPage({ onGetStarted, onBookDemo, onNavigatePage }
           <BrandLogo variant="wordmark" size={32} animated={false} disableGlow={true} />
         </div>
 
-        {/* Centered navigation items with equal spacing */}
         <div className="hidden md:flex items-center justify-center gap-8 text-sm font-medium text-zinc-400 absolute left-1/2 -translate-x-1/2">
-          <button onClick={() => handleNav('product')} className="hover:text-white transition-colors cursor-pointer">Product</button>
-          <button onClick={() => handleNav('solutions')} className="hover:text-white transition-colors cursor-pointer">Solutions</button>
-          <button onClick={() => handleNav('resources')} className="hover:text-white transition-colors cursor-pointer">Resources</button>
-          <button onClick={() => handleNav('pricing')} className="hover:text-white transition-colors cursor-pointer">Pricing</button>
+          <a href="/product" onClick={(e) => { e.preventDefault(); handleNav('product'); }} className="hover:text-white transition-colors cursor-pointer">Product</a>
+          <a href="/solutions" onClick={(e) => { e.preventDefault(); handleNav('solutions'); }} className="hover:text-white transition-colors cursor-pointer">Solutions</a>
+          <a href="/resources" onClick={(e) => { e.preventDefault(); handleNav('resources'); }} className="hover:text-white transition-colors cursor-pointer">Resources</a>
+          <a href="/pricing" onClick={(e) => { e.preventDefault(); handleNav('pricing'); }} className="hover:text-white transition-colors cursor-pointer">Pricing</a>
         </div>
 
         <div className="flex items-center gap-4">
@@ -238,18 +237,18 @@ export default function LandingPage({ onGetStarted, onBookDemo, onNavigatePage }
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-4">
             <BrandLogo variant="icon" size={24} disableGlow={true} animated={false} />
-            <span className="text-zinc-500 text-sm">� 2026 VEYRO Inc. All rights reserved.</span>
+            <span className="text-zinc-500 text-sm">© 2026 VEYRO Inc. All rights reserved.</span>
           </div>
           <div className="flex flex-wrap gap-6 text-sm font-medium text-zinc-500">
-            <button onClick={() => handleNav('product')} className="hover:text-white transition-colors cursor-pointer">Product</button>
-            <button onClick={() => handleNav('solutions')} className="hover:text-white transition-colors cursor-pointer">Solutions</button>
-            <button onClick={() => handleNav('company')} className="hover:text-white transition-colors cursor-pointer">Company</button>
-            <button onClick={() => handleNav('resources')} className="hover:text-white transition-colors cursor-pointer">Resources</button>
-            <button onClick={() => handleNav('pricing')} className="hover:text-white transition-colors cursor-pointer">Pricing</button>
-            <button onClick={() => handleNav('legal')} className="hover:text-white transition-colors cursor-pointer">Legal</button>
-            <button onClick={() => handleNav('privacy')} className="hover:text-white transition-colors cursor-pointer">Privacy</button>
-            <button onClick={() => handleNav('security')} className="hover:text-white transition-colors cursor-pointer">Security</button>
-            <button onClick={() => handleNav('terms')} className="hover:text-white transition-colors cursor-pointer">Terms</button>
+            <a href="/product" onClick={(e) => { e.preventDefault(); handleNav('product'); }} className="hover:text-white transition-colors cursor-pointer">Product</a>
+            <a href="/solutions" onClick={(e) => { e.preventDefault(); handleNav('solutions'); }} className="hover:text-white transition-colors cursor-pointer">Solutions</a>
+            <a href="/company" onClick={(e) => { e.preventDefault(); handleNav('company'); }} className="hover:text-white transition-colors cursor-pointer">Company</a>
+            <a href="/resources" onClick={(e) => { e.preventDefault(); handleNav('resources'); }} className="hover:text-white transition-colors cursor-pointer">Resources</a>
+            <a href="/pricing" onClick={(e) => { e.preventDefault(); handleNav('pricing'); }} className="hover:text-white transition-colors cursor-pointer">Pricing</a>
+            <a href="/legal" onClick={(e) => { e.preventDefault(); handleNav('legal'); }} className="hover:text-white transition-colors cursor-pointer">Legal</a>
+            <a href="/privacy" onClick={(e) => { e.preventDefault(); handleNav('privacy'); }} className="hover:text-white transition-colors cursor-pointer">Privacy</a>
+            <a href="/security" onClick={(e) => { e.preventDefault(); handleNav('security'); }} className="hover:text-white transition-colors cursor-pointer">Security</a>
+            <a href="/terms" onClick={(e) => { e.preventDefault(); handleNav('terms'); }} className="hover:text-white transition-colors cursor-pointer">Terms</a>
           </div>
         </div>
       </footer>

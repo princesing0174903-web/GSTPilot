@@ -2168,7 +2168,7 @@ function Footer() {
                 {col.links.map((link) => (
                   <li key={link}>
                     <a
-                      href="#"
+                      href={`/${link.toLowerCase()}`}
                       className="text-sm text-white/65 transition-colors hover:text-white"
                     >
                       {link}

@@ -544,6 +544,10 @@ export function AppRouter() {
     if (typeof window === 'undefined') return;
     const checkHash = () => {
       const rawHash = window.location.hash.replace('#', '').toLowerCase();
+      if (rawHash === 'login' || rawHash === 'signin' || rawHash === 'signup') {
+        setCurrentScreen('login');
+        return;
+      }
       const validPages = ['product', 'solutions', 'resources', 'pricing', 'company', 'legal', 'privacy', 'security', 'terms'];
       if (validPages.includes(rawHash)) {
         setCurrentScreen(rawHash as any);
@@ -606,7 +610,13 @@ export function AppRouter() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   if (currentScreen === 'login') {
-    return <LoginPage onBack={handleBackToLanding} onGetStarted={handleGetStarted} />;
+    return (
+      <LoginPage 
+        onBack={handleBackToLanding} 
+        onGetStarted={handleGetStarted} 
+        onNavigatePage={(p) => setCurrentScreen(p)}
+      />
+    );
   }
 
   const publicPages = ['product', 'solutions', 'resources', 'pricing', 'company', 'legal', 'privacy', 'security', 'terms'] as const;

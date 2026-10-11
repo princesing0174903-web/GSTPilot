@@ -259,6 +259,43 @@ export default function PublicInfoPage({
           icon: FileText
         }
       ],
+      sections: [
+        {
+          heading: '1. Information We Collect and Process',
+          body: [
+            'We collect information necessary to operate your financial workflows: authentication identifiers (email, name, OAuth tokens from Google or GitHub), organization details, GSTIN tax identifiers, customer invoice metadata, bank ledger transactions, and audit timestamps.',
+            'We strictly do not collect biometric identifiers, sensitive personal health records, or credit card numbers directly. Payments and bank verifications are handled through PCI-DSS Level 1 compliant gateways.'
+          ]
+        },
+        {
+          heading: '2. Zero Data Selling Commitment',
+          body: [
+            'VEYRO does not sell, rent, license, or monetize your company data or customer lists to any advertising network, data broker, or commercial third party under any circumstances.',
+            'Your financial data is used solely to deliver the autonomous ERP, accounting, invoice generation, tax reconciliation, and Oracle AI assistance features you explicitly configure.'
+          ]
+        },
+        {
+          heading: '3. Multi-Tenant Cryptographic Isolation',
+          body: [
+            'Every organization within VEYRO is isolated with strict PostgreSQL row-level security and tenant-scoped Prisma middleware.',
+            'No user or system query can bridge tenant boundaries. Access to organization ledgers requires validated cryptographic session tokens with verified active membership in that organization.'
+          ]
+        },
+        {
+          heading: '4. Data Retention, Portability & Deletion Rights',
+          body: [
+            'You retain full, unconditional ownership of all business records. You can export complete financial ledgers, invoice archives, and contact records in open JSON and CSV formats at any time.',
+            'Upon organization workspace deletion or account termination, all corresponding databases, cached files, and credentials are permanently purged within 30 days in compliance with right-to-be-forgotten standards.'
+          ]
+        },
+        {
+          heading: '5. Regulatory Compliance & Global Standards',
+          body: [
+            'Our architecture is designed to comply with the European Union General Data Protection Regulation (GDPR), California Consumer Privacy Act (CCPA), and India Digital Personal Data Protection Act (DPDP Act 2023).',
+            'All data processors and cloud service providers we utilize undergo rigorous enterprise security auditing and execute binding Data Processing Addendums (DPAs).'
+          ]
+        }
+      ],
       ctaTitle: 'Review our complete commitment',
       ctaSub: 'Designed to protect the most sensitive financial records in the world.'
     },
@@ -288,6 +325,43 @@ export default function PublicInfoPage({
           title: 'Audited Database Backups',
           desc: 'Point-in-time recovery, distributed geographical replication, and automated disaster failover guarantees.',
           icon: Server
+        }
+      ],
+      sections: [
+        {
+          heading: '1. Infrastructure and Network Defense',
+          body: [
+            'VEYRO is hosted on top-tier global cloud infrastructure protected by multi-layered DDoS mitigation, Web Application Firewalls (WAF), and automated intrusion prevention systems.',
+            'All public and internal network communications are enforced over TLS 1.3 with Strict Transport Security (HSTS) and ephemeral Elliptic Curve Diffie-Hellman key exchanges.'
+          ]
+        },
+        {
+          heading: '2. Cryptographic Storage & Encryption at Rest',
+          body: [
+            'Production databases, storage volumes, and file backups are encrypted at rest using AES-256 with automatically rotated cryptographic keys managed by Hardware Security Modules (HSMs).',
+            'Sensitive authentication secrets, API keys, and third-party integration tokens are double-encrypted with salted envelope cryptography prior to persistence.'
+          ]
+        },
+        {
+          heading: '3. Identity, SSO, and Access Controls',
+          body: [
+            'User authentication is powered by Google Identity Services and GitHub OAuth with biometric MFA support, session revocation on device change, and rate-limited brute-force guards.',
+            'Administrative access to production clusters requires zero-trust ephemeral certificates, multi-party authorization, and comprehensive hardware-bound security keys.'
+          ]
+        },
+        {
+          heading: '4. Continuous Monitoring & Automated Vulnerability Auditing',
+          body: [
+            'We run automated static analysis (SAST), software composition analysis (SCA), and dynamic application security testing (DAST) on every git commit and pull request.',
+            'Audit trails capture every sensitive administrative operation, login attempt, role update, and data export with tamper-evident, append-only logging.'
+          ]
+        },
+        {
+          heading: '5. Disaster Recovery and Incident Response',
+          body: [
+            'High-availability database replication ensures continuous failover across independent availability zones. Encrypted snapshots provide point-in-time recovery with a Recovery Point Objective (RPO) of under 5 minutes.',
+            'Our dedicated security incident team maintains 24/7 on-call rotation with a maximum 15-minute SLA for critical threat escalation.'
+          ]
         }
       ],
       ctaTitle: 'Security that enterprise teams trust',
@@ -321,6 +395,43 @@ export default function PublicInfoPage({
           icon: Server
         }
       ],
+      sections: [
+        {
+          heading: '1. Agreement to Terms and Platform Scope',
+          body: [
+            'By accessing or using the VEYRO platform, you agree to be bound by these Terms of Service. If you are entering into this agreement on behalf of a company or other legal entity, you represent that you have the authority to bind such entity.',
+            'VEYRO provides autonomous enterprise software for accounting, invoice processing, banking reconciliation, tax analytics, and business intelligence.'
+          ]
+        },
+        {
+          heading: '2. Account Registration and Security Obligations',
+          body: [
+            'You are responsible for maintaining the confidentiality of your authentication credentials and for all activities conducted under your organization workspace.',
+            'You agree to immediately notify VEYRO of any unauthorized use of your account or any other breach of security.'
+          ]
+        },
+        {
+          heading: '3. Permitted Commercial Use & Fair Conduct',
+          body: [
+            'The platform is intended exclusively for lawful business management, tax compliance, and commercial accounting operations.',
+            'You may not reverse engineer, decompile, or attempt to derive source code from the platform, nor use the services to transmit unlawful, fraudulent, or malicious payloads.'
+          ]
+        },
+        {
+          heading: '4. Subscriptions, Fees & Billing Terms',
+          body: [
+            'Subscription plans are billed in advance on a recurring monthly or annual basis. You may upgrade, downgrade, or cancel your subscription at any time through your organization settings.',
+            'Upon cancellation, your subscription remains active until the conclusion of the paid billing period, with zero cancellation penalties or lock-in restrictions.'
+          ]
+        },
+        {
+          heading: '5. Limitation of Liability and Warranties',
+          body: [
+            'VEYRO provides automated accounting and tax calculation tools designed to assist qualified professionals. You remain responsible for reviewing and verifying final tax filings submitted to governmental authorities.',
+            'In no event shall VEYRO be liable for indirect, incidental, or consequential damages arising from service usage, beyond the total fees paid by you in the 12 months preceding the incident.'
+          ]
+        }
+      ],
       ctaTitle: 'Experience modern enterprise software',
       ctaSub: 'Start using VEYRO today with full confidence and clarity.'
     }
@@ -342,30 +453,34 @@ export default function PublicInfoPage({
 
         {/* Centered navigation items with equal spacing */}
         <div className="hidden md:flex items-center justify-center gap-8 text-sm font-medium text-zinc-400 absolute left-1/2 -translate-x-1/2">
-          <button 
-            onClick={() => onNavigatePage('product')} 
-            className={`transition-colors hover:text-white ${page === 'product' ? 'text-white' : ''}`}
+          <a 
+            href="/product"
+            onClick={(e) => { e.preventDefault(); onNavigatePage('product'); }} 
+            className={`transition-colors hover:text-white cursor-pointer ${page === 'product' ? 'text-white font-semibold' : ''}`}
           >
             Product
-          </button>
-          <button 
-            onClick={() => onNavigatePage('solutions')} 
-            className={`transition-colors hover:text-white ${page === 'solutions' ? 'text-white' : ''}`}
+          </a>
+          <a 
+            href="/solutions"
+            onClick={(e) => { e.preventDefault(); onNavigatePage('solutions'); }} 
+            className={`transition-colors hover:text-white cursor-pointer ${page === 'solutions' ? 'text-white font-semibold' : ''}`}
           >
             Solutions
-          </button>
-          <button 
-            onClick={() => onNavigatePage('resources')} 
-            className={`transition-colors hover:text-white ${page === 'resources' ? 'text-white' : ''}`}
+          </a>
+          <a 
+            href="/resources"
+            onClick={(e) => { e.preventDefault(); onNavigatePage('resources'); }} 
+            className={`transition-colors hover:text-white cursor-pointer ${page === 'resources' ? 'text-white font-semibold' : ''}`}
           >
             Resources
-          </button>
-          <button 
-            onClick={() => onNavigatePage('pricing')} 
-            className={`transition-colors hover:text-white ${page === 'pricing' ? 'text-white' : ''}`}
+          </a>
+          <a 
+            href="/pricing"
+            onClick={(e) => { e.preventDefault(); onNavigatePage('pricing'); }} 
+            className={`transition-colors hover:text-white cursor-pointer ${page === 'pricing' ? 'text-white font-semibold' : ''}`}
           >
             Pricing
-          </button>
+          </a>
         </div>
 
         <div className="flex items-center gap-4">
@@ -461,6 +576,32 @@ export default function PublicInfoPage({
         </div>
       </section>
 
+      {/* EXTENDED POLICY / ARCHITECTURE SECTIONS */}
+      {current.sections && current.sections.length > 0 && (
+        <section className="py-12 px-6 md:px-12 max-w-4xl mx-auto w-full">
+          <div className="space-y-8">
+            {current.sections.map((sec, sIdx) => (
+              <div 
+                key={sIdx} 
+                className="p-8 rounded-2xl bg-[#090909] border border-zinc-800/80 hover:border-zinc-700 transition-colors"
+              >
+                <h3 className="text-xl md:text-2xl font-semibold text-white mb-4 tracking-tight flex items-center gap-3">
+                  <span className="text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded">
+                    0{sIdx + 1}
+                  </span>
+                  {sec.heading}
+                </h3>
+                <div className="space-y-3 text-zinc-400 text-sm md:text-base leading-relaxed">
+                  {sec.body.map((p, pIdx) => (
+                    <p key={pIdx}>{p}</p>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* PREMIUM DETAILS CALLOUT */}
       <section className="py-20 px-6 md:px-12 bg-zinc-950/60 border-y border-zinc-900">
         <div className="max-w-4xl mx-auto text-center">
@@ -491,15 +632,15 @@ export default function PublicInfoPage({
           </div>
 
           <div className="flex flex-wrap justify-center gap-6 text-sm font-medium text-zinc-500">
-            <button onClick={() => onNavigatePage('product')} className="hover:text-white transition-colors">Product</button>
-            <button onClick={() => onNavigatePage('solutions')} className="hover:text-white transition-colors">Solutions</button>
-            <button onClick={() => onNavigatePage('company')} className="hover:text-white transition-colors">Company</button>
-            <button onClick={() => onNavigatePage('resources')} className="hover:text-white transition-colors">Resources</button>
-            <button onClick={() => onNavigatePage('pricing')} className="hover:text-white transition-colors">Pricing</button>
-            <button onClick={() => onNavigatePage('legal')} className="hover:text-white transition-colors">Legal</button>
-            <button onClick={() => onNavigatePage('privacy')} className="hover:text-white transition-colors">Privacy</button>
-            <button onClick={() => onNavigatePage('security')} className="hover:text-white transition-colors">Security</button>
-            <button onClick={() => onNavigatePage('terms')} className="hover:text-white transition-colors">Terms</button>
+            <a href="/product" onClick={(e) => { e.preventDefault(); onNavigatePage('product'); }} className="hover:text-white transition-colors cursor-pointer">Product</a>
+            <a href="/solutions" onClick={(e) => { e.preventDefault(); onNavigatePage('solutions'); }} className="hover:text-white transition-colors cursor-pointer">Solutions</a>
+            <a href="/company" onClick={(e) => { e.preventDefault(); onNavigatePage('company'); }} className="hover:text-white transition-colors cursor-pointer">Company</a>
+            <a href="/resources" onClick={(e) => { e.preventDefault(); onNavigatePage('resources'); }} className="hover:text-white transition-colors cursor-pointer">Resources</a>
+            <a href="/pricing" onClick={(e) => { e.preventDefault(); onNavigatePage('pricing'); }} className="hover:text-white transition-colors cursor-pointer">Pricing</a>
+            <a href="/legal" onClick={(e) => { e.preventDefault(); onNavigatePage('legal'); }} className="hover:text-white transition-colors cursor-pointer">Legal</a>
+            <a href="/privacy" onClick={(e) => { e.preventDefault(); onNavigatePage('privacy'); }} className="hover:text-white transition-colors cursor-pointer">Privacy</a>
+            <a href="/security" onClick={(e) => { e.preventDefault(); onNavigatePage('security'); }} className="hover:text-white transition-colors cursor-pointer">Security</a>
+            <a href="/terms" onClick={(e) => { e.preventDefault(); onNavigatePage('terms'); }} className="hover:text-white transition-colors cursor-pointer">Terms</a>
           </div>
         </div>
       </footer>

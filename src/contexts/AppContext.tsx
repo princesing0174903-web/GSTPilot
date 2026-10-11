@@ -227,7 +227,19 @@ export interface ReturnPrepContext {
   period: string;
 }
 
-export type AppScreen = 'landing' | 'login' | 'app';
+export type AppScreen = 
+  | 'landing' 
+  | 'login' 
+  | 'app'
+  | 'product'
+  | 'solutions'
+  | 'resources'
+  | 'pricing'
+  | 'company'
+  | 'legal'
+  | 'privacy'
+  | 'security'
+  | 'terms';
 
 /**
  * Optional deep-link target for the Settings page.

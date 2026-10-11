@@ -45,6 +45,7 @@ const PageLoader = () => <PremiumPageLoader />;
 // ═══════════════════════════════════════════════════════════════════════════════
 const LandingPage = dynamic(withRetry(() => import('@/components/landing/LandingPage')), { loading: PageLoader, ssr: false });
 const LoginPage = dynamic(withRetry(() => import('@/components/auth/LoginPage')), { loading: PageLoader, ssr: false });
+const PublicInfoPage = dynamic(withRetry(() => import('@/components/landing/PublicInfoPage')), { loading: PageLoader, ssr: false });
 
 // NOTE: `OnboardingFlow` (the multi-step questionnaire) was previously a root
 // dynamic import here. It has been REMOVED — the questionnaire flow is gone.
@@ -538,6 +539,21 @@ export function AppRouter() {
     }
   }, [isAuthenticated, isInitializing, currentScreen, setCurrentScreen]);
 
+  // Support direct hash navigation (e.g. #pricing, #product, #solutions, #resources, #legal, etc.)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const checkHash = () => {
+      const rawHash = window.location.hash.replace('#', '').toLowerCase();
+      const validPages = ['product', 'solutions', 'resources', 'pricing', 'company', 'legal', 'privacy', 'security', 'terms'];
+      if (validPages.includes(rawHash)) {
+        setCurrentScreen(rawHash as any);
+      }
+    };
+    checkHash();
+    window.addEventListener('hashchange', checkHash);
+    return () => window.removeEventListener('hashchange', checkHash);
+  }, [setCurrentScreen]);
+
   const handleGetStarted = () => setCurrentScreen('login');
   const handleBookDemo = () => setCurrentScreen('login');
   const handleBackToLanding = () => setCurrentScreen('landing');
@@ -593,7 +609,25 @@ export function AppRouter() {
     return <LoginPage onBack={handleBackToLanding} onGetStarted={handleGetStarted} />;
   }
 
-  return <LandingPage onGetStarted={handleGetStarted} onBookDemo={handleBookDemo} />;
+  const publicPages = ['product', 'solutions', 'resources', 'pricing', 'company', 'legal', 'privacy', 'security', 'terms'] as const;
+  if (publicPages.includes(currentScreen as any)) {
+    return (
+      <PublicInfoPage
+        page={currentScreen as any}
+        onBack={handleBackToLanding}
+        onGetStarted={handleGetStarted}
+        onNavigatePage={(p) => setCurrentScreen(p)}
+      />
+    );
+  }
+
+  return (
+    <LandingPage 
+      onGetStarted={handleGetStarted} 
+      onBookDemo={handleBookDemo} 
+      onNavigatePage={(p) => setCurrentScreen(p)}
+    />
+  );
 }
 
 export default AppRouter;

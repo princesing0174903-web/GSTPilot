@@ -10,9 +10,10 @@ import { ChevronRight, ArrowRight, CheckCircle2, PlayCircle, BarChart3, Bot, Lay
 interface LandingPageProps {
   onGetStarted: () => void;
   onBookDemo: () => void;
+  onNavigatePage?: (page: 'product' | 'solutions' | 'resources' | 'pricing' | 'company' | 'legal' | 'privacy' | 'security' | 'terms') => void;
 }
 
-export default function LandingPage({ onGetStarted, onBookDemo }: LandingPageProps) {
+export default function LandingPage({ onGetStarted, onBookDemo, onNavigatePage }: LandingPageProps) {
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { 
@@ -29,6 +30,12 @@ export default function LandingPage({ onGetStarted, onBookDemo }: LandingPagePro
     }
   };
 
+  const handleNav = (target: 'product' | 'solutions' | 'resources' | 'pricing' | 'company' | 'legal' | 'privacy' | 'security' | 'terms') => {
+    if (onNavigatePage) {
+      onNavigatePage(target);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#030303] text-zinc-200 font-sans selection:bg-zinc-800 selection:text-white overflow-x-hidden">
       
@@ -37,10 +44,10 @@ export default function LandingPage({ onGetStarted, onBookDemo }: LandingPagePro
         <div className="flex items-center gap-8">
           <BrandLogo variant="wordmark" size={32} animated={false} disableGlow={true} />
           <div className="hidden md:flex items-center gap-6 text-sm font-medium text-zinc-400">
-            <a href="#product" className="hover:text-white transition-colors">Product</a>
-            <a href="#solutions" className="hover:text-white transition-colors">Solutions</a>
-            <a href="#resources" className="hover:text-white transition-colors">Resources</a>
-            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+            <button onClick={() => handleNav('product')} className="hover:text-white transition-colors cursor-pointer">Product</button>
+            <button onClick={() => handleNav('solutions')} className="hover:text-white transition-colors cursor-pointer">Solutions</button>
+            <button onClick={() => handleNav('resources')} className="hover:text-white transition-colors cursor-pointer">Resources</button>
+            <button onClick={() => handleNav('pricing')} className="hover:text-white transition-colors cursor-pointer">Pricing</button>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -230,11 +237,16 @@ export default function LandingPage({ onGetStarted, onBookDemo }: LandingPagePro
             <BrandLogo variant="icon" size={24} disableGlow={true} animated={false} />
             <span className="text-zinc-500 text-sm">� 2026 VEYRO Inc. All rights reserved.</span>
           </div>
-          <div className="flex gap-8 text-sm font-medium text-zinc-500">
-            <a href="#" className="hover:text-white transition-colors">Product</a>
-            <a href="#" className="hover:text-white transition-colors">Company</a>
-            <a href="#" className="hover:text-white transition-colors">Resources</a>
-            <a href="#" className="hover:text-white transition-colors">Legal</a>
+          <div className="flex flex-wrap gap-6 text-sm font-medium text-zinc-500">
+            <button onClick={() => handleNav('product')} className="hover:text-white transition-colors cursor-pointer">Product</button>
+            <button onClick={() => handleNav('solutions')} className="hover:text-white transition-colors cursor-pointer">Solutions</button>
+            <button onClick={() => handleNav('company')} className="hover:text-white transition-colors cursor-pointer">Company</button>
+            <button onClick={() => handleNav('resources')} className="hover:text-white transition-colors cursor-pointer">Resources</button>
+            <button onClick={() => handleNav('pricing')} className="hover:text-white transition-colors cursor-pointer">Pricing</button>
+            <button onClick={() => handleNav('legal')} className="hover:text-white transition-colors cursor-pointer">Legal</button>
+            <button onClick={() => handleNav('privacy')} className="hover:text-white transition-colors cursor-pointer">Privacy</button>
+            <button onClick={() => handleNav('security')} className="hover:text-white transition-colors cursor-pointer">Security</button>
+            <button onClick={() => handleNav('terms')} className="hover:text-white transition-colors cursor-pointer">Terms</button>
           </div>
         </div>
       </footer>

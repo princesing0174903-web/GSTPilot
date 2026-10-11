@@ -84,6 +84,30 @@ async function safeSetPersistence(rememberMe: boolean): Promise<void> {
 }
 
 /**
+ * Google OAuth errors must be mapped in provider context. Firebase can return
+ * auth/invalid-credential for a Google flow too; the shared email/password map
+ * incorrectly calls that "Email or password is incorrect".
+ */
+function friendlyGoogleAuthError(error: unknown): string {
+  const code = (error as { code?: string } | null)?.code || '';
+
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+      return 'Google sign-in could not be completed because Firebase rejected the Google credential. This is not an email/password error. If retrying does not work, the Google provider or OAuth configuration for this Firebase project needs checking.';
+    case 'auth/operation-not-allowed':
+      return 'Google sign-in is not enabled for this Firebase project. Enable Google in Firebase Console → Authentication → Sign-in method.';
+    case 'auth/unauthorized-domain':
+      return 'This website is not authorized for Google sign-in. Add the active production domain in Firebase Console → Authentication → Settings → Authorized domains.';
+    case 'redirect_uri_mismatch':
+    case 'auth/redirect-uri-mismatch':
+      return 'Google sign-in is misconfigured for this website. Check the OAuth redirect URI and the Firebase Authentication authorized domains.';
+    default:
+      return friendlyAuthError(error);
+  }
+}
+
+/**
  * Google Sign-In. Strategy:
  *   1. If we're inside an iframe → return `needsNewTab: true` so the UI
  *      shows an "Open in new tab" button. We do NOT attempt signInWithRedirect
@@ -105,16 +129,34 @@ export async function signInWithGoogle(
     return { user: result.user, error: null };
   } catch (error: unknown) {
     const code = (error as { code?: string })?.code || '';
-    if (code === 'auth/account-exists-with-different-credential') {
-      const credential = GoogleAuthProvider.credentialFromError(error as any);
-      return { 
-        user: null, 
-        error: null, 
-        needsAccountLink: true, 
-        linkingEmail: (error as any)?.customData?.email || '',
-        credential
+    const credential = GoogleAuthProvider.credentialFromError(error as any);
+    const linkingEmail = (error as { customData?: { email?: string } })?.customData?.email || '';
+    const providerConflict = code === 'auth/account-exists-with-different-credential';
+    const recoverableMaskedConflict =
+      code === 'auth/invalid-credential' && Boolean(credential) && Boolean(linkingEmail);
+
+    // Only offer account linking when Firebase returned both the email and
+    // a recoverable Google credential. Never treat a generic invalid credential
+    // as proof of an email/password account conflict.
+    if ((providerConflict || recoverableMaskedConflict) && credential && linkingEmail) {
+      return {
+        user: null,
+        error: null,
+        needsAccountLink: true,
+        linkingEmail,
+        credential,
       };
     }
+
+    if (providerConflict) {
+      console.warn('[Auth] Google account conflict had no recoverable credential/email');
+      return {
+        user: null,
+        error: 'Firebase detected a Google account conflict but did not return a credential that can be linked automatically. Sign in using the existing account method, then link Google from account settings.',
+      };
+    }
+
+    console.warn('[Auth] Google sign-in failed', { code: code || 'unknown' });
 
     if (code === 'auth/popup-blocked' ||
       code === 'auth/cancelled-popup-request' ||
@@ -124,11 +166,11 @@ export async function signInWithGoogle(
         await signInWithRedirect(auth, googleProvider);
         return { user: null, error: null };
       } catch (redirectError: unknown) {
-        return { user: null, error: friendlyAuthError(redirectError) };
+        return { user: null, error: friendlyGoogleAuthError(redirectError) };
       }
     }
 
-    return { user: null, error: friendlyAuthError(error) };
+    return { user: null, error: friendlyGoogleAuthError(error) };
   }
 }
 
@@ -165,13 +207,13 @@ export async function handleRedirectResult(): Promise<{
         const popupResult = await signInWithPopup(auth, googleProvider);
         return { user: popupResult.user, error: null };
       } catch (error: unknown) {
-        return { user: null, error: friendlyAuthError(error) };
+        return { user: null, error: friendlyGoogleAuthError(error) };
       }
     }
 
     return { user: null, error: null };
   } catch (error: unknown) {
-    return { user: null, error: friendlyAuthError(error) };
+    return { user: null, error: friendlyGoogleAuthError(error) };
   }
 }
 
@@ -287,7 +329,7 @@ export async function linkGoogleAccount(): Promise<{ user: User | null; error: s
     const result = await linkWithPopup(auth.currentUser, googleProvider);
     return { user: result.user, error: null };
   } catch (error: unknown) {
-    return { user: null, error: friendlyAuthError(error) };
+    return { user: null, error: friendlyGoogleAuthError(error) };
   }
 }
 

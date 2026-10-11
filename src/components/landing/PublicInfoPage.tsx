@@ -333,40 +333,39 @@ export default function PublicInfoPage({
       
       {/* NAVBAR */}
       <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 md:px-12 backdrop-blur-md bg-[#030303]/80 border-b border-zinc-900/50">
-        <div className="flex items-center gap-8">
-          <div 
-            onClick={onBack} 
-            className="cursor-pointer flex items-center gap-2 group"
-          >
-            <BrandLogo variant="wordmark" size={32} animated={false} disableGlow={true} />
-          </div>
+        <div 
+          onClick={onBack} 
+          className="cursor-pointer flex items-center gap-2 group"
+        >
+          <BrandLogo variant="wordmark" size={32} animated={false} disableGlow={true} />
+        </div>
 
-          <div className="hidden md:flex items-center gap-6 text-sm font-medium text-zinc-400">
-            <button 
-              onClick={() => onNavigatePage('product')} 
-              className={`transition-colors hover:text-white ${page === 'product' ? 'text-white' : ''}`}
-            >
-              Product
-            </button>
-            <button 
-              onClick={() => onNavigatePage('solutions')} 
-              className={`transition-colors hover:text-white ${page === 'solutions' ? 'text-white' : ''}`}
-            >
-              Solutions
-            </button>
-            <button 
-              onClick={() => onNavigatePage('resources')} 
-              className={`transition-colors hover:text-white ${page === 'resources' ? 'text-white' : ''}`}
-            >
-              Resources
-            </button>
-            <button 
-              onClick={() => onNavigatePage('pricing')} 
-              className={`transition-colors hover:text-white ${page === 'pricing' ? 'text-white' : ''}`}
-            >
-              Pricing
-            </button>
-          </div>
+        {/* Centered navigation items with equal spacing */}
+        <div className="hidden md:flex items-center justify-center gap-8 text-sm font-medium text-zinc-400 absolute left-1/2 -translate-x-1/2">
+          <button 
+            onClick={() => onNavigatePage('product')} 
+            className={`transition-colors hover:text-white ${page === 'product' ? 'text-white' : ''}`}
+          >
+            Product
+          </button>
+          <button 
+            onClick={() => onNavigatePage('solutions')} 
+            className={`transition-colors hover:text-white ${page === 'solutions' ? 'text-white' : ''}`}
+          >
+            Solutions
+          </button>
+          <button 
+            onClick={() => onNavigatePage('resources')} 
+            className={`transition-colors hover:text-white ${page === 'resources' ? 'text-white' : ''}`}
+          >
+            Resources
+          </button>
+          <button 
+            onClick={() => onNavigatePage('pricing')} 
+            className={`transition-colors hover:text-white ${page === 'pricing' ? 'text-white' : ''}`}
+          >
+            Pricing
+          </button>
         </div>
 
         <div className="flex items-center gap-4">

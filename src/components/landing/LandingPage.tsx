@@ -41,15 +41,18 @@ export default function LandingPage({ onGetStarted, onBookDemo, onNavigatePage }
       
       {/* NAVBAR */}
       <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 md:px-12 backdrop-blur-md bg-[#030303]/80 border-b border-zinc-900/50">
-        <div className="flex items-center gap-8">
+        <div className="flex items-center">
           <BrandLogo variant="wordmark" size={32} animated={false} disableGlow={true} />
-          <div className="hidden md:flex items-center gap-6 text-sm font-medium text-zinc-400">
-            <button onClick={() => handleNav('product')} className="hover:text-white transition-colors cursor-pointer">Product</button>
-            <button onClick={() => handleNav('solutions')} className="hover:text-white transition-colors cursor-pointer">Solutions</button>
-            <button onClick={() => handleNav('resources')} className="hover:text-white transition-colors cursor-pointer">Resources</button>
-            <button onClick={() => handleNav('pricing')} className="hover:text-white transition-colors cursor-pointer">Pricing</button>
-          </div>
         </div>
+
+        {/* Centered navigation items with equal spacing */}
+        <div className="hidden md:flex items-center justify-center gap-8 text-sm font-medium text-zinc-400 absolute left-1/2 -translate-x-1/2">
+          <button onClick={() => handleNav('product')} className="hover:text-white transition-colors cursor-pointer">Product</button>
+          <button onClick={() => handleNav('solutions')} className="hover:text-white transition-colors cursor-pointer">Solutions</button>
+          <button onClick={() => handleNav('resources')} className="hover:text-white transition-colors cursor-pointer">Resources</button>
+          <button onClick={() => handleNav('pricing')} className="hover:text-white transition-colors cursor-pointer">Pricing</button>
+        </div>
+
         <div className="flex items-center gap-4">
           <button onClick={onGetStarted} className="hidden md:block text-sm font-medium text-zinc-400 hover:text-white transition-colors">Sign in</button>
           <Button onClick={onGetStarted} className="bg-white text-black hover:bg-zinc-200 h-9 px-4 rounded-full text-sm font-medium">

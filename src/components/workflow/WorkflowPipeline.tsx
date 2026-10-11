@@ -105,38 +105,38 @@ interface StatusStyle {
 
 const STATUS_STYLES: Record<StageStatus, StatusStyle> = {
   healthy: {
-    dot: 'bg-emerald-500',
-    iconWrap: 'bg-emerald-500/10',
-    iconColor: 'text-emerald-400',
-    countColor: 'text-emerald-300',
-    borderHover: 'hover:border-emerald-500/40',
-    ring: 'ring-emerald-500/20',
-    shadow: 'shadow-[0_0_24px_-6px_rgba(37,99,235,0.25)]',
+    dot: 'bg-zinc-500',
+    iconWrap: 'bg-white/[0.04]',
+    iconColor: 'text-[#EDEDED]',
+    countColor: 'text-[#EDEDED]',
+    borderHover: 'hover:border-white/20',
+    ring: 'ring-white/[0.08]',
+    shadow: '',
   },
   warning: {
-    dot: 'bg-amber-500',
+    dot: 'bg-amber-400',
     iconWrap: 'bg-amber-500/10',
     iconColor: 'text-amber-400',
-    countColor: 'text-amber-300',
-    borderHover: 'hover:border-amber-500/40',
+    countColor: 'text-[#EDEDED]',
+    borderHover: 'hover:border-amber-500/30',
     ring: 'ring-amber-500/20',
-    shadow: 'shadow-[0_0_24px_-6px_rgba(245,158,11,0.25)]',
+    shadow: '',
   },
   critical: {
-    dot: 'bg-rose-500',
+    dot: 'bg-rose-400',
     iconWrap: 'bg-rose-500/10',
     iconColor: 'text-rose-400',
-    countColor: 'text-rose-300',
-    borderHover: 'hover:border-rose-500/40',
+    countColor: 'text-[#EDEDED]',
+    borderHover: 'hover:border-rose-500/30',
     ring: 'ring-rose-500/20',
-    shadow: 'shadow-[0_0_24px_-6px_rgba(244,63,94,0.3)]',
+    shadow: '',
   },
   clear: {
-    dot: 'bg-zinc-600',
-    iconWrap: 'bg-white/[0.04]',
-    iconColor: 'text-zinc-500',
-    countColor: 'text-zinc-400',
-    borderHover: 'hover:border-white/[0.12]',
+    dot: 'bg-zinc-700',
+    iconWrap: 'bg-white/[0.02]',
+    iconColor: 'text-[#666666]',
+    countColor: 'text-[#888888]',
+    borderHover: 'hover:border-white/20',
     ring: 'ring-white/[0.04]',
     shadow: '',
   },
@@ -159,31 +159,31 @@ interface HealthMeta {
 
 const HEALTH_META: Record<StageStatus, HealthMeta> = {
   healthy: {
-    label: 'On Track',
-    dot: 'bg-emerald-500',
-    text: 'text-emerald-300',
-    chip: 'bg-emerald-500/10 border-emerald-500/25',
+    label: 'On track',
+    dot: 'bg-zinc-400',
+    text: 'text-zinc-300',
+    chip: 'bg-white/[0.04] border-white/[0.08]',
     Icon: CheckCircle,
   },
   warning: {
-    label: 'Needs Attention',
-    dot: 'bg-amber-500',
+    label: 'Needs review',
+    dot: 'bg-amber-400',
     text: 'text-amber-300',
-    chip: 'bg-amber-500/10 border-amber-500/25',
+    chip: 'bg-amber-500/10 border-amber-500/20',
     Icon: AlertTriangle,
   },
   critical: {
-    label: 'Blocked',
-    dot: 'bg-rose-500',
+    label: 'Attention',
+    dot: 'bg-rose-400',
     text: 'text-rose-300',
-    chip: 'bg-rose-500/10 border-rose-500/25',
+    chip: 'bg-rose-500/10 border-rose-500/20',
     Icon: AlertOctagon,
   },
   clear: {
     label: 'Idle',
     dot: 'bg-zinc-600',
-    text: 'text-zinc-400',
-    chip: 'bg-white/[0.04] border-white/[0.06]',
+    text: 'text-zinc-500',
+    chip: 'bg-white/[0.02] border-white/[0.04]',
     Icon: MinusCircle,
   },
 };
@@ -205,30 +205,15 @@ function formatCount(n: number): string {
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function HealthBadge({ health }: { health: StageStatus }) {
-  // Renders the WORKFLOW PIPELINE status badge (On Track / Needs Attention /
-  // Blocked / Idle). Renamed from "Healthy/Warning/Critical/Clear" to avoid
-  // vocabulary collision with the business health score (Excellent/Good/Fair/
-  // Poor/Critical) shown in the DashboardPage hero pill.
   const meta = HEALTH_META[health] ?? HEALTH_META.clear;
-  const Icon = meta.Icon;
   return (
     <div
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${meta.chip}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-normal ${meta.chip}`}
     >
-      <span className="relative flex h-1.5 w-1.5">
-        {health !== 'clear' && (
-          <motion.span
-            className={`absolute inline-flex h-full w-full rounded-full ${meta.dot} opacity-60`}
-            animate={{ scale: [1, 1.8, 1], opacity: [0.6, 0, 0.6] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
-          />
-        )}
-        <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-      </span>
-      <span className={`text-[10px] font-semibold uppercase tracking-wider ${meta.text}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+      <span className={`text-[11px] ${meta.text}`}>
         {meta.label}
       </span>
-      <Icon className={`size-3 ${meta.text}`} />
     </div>
   );
 }
@@ -268,9 +253,9 @@ const StageCard = React.memo(function StageCard({
       transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' }}
       whileHover={{ y: -2 }}
       className={`
-        group relative w-full overflow-hidden rounded-2xl border border-white/[0.06]
-        bg-white/[0.02] p-3 text-left transition-colors duration-300
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40
+        group relative w-full overflow-hidden rounded-[10px] border border-white/[0.08]
+        bg-[#141414] p-3 text-left transition-colors duration-200
+        focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20
         ${styles.borderHover}
         ${stage.view ? 'cursor-pointer' : 'cursor-default'}
       `}
@@ -332,12 +317,12 @@ const StageCard = React.memo(function StageCard({
       </div>
 
       {/* Label */}
-      <p className="relative mt-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
+      <p className="relative mt-1 text-[11px] font-medium text-[#EDEDED]">
         {meta.shortLabel}
       </p>
 
       {/* Description */}
-      <p className="relative mt-0.5 line-clamp-2 text-[10px] leading-tight text-zinc-500">
+      <p className="relative mt-0.5 line-clamp-2 text-[10px] leading-tight text-[#666666]">
         {stage.description}
       </p>
 
@@ -495,39 +480,40 @@ function WorkflowPipelineImpl({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="glass-surface rounded-2xl border border-white/[0.06] p-4 md:p-5"
-      aria-label="Today's workflow pipeline"
+      className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-4 md:p-5"
+      aria-label="Workflow activity pipeline"
     >
       {/* ─── Header ─── */}
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
-            <WorkflowIcon className="size-4 text-emerald-400" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04]">
+            <WorkflowIcon className="size-3.5 text-[#A1A1A1]" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-zinc-100">
-              Today&apos;s Workflow
+            <h2 className="text-xs font-medium text-[#EDEDED]">
+              Activity pipeline
             </h2>
-            <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-              Live pipeline · 8 stages
+            <p className="text-[11px] text-[#666666]">
+              8 automated stages
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          {/* Pipeline status badge (NOT a business health score — the
-              canonical health score lives in the DashboardPage hero pill) */}
-          <HealthBadge health={health} />
+        <div className="flex items-center gap-2">
+          {/* Status badge: shown ONLY when there are active items to prevent "On Track / Active 0" contradiction */}
+          {totalActive > 0 && <HealthBadge health={health} />}
 
           {/* Total active count */}
-          <div className="hidden items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.02] px-2.5 py-1 sm:inline-flex">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-              Active
-            </span>
-            <span className="text-[11px] font-bold tabular-nums text-zinc-200">
-              {formatCount(totalActive)}
-            </span>
-          </div>
+          {totalActive > 0 && (
+            <div className="hidden items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.02] px-2 py-0.5 sm:inline-flex">
+              <span className="text-[10px] text-[#666666]">
+                Active
+              </span>
+              <span className="text-[11px] font-mono text-[#EDEDED]">
+                {formatCount(totalActive)}
+              </span>
+            </div>
+          )}
 
           {/* Refresh */}
           <Button
@@ -535,7 +521,7 @@ function WorkflowPipelineImpl({
             size="sm"
             onClick={handleRefresh}
             disabled={loading}
-            className="h-8 gap-1.5 px-2.5 text-[11px] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
+            className="h-7 gap-1.5 px-2 text-xs text-[#888888] hover:bg-white/[0.04] hover:text-[#EDEDED]"
           >
             <RefreshCw
               className={`size-3 ${loading ? 'animate-spin' : ''}`}

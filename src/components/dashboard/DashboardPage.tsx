@@ -167,10 +167,40 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-function getFirstName(name: string | undefined | null): string {
-  if (!name) return 'there';
-  const first = name.trim().split(/\s+/)[0];
-  return first || 'there';
+function cleanFirstName(name: string | undefined | null, email?: string | null): string {
+  let raw = (name || '').trim();
+  if (!raw && email) {
+    raw = email.split('@')[0];
+  }
+  // Strip email domain if present in name
+  raw = raw.replace(/@.*$/, '').trim();
+  // Strip numbers at end (e.g. princesing0174903 -> princesing)
+  raw = raw.replace(/\d+$/, '').trim();
+  // Replace underscores, periods, dashes with space
+  raw = raw.replace(/[._-]/g, ' ').trim();
+  const first = raw.split(/\s+/)[0];
+  if (!first || first.length < 2) return '';
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
+function MiniSparkline({ trend = 'up' }: { trend?: 'up' | 'down' | 'flat' }) {
+  const points = trend === 'up'
+    ? '0,13 8,11 16,12 24,8 32,9 40,5 48,6 56,2'
+    : trend === 'down'
+    ? '0,2 8,6 16,5 24,9 32,8 40,12 48,11 56,14'
+    : '0,8 8,8 16,8 24,8 32,8 40,8 48,8 56,8';
+  return (
+    <svg className="w-14 h-3.5 overflow-visible shrink-0 text-[#A1A1A1] opacity-40 group-hover:opacity-75 transition-opacity" viewBox="0 0 56 16">
+      <polyline
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points}
+      />
+    </svg>
+  );
 }
 
 function timeAgo(dateStr: string): string {
@@ -227,109 +257,49 @@ function DashboardSkeleton() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// HERO STAT TILE
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPACT METRIC CARD (Vercel Style)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-interface HeroStatProps {
+interface CompactMetricCardProps {
   label: string;
-  /** Numeric value for count-up animation. */
-  numericValue?: number;
-  /** Format: 'currency' = ₹1,18,000, 'currencyCompact' = ₹1.18L, 'integer' = 42, 'decimal' = 68.5 */
-  numericFormat?: 'currency' | 'currencyCompact' | 'integer' | 'decimal';
-  /** Fallback string when numericValue is undefined. */
-  valueString?: string;
-  subtitle: string;
-  icon: React.ReactNode;
-  /** Accent color for the left bar + icon chip. */
-  accent: 'emerald' | 'amber' | 'blue';
+  value: string;
+  subtitle?: string;
+  change?: { value: string; positive: boolean } | null;
+  trend?: 'up' | 'down' | 'flat';
   index: number;
-  /** Optional CTA link rendered below the subtitle. */
-  cta?: { label: string; onClick: () => void };
-  /** Optional inline badge (e.g. health tier). */
-  badge?: { label: string; tone: 'emerald' | 'amber' | 'rose' };
-  children?: React.ReactNode;
 }
 
-const HERO_ACCENT: Record<HeroStatProps['accent'], { bar: string; chip: string; glow: string }> = {
-  emerald: {
-    bar: 'bg-gradient-to-b from-blue-400 to-blue-600',
-    chip: 'bg-blue-500/10 border border-blue-500/20',
-    glow: 'hover:shadow-[0_0_32px_-8px_rgba(37,99,235,0.22)]',
-  },
-  amber: {
-    bar: 'bg-gradient-to-b from-amber-400 to-amber-600',
-    chip: 'bg-amber-500/10 border border-amber-500/20',
-    glow: 'hover:shadow-[0_0_32px_-8px_rgba(245,158,11,0.22)]',
-  },
-  blue: {
-    bar: 'bg-gradient-to-b from-sky-400 to-sky-600',
-    chip: 'bg-sky-500/10 border border-sky-500/20',
-    glow: 'hover:shadow-[0_0_32px_-8px_rgba(14,165,233,0.22)]',
-  },
-};
-
-const BADGE_TONE: Record<NonNullable<HeroStatProps['badge']>['tone'], string> = {
-  emerald: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
-  amber: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
-  rose: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
-};
-
-function HeroStat({
+function CompactMetricCard({
   label,
-  numericValue,
-  numericFormat = 'integer',
-  valueString,
+  value,
   subtitle,
-  icon,
-  accent,
+  change,
+  trend = 'flat',
   index,
-  cta,
-  badge,
-  children,
-}: HeroStatProps) {
-  const cfg = HERO_ACCENT[accent];
+}: CompactMetricCardProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.06, ease: 'easeOut' as const }}
-      className="h-full"
+      transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' as const }}
+      className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 transition-colors hover:border-white/20 group flex flex-col justify-between"
     >
-      <div className={`relative glass-surface rounded-2xl p-5 h-full overflow-hidden transition-shadow hover-lift ${cfg.glow}`}>
-        <div aria-hidden className={`absolute left-0 top-0 h-full w-[3px] rounded-l-2xl ${cfg.bar}`} />
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em]">
-              {label}
-            </p>
-          </div>
-          <div className={`flex items-center justify-center h-9 w-9 rounded-xl shrink-0 ${cfg.chip}`}>
-            {icon}
-          </div>
+      <div>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <span className="text-xs text-[#A1A1A1] font-normal">{label}</span>
+          <MiniSparkline trend={trend} />
         </div>
-        <div className="flex items-baseline gap-2 flex-wrap">
-          {numericValue !== undefined ? (
-            <AnimatedNumber value={numericValue} format={numericFormat} className="text-2xl md:text-3xl font-bold text-foreground tracking-tight tabular-nums" />
-          ) : (
-            <span className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">{valueString ?? '—'}</span>
-          )}
-          {badge && (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${BADGE_TONE[badge.tone]}`}>
-              {badge.label}
-            </span>
-          )}
+        <div className="text-2xl font-mono font-medium text-[#EDEDED] tracking-tight">
+          {value}
         </div>
-        <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed break-words">{subtitle}</p>
-        {children}
-        {cta && (
-          <button
-            type="button"
-            onClick={cta.onClick}
-            className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity"
-          >
-            {cta.label}
-            <ArrowRight className="h-3 w-3" />
-          </button>
+      </div>
+      <div className="mt-3 flex items-center justify-between text-[11px] text-[#666666]">
+        {subtitle && <span className="truncate">{subtitle}</span>}
+        {change && (
+          <span className={`font-mono shrink-0 ml-auto ${change.positive ? 'text-emerald-400/90' : 'text-rose-400/90'}`}>
+            {change.value}
+          </span>
         )}
       </div>
     </motion.div>
@@ -384,34 +354,34 @@ function SnapshotTile({
         onClick={onClick}
         disabled={!interactive}
         aria-label={`${label}${valueString ? `: ${valueString}` : ''}${mom ? `, ${mom.direction === 'up' ? 'up' : mom.direction === 'down' ? 'down' : 'flat'} ${mom.pct}% vs last month` : ''}`}
-        className={`group relative w-full text-left glass-surface rounded-2xl p-4 h-full overflow-hidden transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60 ${interactive ? 'hover-lift cursor-pointer hover:border-white/10' : 'cursor-default'}`}
+        className={`group relative w-full text-left rounded-[10px] border border-white/[0.08] bg-[#141414] p-3.5 h-full overflow-hidden transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20 ${interactive ? 'cursor-pointer hover:border-white/20' : 'cursor-default'}`}
       >
         <div className="flex items-center justify-between gap-2 mb-2">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.08em] truncate">
+          <span className="text-xs text-[#A1A1A1] truncate">
             {label}
-          </p>
-          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-white/[0.04] border border-white/[0.06] shrink-0">
+          </span>
+          <div className="flex items-center justify-center h-6 w-6 rounded-md bg-white/[0.04] text-[#A1A1A1] shrink-0">
             {icon}
           </div>
         </div>
         <div className="flex items-baseline gap-1.5">
           {numericValue !== undefined ? (
-            <AnimatedNumber value={numericValue} format={numericFormat} className="text-xl font-bold text-foreground tracking-tight tabular-nums" />
+            <AnimatedNumber value={numericValue} format={numericFormat} className="text-lg font-mono font-medium text-[#EDEDED] tracking-tight tabular-nums" />
           ) : (
-            <span className="text-xl font-bold text-foreground tracking-tight">{valueString ?? '—'}</span>
+            <span className="text-lg font-mono font-medium text-[#EDEDED] tracking-tight">{valueString ?? '—'}</span>
           )}
         </div>
         {mom && MomIcon && (
-          <div className={`flex items-center gap-1 mt-1 ${MOM_STYLE[mom.direction].cls}`}>
+          <div className={`flex items-center gap-1 mt-1 text-[11px] ${MOM_STYLE[mom.direction].cls}`}>
             <MomIcon className="h-3 w-3" />
-            <span className="text-[11px] font-semibold tabular-nums">
+            <span className="font-mono">
               {mom.direction === 'flat' ? '—' : `${mom.pct > 0 ? '+' : ''}${mom.pct}%`}
             </span>
-            <span className="text-[11px] text-muted-foreground">{MOM_STYLE[mom.direction].verb}</span>
+            <span className="text-[#666666]">{MOM_STYLE[mom.direction].verb}</span>
           </div>
         )}
         {!mom && (
-          <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed truncate">{subtitle}</p>
+          <p className="text-[11px] text-[#666666] mt-1 leading-relaxed truncate">{subtitle}</p>
         )}
       </button>
     </motion.div>
@@ -480,24 +450,23 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-center justify-between gap-3 mb-4">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <div className="flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0">
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center justify-center h-6 w-6 rounded-md border border-white/[0.08] bg-white/[0.04] text-[#A1A1A1] shrink-0">
           {icon}
         </div>
-        <h2 className="text-sm font-semibold text-foreground tracking-tight truncate">
+        <h2 className="text-xs font-medium text-[#EDEDED] truncate">
           {title}
         </h2>
       </div>
       {actionLabel && onAction && (
-        <Button
-          variant="ghost"
-          size="sm"
+        <button
+          type="button"
           onClick={onAction}
-          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
+          className="text-xs text-[#A1A1A1] hover:text-[#EDEDED] flex items-center gap-1 transition-colors"
         >
           {actionLabel}
-          <ArrowRight className="h-3 w-3 ml-1" />
-        </Button>
+          <ArrowRight className="h-3 w-3" />
+        </button>
       )}
     </div>
   );
@@ -510,17 +479,17 @@ function SectionHeader({
 function activityIconFor(type: string, source: string): { icon: LucideIcon; tone: string } {
   const t = type.toLowerCase();
   const s = source.toLowerCase();
-  if (t.includes('oracle') || t.includes('brain')) return { icon: Sparkles, tone: 'text-amber-400' };
-  if (t.includes('zoho') || s.includes('zoho')) return { icon: BookOpen, tone: 'text-rose-400' };
-  if (t.includes('google') || s.includes('google') || t.includes('drive') || t.includes('gmail')) return { icon: Cloud, tone: 'text-blue-300' };
-  if (t.includes('bank') || s.includes('bank')) return { icon: Landmark, tone: 'text-blue-300' };
-  if (t.includes('payment') || t.includes('paid') || t.includes('collect')) return { icon: Wallet, tone: 'text-blue-400' };
-  if (t.includes('invoice') || t.includes('bill')) return { icon: FileText, tone: 'text-blue-400' };
-  if (t.includes('return') || t.includes('gst') || t.includes('filing')) return { icon: Receipt, tone: 'text-amber-400' };
-  if (t.includes('client') || t.includes('customer')) return { icon: Users, tone: 'text-blue-300' };
+  if (t.includes('oracle') || t.includes('brain')) return { icon: Sparkles, tone: 'text-[#A1A1A1]' };
+  if (t.includes('zoho') || s.includes('zoho')) return { icon: BookOpen, tone: 'text-[#A1A1A1]' };
+  if (t.includes('google') || s.includes('google') || t.includes('drive') || t.includes('gmail')) return { icon: Cloud, tone: 'text-[#A1A1A1]' };
+  if (t.includes('bank') || s.includes('bank')) return { icon: Landmark, tone: 'text-[#A1A1A1]' };
+  if (t.includes('payment') || t.includes('paid') || t.includes('collect')) return { icon: Wallet, tone: 'text-[#A1A1A1]' };
+  if (t.includes('invoice') || t.includes('bill')) return { icon: FileText, tone: 'text-[#A1A1A1]' };
+  if (t.includes('return') || t.includes('gst') || t.includes('filing')) return { icon: Receipt, tone: 'text-[#A1A1A1]' };
+  if (t.includes('client') || t.includes('customer')) return { icon: Users, tone: 'text-[#A1A1A1]' };
   if (t.includes('reconcil')) return { icon: AlertTriangle, tone: 'text-amber-400' };
-  if (t.includes('filed') || t.includes('completed') || t.includes('success')) return { icon: CheckCircle2, tone: 'text-blue-400' };
-  return { icon: Activity, tone: 'text-muted-foreground' };
+  if (t.includes('filed') || t.includes('completed') || t.includes('success')) return { icon: CheckCircle2, tone: 'text-[#EDEDED]' };
+  return { icon: Activity, tone: 'text-[#888888]' };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -537,10 +506,10 @@ interface ActionItem {
 }
 
 const ACTION_TONE: Record<ActionItem['tone'], { chip: string; bar: string }> = {
-  rose: { chip: 'bg-rose-500/10 border-rose-500/20 text-rose-400', bar: 'bg-rose-400' },
-  amber: { chip: 'bg-amber-500/10 border-amber-500/20 text-amber-400', bar: 'bg-amber-400' },
-  blue: { chip: 'bg-sky-500/10 border-sky-500/20 text-sky-400', bar: 'bg-sky-400' },
-  emerald: { chip: 'bg-blue-500/10 border-blue-500/20 text-blue-400', bar: 'bg-blue-400' },
+  rose: { chip: 'border-rose-500/30 bg-rose-500/10 text-rose-400', bar: 'bg-rose-400' },
+  amber: { chip: 'border-amber-500/30 bg-amber-500/10 text-amber-400', bar: 'bg-amber-400' },
+  blue: { chip: 'border-white/[0.08] bg-white/[0.04] text-[#EDEDED]', bar: 'bg-white' },
+  emerald: { chip: 'border-white/[0.08] bg-white/[0.04] text-[#EDEDED]', bar: 'bg-white' },
 };
 
 function ActionRow({ item, index }: { item: ActionItem; index: number }) {
@@ -549,19 +518,19 @@ function ActionRow({ item, index }: { item: ActionItem; index: number }) {
   return (
     <motion.button
       type="button"
-      initial={{ opacity: 0, x: -8 }}
+      initial={{ opacity: 0, x: -6 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.04, ease: 'easeOut' as const }}
-      className="group w-full text-left flex items-center gap-3 p-3 rounded-xl hover:bg-white/[0.04] transition-colors"
+      transition={{ duration: 0.25, delay: index * 0.03, ease: 'easeOut' as const }}
+      className="group w-full text-left flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/[0.04] transition-colors"
     >
-      <div className={`flex items-center justify-center h-9 w-9 rounded-lg border shrink-0 ${tone.chip}`}>
-        <Icon className="h-4 w-4" />
+      <div className={`flex items-center justify-center h-7 w-7 rounded-md border shrink-0 ${tone.chip}`}>
+        <Icon className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-medium text-foreground truncate">{item.title}</p>
-        <p className="text-[11px] text-muted-foreground truncate">{item.detail}</p>
+        <p className="text-xs font-medium text-[#EDEDED] truncate">{item.title}</p>
+        <p className="text-[11px] text-[#666666] truncate">{item.detail}</p>
       </div>
-      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0" />
+      <ArrowRight className="h-3.5 w-3.5 text-[#666666] group-hover:text-[#EDEDED] group-hover:translate-x-0.5 transition-all shrink-0" />
     </motion.button>
   );
 }
@@ -812,8 +781,92 @@ export default function DashboardPage() {
   // ═══════════════════════════════════════════════════════════════════════════
   // NON-HOOK DERIVED VALUES (safe to compute after the early returns above)
   // ═══════════════════════════════════════════════════════════════════════════
-  const firstName = getFirstName(user?.name);
+  const firstName = cleanFirstName(user?.name, user?.email);
+  const greetingText = firstName ? `${getGreeting()}, ${firstName}` : getGreeting();
   const todaysRevenue = snapshot.revenueThisMonth ?? 0;
+
+  const todayStr = useMemo(() => {
+    return new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+    }).format(new Date());
+  }, []);
+
+  const subtitleLine = useMemo(() => {
+    if (actionItems.length > 0) {
+      return `${actionItems.length} task${actionItems.length === 1 ? '' : 's'} pending review`;
+    }
+    if (snapshot.overdueInvoiceCount > 0) {
+      return `${snapshot.overdueInvoiceCount} invoice${snapshot.overdueInvoiceCount === 1 ? '' : 's'} overdue`;
+    }
+    return 'Workspace active and up to date';
+  }, [actionItems.length, snapshot.overdueInvoiceCount]);
+
+  const isAllZero = (snapshot.bankBalance === 0 || !snapshot.bankBalance) &&
+    (todaysRevenue === 0 || !todaysRevenue) &&
+    (pendingGst === 0) &&
+    (snapshot.invoices?.count === 0 || !snapshot.invoices?.count);
+
+  const onboardingSteps = useMemo(() => [
+    {
+      title: 'Add business details',
+      description: 'Set legal name, GSTIN, and registered business address',
+      completed: Boolean(user?.orgName || (user as Record<string, unknown>)?.businessName),
+      action: () => setCurrentView('settings'),
+    },
+    {
+      title: 'Connect bank account',
+      description: 'Track real-time cash balance and automated statement sync',
+      completed: (snapshot.bankBalance ?? 0) > 0,
+      action: () => setCurrentView('banking'),
+    },
+    {
+      title: 'Add first client',
+      description: 'Add client contact info and GSTIN for invoicing',
+      completed: (snapshot.customers ?? 0) > 0,
+      action: () => setCurrentView('clients'),
+    },
+    {
+      title: 'Create first invoice',
+      description: 'Issue GST-compliant tax invoices and track payment',
+      completed: (snapshot.invoices?.count ?? 0) > 0,
+      action: () => setCurrentView('invoices'),
+    },
+    {
+      title: 'Connect Zoho or Google',
+      description: 'Sync email invoices, drive attachments, and ledgers',
+      completed: false,
+      action: () => setCurrentView('zoho-books'),
+    },
+  ], [user, snapshot, setCurrentView]);
+
+  const completedStepsCount = useMemo(() => {
+    return onboardingSteps.filter((s) => s.completed).length;
+  }, [onboardingSteps]);
+
+  // Keyboard shortcut listener for quick actions (C, R, A)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        setCurrentView('invoices');
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        setCurrentView('returns');
+      } else if (e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        setCurrentView('clients');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setCurrentView]);
 
   // ── AI recommendation icon mapping ──
   const iconForAIRec = (type: AIRecommendation['type']): LucideIcon => {
@@ -843,140 +896,173 @@ export default function DashboardPage() {
       <div className="relative z-10 space-y-6 md:space-y-8">
         {/* ════════════════════════════════════════════════════════════════════
             SECTION 1 — HERO
-            Greeting + 3 hero stats (Health Score, Today's Revenue, Pending GST)
-            + 3 quick actions.
+            Greeting + 4 compact metric cards (or onboarding checklist if 0)
+            + Quick Actions with keyboard shortcuts.
         ════════════════════════════════════════════════════════════════════ */}
         <motion.section
-          initial={{ opacity: 0, y: -8 }}
+          initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: 'easeOut' as const }}
-          className="space-y-6"
+          transition={{ duration: 0.35, ease: 'easeOut' as const }}
+          className="space-y-5"
         >
-          {/* Greeting — single line, no redundant summary (tiles below show the numbers) */}
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-            <div className="space-y-1.5">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-                {getGreeting()},{' '}
-                <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                  {firstName}
-                </span>
+          {/* Greeting — clean, minimal, never showing email handles */}
+          <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-[#EDEDED]">
+                {greetingText}
               </h1>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {snapshot.hasLiveData
-                  ? `${actionItems.length > 0 ? `${actionItems.length} action${actionItems.length === 1 ? '' : 's'} pending` : 'You\'re all caught up'} · ${abbreviateINR(snapshot.bankBalance)} cash on hand`
-                  : 'Your workspace is ready — create your first invoice to see live business data here.'}
+              <p className="text-xs text-[#A1A1A1] mt-1 font-normal">
+                {todayStr} · {subtitleLine}
               </p>
             </div>
-            {/* Health Score badge — the SINGLE canonical health display on the
-                dashboard. The number + label both come from the business
-                snapshot API (`/api/business/snapshot` → rich engine). No other
-                widget renders a health score (AI Recs no longer emits a
-                "Business health is X/100" rule; the WorkflowPipeline header
-                shows a *pipeline* status badge, not a business health score). */}
-            {hasHealthScore && healthTier && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass-surface shrink-0">
-                <Brain className={`h-3.5 w-3.5 ${healthTier.tone === 'emerald' ? 'text-blue-400' : healthTier.tone === 'amber' ? 'text-amber-400' : 'text-rose-400'}`} />
-                <span className="text-xs font-medium text-muted-foreground">Health</span>
-                <span className="text-sm font-bold text-foreground gst-text-tabular">{snapshot.healthScore}</span>
-                <span className={`text-[11px] font-semibold uppercase tracking-wider px-1.5 py-0 rounded-full ${BADGE_TONE[healthTier.tone]}`}>
-                  {healthTier.label}
+          </div>
+
+          {/* EMPTY STATE CHECKLIST vs 4 METRIC CARDS */}
+          {isAllZero ? (
+            /* Onboarding Checklist Card (when all values are 0) */
+            <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-6 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-[#EDEDED] tracking-[-0.01em]">
+                    Get started with Veyro
+                  </h2>
+                  <p className="text-xs text-[#A1A1A1] mt-0.5">
+                    Complete these steps to set up your financial operating system.
+                  </p>
+                </div>
+                <span className="text-xs font-mono text-[#A1A1A1]">
+                  {completedStepsCount} of 5 completed
                 </span>
               </div>
-            )}
-          </div>
 
-          {/* 3 Hero Stats — EXECUTIVE PRIORITY ORDER:
-              1. Cash Position  → "How much money do I have?"
-              2. This Month's Revenue → revenue performance
-              3. Pending GST → compliance status
-              No per-stat CTAs (they duplicated the quick-action buttons below). */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* 1. Cash Position — bank balance + net cash flow */}
-            <HeroStat
-              index={0}
-              label="Cash Position"
-              numericValue={snapshot.bankBalance}
-              numericFormat="currencyCompact"
-              subtitle={
-                snapshot.bankBalance > 0
-                  ? `Bank balance · ${snapshot.netCashFlow >= 0 ? '+' : ''}${abbreviateINR(snapshot.netCashFlow)} net flow this FY`
-                  : 'Connect your bank account to see live cash position'
-              }
-              icon={<Wallet className="h-4 w-4 text-blue-400" />}
-              accent="emerald"
-            />
+              {/* Progress bar */}
+              <div className="h-1 w-full bg-white/[0.06] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-white transition-all duration-500 rounded-full"
+                  style={{ width: `${(completedStepsCount / 5) * 100}%` }}
+                />
+              </div>
 
-            {/* 2. This Month's Revenue */}
-            <HeroStat
-              index={1}
-              label="This Month's Revenue"
-              numericValue={todaysRevenue}
-              numericFormat="currencyCompact"
-              subtitle={
-                todaysRevenue > 0
-                  ? `${snapshot.invoices.count} invoice${snapshot.invoices.count === 1 ? '' : 's'} issued · FY total ${abbreviateINR(snapshot.revenue)}`
-                  : 'No invoices issued this month yet'
-              }
-              icon={<IndianRupee className="h-4 w-4 text-blue-400" />}
-              accent="blue"
-            >
-              {todaysRevenue > 0 && revenueMom.direction !== 'flat' && (
-                <div className={`flex items-center gap-1 mt-1.5 text-[11px] font-medium ${revenueMom.direction === 'up' ? 'text-blue-400' : 'text-rose-400'}`}>
-                  {revenueMom.direction === 'up' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                  {revenueMom.pct}% vs last month
-                </div>
-              )}
-            </HeroStat>
+              {/* Steps list */}
+              <div className="divide-y divide-white/[0.06]">
+                {onboardingSteps.map((step, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={step.action}
+                    className="w-full text-left py-3.5 flex items-center justify-between gap-4 group hover:bg-white/[0.02] px-2 -mx-2 rounded-lg transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] transition-colors ${
+                        step.completed
+                          ? 'bg-white text-black font-semibold'
+                          : 'border border-white/20 text-[#666666] group-hover:border-white/40'
+                      }`}>
+                        {step.completed ? <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" /> : (idx + 1)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-xs font-medium truncate ${
+                          step.completed ? 'text-[#888888] line-through' : 'text-[#EDEDED] group-hover:text-white'
+                        }`}>
+                          {step.title}
+                        </p>
+                        <p className="text-[11px] text-[#666666] truncate mt-0.5">
+                          {step.description}
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-3.5 w-3.5 text-[#666666] group-hover:text-[#EDEDED] group-hover:translate-x-0.5 transition-all shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* 4 Compact Metric Cards in one row */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <CompactMetricCard
+                index={0}
+                label="Cash position"
+                value={abbreviateINR(snapshot.bankBalance)}
+                subtitle="Bank balance"
+                change={
+                  snapshot.netCashFlow !== 0
+                    ? {
+                        value: `${snapshot.netCashFlow > 0 ? '+' : ''}${abbreviateINR(snapshot.netCashFlow)} net`,
+                        positive: snapshot.netCashFlow > 0,
+                      }
+                    : null
+                }
+                trend="up"
+              />
 
-            {/* 3. Pending GST */}
-            <HeroStat
-              index={2}
-              label="Pending GST"
-              numericValue={pendingGst}
-              numericFormat="currencyCompact"
-              subtitle={
-                pendingGst > 0
-                  ? `Output ${abbreviateINR(snapshot.gst?.outputTax ?? 0)} − ITC ${abbreviateINR(snapshot.gst?.inputTax ?? 0)} · file to settle`
-                  : 'No net GST liability · all output tax offset by input tax credit'
-              }
-              icon={<Receipt className="h-4 w-4 text-amber-400" />}
-              accent="amber"
-            />
-          </div>
+              <CompactMetricCard
+                index={1}
+                label="Revenue this month"
+                value={abbreviateINR(todaysRevenue)}
+                subtitle={todaysRevenue > 0 ? `FY ${abbreviateINR(snapshot.revenue)}` : 'No sales yet'}
+                change={
+                  revenueMom.direction !== 'flat'
+                    ? {
+                        value: `${revenueMom.direction === 'up' ? '+' : '-'}${revenueMom.pct}% vs last mo.`,
+                        positive: revenueMom.direction === 'up',
+                      }
+                    : null
+                }
+                trend={revenueMom.direction}
+              />
 
-          {/* Primary Quick Actions — ONE entry point per feature, no duplication */}
-          <div className="flex flex-wrap items-center gap-2.5">
+              <CompactMetricCard
+                index={2}
+                label="Pending GST"
+                value={abbreviateINR(pendingGst)}
+                subtitle={pendingGst > 0 ? 'Net liability due' : 'All offset by ITC'}
+                trend={pendingGst > 0 ? 'down' : 'flat'}
+              />
+
+              <CompactMetricCard
+                index={3}
+                label="Outstanding invoices"
+                value={abbreviateINR(snapshot.collections?.totalOutstanding ?? snapshot.overdueReceivables ?? 0)}
+                subtitle={
+                  snapshot.overdueInvoiceCount > 0
+                    ? `${snapshot.overdueInvoiceCount} overdue`
+                    : `${snapshot.invoices.count} issued`
+                }
+                trend="flat"
+              />
+            </div>
+          )}
+
+          {/* Primary Quick Actions — Create Invoice is the only primary button */}
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               onClick={() => setCurrentView('invoices')}
-              className="gap-2 accent-gradient text-white px-4 py-2 shadow-[0_4px_14px_rgba(0,0,0,0.25)] transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
+              className="h-8 gap-2 bg-white text-black hover:bg-white/90 font-medium px-3.5 rounded-lg text-xs transition-all shadow-none"
             >
-              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-white/20">
-                <FileText className="h-3.5 w-3.5 text-white" />
-              </span>
-              Create Invoice
+              <FileText className="h-3.5 w-3.5 text-black" strokeWidth={1.5} />
+              <span>Create Invoice</span>
+              <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-black/10 text-black/70 border border-black/10">C</kbd>
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setCurrentView('returns')}
-              className="gap-2 border border-border bg-transparent px-4 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
+              className="h-8 gap-2 border border-white/[0.08] hover:border-white/20 bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] font-medium px-3.5 rounded-lg text-xs transition-all"
             >
-              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
-                <ShieldCheck className="h-3.5 w-3.5 accent-text" />
-              </span>
-              File GST Return
+              <ShieldCheck className="h-3.5 w-3.5 text-[#A1A1A1]" strokeWidth={1.5} />
+              <span>File GST Return</span>
+              <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-white/[0.06] text-[#A1A1A1] border border-white/[0.08]">R</kbd>
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setCurrentView('clients')}
-              className="gap-2 border border-border bg-transparent px-4 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-all hover:scale-[1.02] hover:shadow-md active:scale-95"
+              className="h-8 gap-2 border border-white/[0.08] hover:border-white/20 bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] font-medium px-3.5 rounded-lg text-xs transition-all"
             >
-              <span className="flex h-5 w-5 items-center justify-center rounded-md accent-gradient-soft">
-                <Users className="h-3.5 w-3.5 accent-text" />
-              </span>
-              Add Client
+              <Users className="h-3.5 w-3.5 text-[#A1A1A1]" strokeWidth={1.5} />
+              <span>Add Client</span>
+              <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-white/[0.06] text-[#A1A1A1] border border-white/[0.08]">A</kbd>
             </Button>
           </div>
         </motion.section>
@@ -1022,11 +1108,11 @@ export default function DashboardPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.16, ease: 'easeOut' as const }}
-          className="glass-surface rounded-2xl p-5 md:p-6"
+          className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6"
         >
           <SectionHeader
-            title="Business Snapshot"
-            icon={<Database className="h-4 w-4 accent-text" />}
+            title="Business snapshot"
+            icon={<Database className="h-3.5 w-3.5 text-[#A1A1A1]" />}
             actionLabel="View analytics"
             onAction={() => setCurrentView('analytics')}
           />
@@ -1117,19 +1203,19 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.22, ease: 'easeOut' as const }}
-            className="glass-surface rounded-2xl p-5 md:p-6 flex flex-col"
+            className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6 flex flex-col"
           >
             <SectionHeader
-              title="Action Center"
-              icon={<Zap className="h-4 w-4 accent-text" />}
+              title="Action center"
+              icon={<Zap className="h-3.5 w-3.5 text-[#A1A1A1]" />}
             />
             {actionItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center py-10 flex-1">
-                <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 mb-3">
-                  <CheckCircle2 className="h-6 w-6 text-blue-400" />
+                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-white/[0.04] border border-white/[0.08] mb-3">
+                  <CheckCircle2 className="h-5 w-5 text-[#EDEDED]" />
                 </div>
-                <h3 className="text-sm font-semibold text-foreground">You&apos;re all caught up</h3>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed">
+                <h3 className="text-xs font-medium text-[#EDEDED]">You&apos;re all caught up</h3>
+                <p className="text-[11px] text-[#666666] mt-1 max-w-xs leading-relaxed">
                   Nothing requires your attention right now. New actions will appear here as invoices come due, returns need filing, or syncs complete.
                 </p>
               </div>
@@ -1151,11 +1237,11 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.28, ease: 'easeOut' as const }}
-            className="glass-surface rounded-2xl p-5 md:p-6 flex flex-col"
+            className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6 flex flex-col"
           >
             <SectionHeader
-              title="AI Recommendations"
-              icon={<Sparkles className="h-4 w-4 accent-text" />}
+              title="AI recommendations"
+              icon={<Sparkles className="h-3.5 w-3.5 text-[#A1A1A1]" />}
               actionLabel={aiRecommendations.length > 0 ? `View all (${aiRecommendations.length})` : undefined}
               onAction={aiRecommendations.length > 0 ? () => router.push('/oracle') : undefined}
             />
@@ -1167,18 +1253,18 @@ export default function DashboardPage() {
               </div>
             ) : aiRecommendations.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center py-10 flex-1">
-                <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 mb-3">
-                  <Brain className="h-6 w-6 text-amber-400" />
+                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-white/[0.04] border border-white/[0.08] mb-3">
+                  <Brain className="h-5 w-5 text-[#A1A1A1]" />
                 </div>
-                <h3 className="text-sm font-semibold text-foreground">No recommendations yet</h3>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed">
+                <h3 className="text-xs font-medium text-[#EDEDED]">No recommendations yet</h3>
+                <p className="text-[11px] text-[#666666] mt-1 max-w-xs leading-relaxed">
                   Oracle generates recommendations from your live business data. Connect Zoho Books or create invoices to unlock AI-driven insights on GST liability, cash flow, and risk.
                 </p>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => router.push('/oracle')}
-                  className="mt-3 gap-1.5 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+                  className="mt-3 gap-1.5 border-white/[0.08] bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] text-xs h-7"
                 >
                   <Brain className="h-3.5 w-3.5" />
                   Open Oracle
@@ -1194,28 +1280,28 @@ export default function DashboardPage() {
                     return (
                       <motion.div
                         key={rec.id}
-                        initial={{ opacity: 0, x: -8 }}
+                        initial={{ opacity: 0, x: -6 }}
                         animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, delay: i * 0.04, ease: 'easeOut' as const }}
-                        className="group flex items-start gap-3 p-3 rounded-xl hover:bg-white/[0.04] transition-colors"
+                        transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' as const }}
+                        className="group flex items-start gap-3 p-2.5 rounded-lg hover:bg-white/[0.04] transition-colors"
                       >
-                        <div className={`flex items-center justify-center h-9 w-9 rounded-lg border shrink-0 ${actionCfg.chip}`}>
-                          <Icon className="h-4 w-4" />
+                        <div className={`flex items-center justify-center h-7 w-7 rounded-md border shrink-0 ${actionCfg.chip}`}>
+                          <Icon className="h-3.5 w-3.5" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <p className="text-[13px] font-medium text-foreground leading-snug">{rec.title}</p>
-                            <Badge variant="outline" className={`text-[11px] px-1.5 py-0 h-4 ${actionCfg.chip} capitalize`}>
+                            <p className="text-xs font-medium text-[#EDEDED] leading-snug">{rec.title}</p>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded border border-white/[0.08] bg-white/[0.04] text-[#A1A1A1] capitalize">
                               {rec.priority}
-                            </Badge>
+                            </span>
                           </div>
-                          <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">{rec.description}</p>
+                          <p className="text-[11px] text-[#666666] line-clamp-2 leading-relaxed">{rec.description}</p>
                           <button
                             type="button"
                             onClick={() => rec.actionView ? setCurrentView(rec.actionView as AppView) : router.push('/oracle')}
-                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold accent-text hover:opacity-80 transition-opacity"
+                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#A1A1A1] hover:text-[#EDEDED] transition-colors"
                           >
-                            View Details
+                            View details
                             <ArrowRight className="h-3 w-3" />
                           </button>
                         </div>
@@ -1229,10 +1315,10 @@ export default function DashboardPage() {
         </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="glass-surface rounded-2xl p-5 md:p-6 h-[380px] flex items-center justify-center">
+              <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6 h-[380px] flex items-center justify-center">
                 <ProSkeleton className="h-8 w-32" />
               </div>
-              <div className="glass-surface rounded-2xl p-5 md:p-6 h-[380px] flex items-center justify-center">
+              <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6 h-[380px] flex items-center justify-center">
                 <ProSkeleton className="h-8 w-32" />
               </div>
             </div>
@@ -1250,11 +1336,11 @@ export default function DashboardPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.34, ease: 'easeOut' as const }}
-          className="glass-surface rounded-2xl p-5 md:p-6"
+          className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6"
         >
           <SectionHeader
-            title="Recent Activity"
-            icon={<Activity className="h-4 w-4 accent-text" />}
+            title="Recent activity"
+            icon={<Activity className="h-3.5 w-3.5 text-[#A1A1A1]" />}
             actionLabel="View timeline"
             onAction={() => setCurrentView('timeline')}
           />

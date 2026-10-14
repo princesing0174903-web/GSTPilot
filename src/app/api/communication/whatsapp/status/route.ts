@@ -10,7 +10,6 @@ export async function GET() {
   const health = await whatsappProviderHealth();
   return NextResponse.json({
     ok: true,
-    provider: getWhatsAppProviderName(),
     ...health,
   });
 }

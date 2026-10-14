@@ -36,6 +36,21 @@ export default function PublicInfoPage({
   onNavigatePage,
 }: PublicInfoPageProps) {
 
+  const handleNav = (target: PublicPageType) => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.history.pushState(null, '', `/#${target}`);
+      } catch {
+        // ignore
+      }
+    }
+    if (onNavigatePage) {
+      onNavigatePage(target);
+    } else if (typeof window !== 'undefined') {
+      window.location.href = `/${target}`;
+    }
+  };
+
   const pageData: Record<PublicPageType, {
     badge: string;
     title: string;
@@ -455,28 +470,28 @@ export default function PublicInfoPage({
         <div className="hidden md:flex items-center justify-center gap-8 text-sm font-medium text-zinc-400 absolute left-1/2 -translate-x-1/2">
           <a 
             href="/product"
-            onClick={(e) => { e.preventDefault(); onNavigatePage('product'); }} 
+            onClick={(e) => { e.preventDefault(); handleNav('product'); }} 
             className={`transition-colors hover:text-white cursor-pointer ${page === 'product' ? 'text-white font-semibold' : ''}`}
           >
             Product
           </a>
           <a 
             href="/solutions"
-            onClick={(e) => { e.preventDefault(); onNavigatePage('solutions'); }} 
+            onClick={(e) => { e.preventDefault(); handleNav('solutions'); }} 
             className={`transition-colors hover:text-white cursor-pointer ${page === 'solutions' ? 'text-white font-semibold' : ''}`}
           >
             Solutions
           </a>
           <a 
             href="/resources"
-            onClick={(e) => { e.preventDefault(); onNavigatePage('resources'); }} 
+            onClick={(e) => { e.preventDefault(); handleNav('resources'); }} 
             className={`transition-colors hover:text-white cursor-pointer ${page === 'resources' ? 'text-white font-semibold' : ''}`}
           >
             Resources
           </a>
           <a 
             href="/pricing"
-            onClick={(e) => { e.preventDefault(); onNavigatePage('pricing'); }} 
+            onClick={(e) => { e.preventDefault(); handleNav('pricing'); }} 
             className={`transition-colors hover:text-white cursor-pointer ${page === 'pricing' ? 'text-white font-semibold' : ''}`}
           >
             Pricing
@@ -632,15 +647,15 @@ export default function PublicInfoPage({
           </div>
 
           <div className="flex flex-wrap justify-center gap-6 text-sm font-medium text-zinc-500">
-            <a href="/product" onClick={(e) => { e.preventDefault(); onNavigatePage('product'); }} className="hover:text-white transition-colors cursor-pointer">Product</a>
-            <a href="/solutions" onClick={(e) => { e.preventDefault(); onNavigatePage('solutions'); }} className="hover:text-white transition-colors cursor-pointer">Solutions</a>
-            <a href="/company" onClick={(e) => { e.preventDefault(); onNavigatePage('company'); }} className="hover:text-white transition-colors cursor-pointer">Company</a>
-            <a href="/resources" onClick={(e) => { e.preventDefault(); onNavigatePage('resources'); }} className="hover:text-white transition-colors cursor-pointer">Resources</a>
-            <a href="/pricing" onClick={(e) => { e.preventDefault(); onNavigatePage('pricing'); }} className="hover:text-white transition-colors cursor-pointer">Pricing</a>
-            <a href="/legal" onClick={(e) => { e.preventDefault(); onNavigatePage('legal'); }} className="hover:text-white transition-colors cursor-pointer">Legal</a>
-            <a href="/privacy" onClick={(e) => { e.preventDefault(); onNavigatePage('privacy'); }} className="hover:text-white transition-colors cursor-pointer">Privacy</a>
-            <a href="/security" onClick={(e) => { e.preventDefault(); onNavigatePage('security'); }} className="hover:text-white transition-colors cursor-pointer">Security</a>
-            <a href="/terms" onClick={(e) => { e.preventDefault(); onNavigatePage('terms'); }} className="hover:text-white transition-colors cursor-pointer">Terms</a>
+            <a href="/product" onClick={(e) => { e.preventDefault(); handleNav('product'); }} className="hover:text-white transition-colors cursor-pointer">Product</a>
+            <a href="/solutions" onClick={(e) => { e.preventDefault(); handleNav('solutions'); }} className="hover:text-white transition-colors cursor-pointer">Solutions</a>
+            <a href="/company" onClick={(e) => { e.preventDefault(); handleNav('company'); }} className="hover:text-white transition-colors cursor-pointer">Company</a>
+            <a href="/resources" onClick={(e) => { e.preventDefault(); handleNav('resources'); }} className="hover:text-white transition-colors cursor-pointer">Resources</a>
+            <a href="/pricing" onClick={(e) => { e.preventDefault(); handleNav('pricing'); }} className="hover:text-white transition-colors cursor-pointer">Pricing</a>
+            <a href="/legal" onClick={(e) => { e.preventDefault(); handleNav('legal'); }} className="hover:text-white transition-colors cursor-pointer">Legal</a>
+            <a href="/privacy" onClick={(e) => { e.preventDefault(); handleNav('privacy'); }} className="hover:text-white transition-colors cursor-pointer">Privacy</a>
+            <a href="/security" onClick={(e) => { e.preventDefault(); handleNav('security'); }} className="hover:text-white transition-colors cursor-pointer">Security</a>
+            <a href="/terms" onClick={(e) => { e.preventDefault(); handleNav('terms'); }} className="hover:text-white transition-colors cursor-pointer">Terms</a>
           </div>
         </div>
       </footer>

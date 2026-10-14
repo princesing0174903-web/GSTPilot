@@ -18,7 +18,8 @@ export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
   const { auth, response } = await resolveAuth(req);
-  if (response || !auth) return response;
+  if (response) return response;
+  if (!auth) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 
   // Permission gate — auditor+ can view audit logs.
   if (!can(auth.role, 'audit.view')) {

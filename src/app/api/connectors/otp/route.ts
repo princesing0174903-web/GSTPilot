@@ -107,8 +107,8 @@ export async function POST(request: NextRequest) {
   });
 }
 
-// Exported helper for the verify endpoint / sync route — not exposed over HTTP.
-export function _consumeOtp(userId: string, type: string, identifier: string, submitted: string): boolean {
+// Helper for the verify endpoint / sync route — internal, not exported over HTTP.
+function _consumeOtp(userId: string, type: string, identifier: string, submitted: string): boolean {
   const key = `${userId}:${type}:${identifier}`;
   const entry = otpStore.get(key);
   if (!entry) return false;

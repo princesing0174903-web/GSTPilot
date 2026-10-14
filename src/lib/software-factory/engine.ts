@@ -415,7 +415,7 @@ export async function reviewProject(req: ReviewRequest): Promise<CodeReview> {
 
   // Run all review types, return the aggregate as the primary
   let primary: CodeReview | null = null;
-  const allFindings: { severity: string; file: string; line: number; message: string; suggestion: string }[] = [];
+  const allFindings: CodeReview['findings'] = [];
   let scoreSum = 0;
 
   for (const rt of reviewTypes) {

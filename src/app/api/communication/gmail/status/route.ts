@@ -10,7 +10,6 @@ export async function GET() {
   const health = await gmailProviderHealth();
   return NextResponse.json({
     ok: true,
-    provider: getGmailProviderName(),
     ...health,
   });
 }

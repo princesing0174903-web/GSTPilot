@@ -56,7 +56,7 @@ const NAV_SECTIONS: NavSection[] = [
     title: 'Overview',
     items: [
       { view: 'dashboard', label: 'Home', icon: Home },
-      { view: 'oracle-brain', label: 'Veyro AI', icon: BrainCircuit, href: '/oracle' },
+      { view: 'oracle-brain', label: 'Veyro AI', icon: BrainCircuit },
     ],
   },
   {
@@ -154,8 +154,13 @@ export function LeftNav({
     ? 'w-full justify-start gap-2.5 px-2.5'
     : 'justify-center w-10 xl:w-full xl:justify-start xl:gap-2.5 xl:px-2.5';
 
-  const userInitial = user?.name ? user.name.trim().charAt(0).toUpperCase() : 'U';
-  const displayName = user?.name ? user.name.replace(/@.*$/, '').replace(/\d+$/, '').trim() || 'User' : 'User';
+  const rawName = ((user?.name || user?.email?.split('@')[0] || 'User'))
+    .replace(/@.*$/, '')
+    .replace(/\d+$/, '')
+    .replace(/[._-]/g, ' ')
+    .trim();
+  const displayName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : 'User';
+  const userInitial = displayName.charAt(0).toUpperCase() || 'U';
 
   return (
     <TooltipProvider delayDuration={200}>

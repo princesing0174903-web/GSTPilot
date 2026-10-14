@@ -217,7 +217,6 @@ export async function GET(request: Request) {
       filedReturns: rich.filedReturns,
       pendingReturns: rich.pendingReturns,
       overdueReturns: rich.overdueReturns,
-      riskScore: rich.riskScore,
       collectionRate, // 0–1 scale (rich native)
       workingCapital: rich.workingCapital,
       runwayDays: rich.runwayDays,

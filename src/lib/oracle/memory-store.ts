@@ -103,7 +103,7 @@ export async function loadMemorySnapshot(orgId: string): Promise<MemorySnapshot>
   // VEYRO AIMemory schema uses entityId/summary (not key/value). Map them.
   const facts = rows.map((r) => ({ category: r.category, key: r.entityId ?? r.title, value: r.summary ?? r.payload }));
   const get = (cat: MemoryCategory, key: string) =>
-    rows.find((r) => r.category === cat && (r.entityId ?? r.title) === key)?.summary;
+    rows.find((r) => r.category === cat && (r.entityId ?? r.title) === key)?.summary ?? undefined;
 
   return {
     firmName: get('firm', 'name'),

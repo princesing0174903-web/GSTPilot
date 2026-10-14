@@ -1095,7 +1095,7 @@ export default function DashboardPage() {
           loading={briefingLoading}
           onNavigate={(view) => setCurrentView(view as AppView)}
           onRefresh={refreshBriefing}
-          onOpenOracle={() => router.push('/oracle')}
+          onOpenOracle={() => setCurrentView('oracle-brain')}
         />
 
         {/* ════════════════════════════════════════════════════════════════════
@@ -1243,7 +1243,7 @@ export default function DashboardPage() {
               title="AI recommendations"
               icon={<Sparkles className="h-3.5 w-3.5 text-[#A1A1A1]" />}
               actionLabel={aiRecommendations.length > 0 ? `View all (${aiRecommendations.length})` : undefined}
-              onAction={aiRecommendations.length > 0 ? () => router.push('/oracle') : undefined}
+              onAction={aiRecommendations.length > 0 ? () => setCurrentView('oracle-brain') : undefined}
             />
             {aiRecsLoading ? (
               <div className="space-y-2 flex-1">
@@ -1263,7 +1263,7 @@ export default function DashboardPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => router.push('/oracle')}
+                  onClick={() => setCurrentView('oracle-brain')}
                   className="mt-3 gap-1.5 border-white/[0.08] bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] text-xs h-7"
                 >
                   <Brain className="h-3.5 w-3.5" />
@@ -1298,7 +1298,7 @@ export default function DashboardPage() {
                           <p className="text-[11px] text-[#666666] line-clamp-2 leading-relaxed">{rec.description}</p>
                           <button
                             type="button"
-                            onClick={() => rec.actionView ? setCurrentView(rec.actionView as AppView) : router.push('/oracle')}
+                            onClick={() => rec.actionView ? setCurrentView(rec.actionView as AppView) : setCurrentView('oracle-brain')}
                             className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#A1A1A1] hover:text-[#EDEDED] transition-colors"
                           >
                             View details

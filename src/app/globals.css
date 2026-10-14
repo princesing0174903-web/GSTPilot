@@ -883,7 +883,7 @@
    (--card = hsl(0, 0%, 6%) = #242424). Opacity variants (bg-white/N where
    N ≤ 20) are left alone — those are intentional subtle overlays. */
 .dark .bg-white,
-.bg-white:not(.bg-white\/\d+):not([class*="bg-white/"]) {
+.bg-white:not([class*="bg-white/"]) {
   background-color: var(--card) !important;
 }
 
@@ -891,7 +891,7 @@
    `text-black` without an opacity modifier renders as pure black (#000000)
    which is invisible on the dark primary background. Convert to white. */
 .dark .text-black,
-.text-black:not(.text-black\/\d+):not([class*="text-black/"]) {
+.text-black:not([class*="text-black/"]) {
   color: var(--foreground) !important;
 }
 

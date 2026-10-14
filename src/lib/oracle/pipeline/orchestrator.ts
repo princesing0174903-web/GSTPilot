@@ -242,7 +242,7 @@ export async function runPipeline(
   // 6. Fetch the canonical snapshot for agent/score/insight/timeline computation.
   //    (Tools already fetched it, but we re-fetch once for the reasoning layer
   //    to keep agents/scores/insights consistent. This is a single Prisma call.)
-  let snapshot = null;
+  let snapshot: Awaited<ReturnType<typeof getBusinessSnapshot>> | null = null;
   if (orgId) {
     try {
       snapshot = await getBusinessSnapshot(orgId);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrandLogo } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,16 +28,18 @@ export default function LoginPage({ onBack, onGetStarted, onNavigatePage }: Logi
   const [resetSent, setResetSent] = useState(false);
 
   // If redirected from a failed GitHub OAuth
-  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const githubError = urlParams?.get('github_error');
-  
-  if (githubError && !localError && !isLoading) {
-    setLocalError(
-      githubError === 'email_exists' 
-        ? 'An account with this email already exists. Please sign in with email and password first, then link your GitHub account in settings.'
-        : 'GitHub authentication failed. Please try again.'
-    );
-  }
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const githubError = urlParams.get('github_error');
+    if (githubError) {
+      setLocalError(
+        githubError === 'email_exists' 
+          ? 'An account with this email already exists. Please sign in with email and password first, then link your GitHub account in settings.'
+          : 'GitHub authentication failed. Please try again.'
+      );
+    }
+  }, []);
 
   const handleGoogle = async () => {
     setLocalError(null);
@@ -129,7 +131,7 @@ export default function LoginPage({ onBack, onGetStarted, onNavigatePage }: Logi
         }
       }
     } catch (err: any) {
-      setLocalError('AUTH_EXCEPTION: ' + (err.message || 'Authentication failed'));
+      setLocalError(err.message || 'Authentication failed. Please try again.');
       setIsLoading(false);
     }
   };
@@ -138,19 +140,62 @@ export default function LoginPage({ onBack, onGetStarted, onNavigatePage }: Logi
 
   return (
     <div className="min-h-screen flex flex-col bg-[#030303] text-zinc-200 font-sans selection:bg-zinc-800 selection:text-white">
-      <div className="flex-1 flex flex-col items-center pt-24 px-6 sm:px-12">
+      {onBack && (
+        <div className="absolute top-6 left-6 z-20">
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-white transition-colors py-1.5 px-3 rounded-full border border-zinc-800/80 bg-zinc-900/40 hover:bg-zinc-800/60"
+          >
+            ← Back to Home
+          </button>
+        </div>
+      )}
+
+      <div className="flex-1 flex flex-col items-center pt-20 px-6 sm:px-12">
         <div className="w-full max-w-[360px] flex flex-col items-center">
           
           <BrandLogo variant="icon" size={40} animated={false} disableGlow={true} />
           
           <div className="mt-8 mb-8 text-center space-y-2">
-            <h1 className="text-2xl font-semibold text-white tracking-tight">Welcome back</h1>
-            <p className="text-sm text-zinc-400 font-medium">Sign in to continue to VEYRO</p>
+            <h1 className="text-2xl font-semibold text-white tracking-tight">
+              {linkEmail ? 'Link your Google account' : mode === 'login' ? 'Welcome back' : 'Create your account'}
+            </h1>
+            <p className="text-sm text-zinc-400 font-medium">
+              {linkEmail
+                ? `Enter your password to link your Google login to ${linkEmail}`
+                : mode === 'login'
+                ? 'Sign in to continue to VEYRO'
+                : 'Start your 14-day free trial on VEYRO'}
+            </p>
           </div>
+
+          {resetSent && (
+            <div className="w-full mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-lg text-center">
+              Password reset link sent! Check your email inbox.
+            </div>
+          )}
 
           {localError && (
             <div className="w-full mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-lg text-center">
               {localError}
+            </div>
+          )}
+
+          {linkEmail && (
+            <div className="w-full mb-4 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setLinkEmail('');
+                  setLocalError(null);
+                  setEmail('');
+                  setPassword('');
+                }}
+                className="text-xs text-zinc-500 hover:text-white transition-colors"
+              >
+                Cancel linking and use standard login
+              </button>
             </div>
           )}
 

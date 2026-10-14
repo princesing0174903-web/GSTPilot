@@ -81,7 +81,7 @@ const DashboardViews = dynamic(() => import('@/components/DashboardViews'), {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export function DashboardContent() {
-  const { currentView, setCurrentView } = useApp()
+  const { currentView, setCurrentView, setCommandPaletteOpen } = useApp()
   const { user, logout } = useAuth()
 
   // Dashboard shell mounted — log the milestone once.
@@ -189,8 +189,8 @@ export function DashboardContent() {
         {/* Right cluster: Search · Notifications · Theme · Profile */}
         <div className="ml-auto flex items-center gap-1.5">
           <button
-            onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
-            className="flex h-8 items-center gap-2 rounded-lg border border-[#222222] bg-[#111111] px-2.5 text-xs text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
+            onClick={() => setCommandPaletteOpen(true)}
+            className="flex h-8 items-center gap-2 rounded-lg border border-[#222222] bg-[#111111] px-2.5 text-xs text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60 cursor-pointer"
             aria-label="Search (Cmd+K)"
           >
             <Search className="h-3.5 w-3.5" aria-hidden="true" />

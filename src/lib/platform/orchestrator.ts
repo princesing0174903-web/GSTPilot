@@ -103,7 +103,7 @@ export async function getPlatformDashboard(): Promise<PlatformDashboard> {
     const cycle = s.billingCycle as BillingCycle;
     billingCyclesMap.set(cycle, (billingCyclesMap.get(cycle) ?? 0) + 1);
   }
-  const billingCycles = Array.from(billingCyclesMap.entries()).map(([cycle, count]) => ({ cycle, count }));
+  const billingCycles = Array.from(billingCyclesMap.entries()).map(([cycle, count]) => ({ cycle, count, organizations: count }));
 
   const trialOrgs = orgs.filter((o) => o.planStatus === 'trial');
   const trials = {

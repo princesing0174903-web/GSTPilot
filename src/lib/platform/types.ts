@@ -20,7 +20,7 @@ export interface PlanLimits {
   aiCreditsPerMonth: number;
   workflowExecutions: number;
   agiExecutions: number;
-  connectors: number;
+  connectors: number | null;         // null = unlimited
   marketplaceApps: number | null;
   environments: number;              // dev / staging / prod etc.
 }
@@ -278,7 +278,7 @@ export interface MarketplaceListing {
   monthlyPrice?: number;             // recurring INR
   iconColor: string;
   tags: string[];
-  featured: boolean;
+  featured?: boolean;
 }
 
 export interface MarketplaceInstall {

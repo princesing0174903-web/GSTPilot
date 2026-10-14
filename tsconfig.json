@@ -40,6 +40,8 @@
     "node_modules",
     "examples",
     "skills",
-    "mini-services"
+    "mini-services",
+    "functions",
+    "vitest.config.ts"
   ]
 }

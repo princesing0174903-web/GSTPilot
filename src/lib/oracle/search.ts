@@ -36,8 +36,8 @@ export interface SearchResult {
   type: SearchResultType;
   id: string;
   title: string;
-  subtitle?: string;
-  meta?: string;
+  subtitle?: string | null;
+  meta?: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

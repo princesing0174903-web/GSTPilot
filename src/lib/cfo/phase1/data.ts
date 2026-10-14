@@ -201,7 +201,7 @@ export interface RawCFOData {
  *
  * @param organizationId The org/firm id (from OrgContext). REQUIRED for any data.
  */
-export async function fetchRawCFOData(organizationId: string): Promise<RawCFOData> {
+export async function fetchRawCFOData(organizationId: string = ''): Promise<RawCFOData> {
   // 🔒 Hard tenant gate: no orgId → no data. Never fall through to a global query.
   if (!organizationId) {
     return {

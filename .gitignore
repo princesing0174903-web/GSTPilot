@@ -64,3 +64,9 @@ server.log
 
 # local restore scripts
 auto-restore.sh
+
+# process ids
+*.pid
+.dev-server.pid
+dev.pid
+

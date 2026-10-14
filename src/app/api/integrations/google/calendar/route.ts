@@ -11,7 +11,8 @@ export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
   const { accessToken, response } = await resolveGoogleAuth(req);
-  if (response || !accessToken) return response;
+  if (response) return response;
+  if (!accessToken) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 
   const url = new URL(req.url);
   const max = Math.min(Number(url.searchParams.get('max') ?? '20'), 100);
@@ -22,7 +23,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const { accessToken, response } = await resolveGoogleAuth(req);
-  if (response || !accessToken) return response;
+  if (response) return response;
+  if (!accessToken) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 
   let body: Record<string, unknown> = {};
   try {

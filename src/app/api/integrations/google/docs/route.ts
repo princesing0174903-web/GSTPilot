@@ -10,7 +10,8 @@ export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   const { accessToken, response } = await resolveGoogleAuth(req);
-  if (response || !accessToken) return response;
+  if (response) return response;
+  if (!accessToken) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 
   let body: Record<string, unknown> = {};
   try {

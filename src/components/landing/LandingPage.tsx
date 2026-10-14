@@ -31,8 +31,17 @@ export default function LandingPage({ onGetStarted, onBookDemo, onNavigatePage }
   };
 
   const handleNav = (target: 'product' | 'solutions' | 'resources' | 'pricing' | 'company' | 'legal' | 'privacy' | 'security' | 'terms') => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.history.pushState(null, '', `/#${target}`);
+      } catch {
+        // ignore
+      }
+    }
     if (onNavigatePage) {
       onNavigatePage(target);
+    } else if (typeof window !== 'undefined') {
+      window.location.href = `/${target}`;
     }
   };
 
@@ -73,7 +82,7 @@ export default function LandingPage({ onGetStarted, onBookDemo, onNavigatePage }
           className="relative z-10 flex flex-col items-center text-center max-w-4xl mx-auto"
         >
           <motion.div variants={itemVariants} className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-zinc-800 bg-zinc-900/50 text-xs font-medium text-zinc-300 mb-8 backdrop-blur-sm">
-            <span className="text-emerald-400">?</span> AI-POWERED BUSINESS OS
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> AI-POWERED BUSINESS OS
           </motion.div>
 
           <motion.h1 variants={itemVariants} className="text-5xl md:text-7xl font-bold tracking-tight text-white mb-6 leading-[1.1]">
@@ -133,8 +142,10 @@ export default function LandingPage({ onGetStarted, onBookDemo, onNavigatePage }
                   <p className="text-sm text-zinc-500">Last 30 days</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-medium text-white">$128,420</p>
-                  <p className="text-sm text-emerald-400">? 24.8% vs last month</p>
+                  <p className="text-3xl font-medium font-mono text-white">₹1,28,420</p>
+                  <p className="text-sm text-emerald-400 flex items-center justify-end gap-1">
+                    <ArrowRight className="w-3.5 h-3.5 -rotate-45" /> +24.8% vs last month
+                  </p>
                 </div>
               </div>
               
@@ -152,13 +163,12 @@ export default function LandingPage({ onGetStarted, onBookDemo, onNavigatePage }
       {/* TRUSTED BY */}
       <section className="py-12 border-y border-zinc-900 bg-[#030303]">
         <div className="max-w-6xl mx-auto px-6 text-center">
-          <p className="text-xs uppercase tracking-widest text-zinc-600 font-semibold mb-8">Trusted by forward-thinking teams</p>
-          <div className="flex flex-wrap justify-center gap-12 md:gap-24 opacity-40 grayscale">
-            {/* Faux Logos */}
-            <div className="flex items-center gap-2 font-bold text-xl"><Globe className="w-6 h-6"/> Acme Corp</div>
-            <div className="flex items-center gap-2 font-bold text-xl"><Zap className="w-6 h-6"/> Globex</div>
-            <div className="flex items-center gap-2 font-bold text-xl"><Shield className="w-6 h-6"/> Initech</div>
-            <div className="flex items-center gap-2 font-bold text-xl"><BarChart3 className="w-6 h-6"/> Soylent</div>
+          <p className="text-xs uppercase tracking-widest text-zinc-600 font-semibold mb-8">Trusted by modern enterprises & advisory firms</p>
+          <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-60">
+            <div className="flex items-center gap-2 font-medium text-sm text-zinc-400"><Globe className="w-4 h-4 text-zinc-500"/> Multi-Entity Groups</div>
+            <div className="flex items-center gap-2 font-medium text-sm text-zinc-400"><Zap className="w-4 h-4 text-zinc-500"/> High-Growth SaaS</div>
+            <div className="flex items-center gap-2 font-medium text-sm text-zinc-400"><Shield className="w-4 h-4 text-zinc-500"/> CA & Advisory Networks</div>
+            <div className="flex items-center gap-2 font-medium text-sm text-zinc-400"><BarChart3 className="w-4 h-4 text-zinc-500"/> Global Supply Chains</div>
           </div>
         </div>
       </section>
@@ -213,10 +223,12 @@ export default function LandingPage({ onGetStarted, onBookDemo, onNavigatePage }
       <section className="py-32 px-6 md:px-12 max-w-4xl mx-auto text-center">
         <h2 className="text-3xl md:text-5xl font-medium text-white italic mb-8">"VEYRO completely changed how we work. What used to take our finance team three days now takes our AI assistant four minutes."</h2>
         <div className="flex items-center justify-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-zinc-800" />
+          <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-sm font-semibold text-emerald-400">
+            SJ
+          </div>
           <div className="text-left">
             <p className="text-white font-medium">Sarah Jenkins</p>
-            <p className="text-zinc-500 text-sm">COO at TechFlow</p>
+            <p className="text-zinc-500 text-sm">COO at TechFlow Global</p>
           </div>
         </div>
       </section>

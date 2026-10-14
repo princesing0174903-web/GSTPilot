@@ -121,7 +121,8 @@ async function extractViaVLM(
   const dataUri = `data:${mime};base64,${buffer.toString('base64')}`;
 
   const zai = await ZAI.create();
-  const response = await zai.chat.completions.createVision({
+  const response = await (zai.chat.completions as any).createVision({
+    model: 'glm-4v',
     messages: [
       {
         role: 'user',

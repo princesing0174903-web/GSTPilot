@@ -33,6 +33,7 @@ export {
   refreshAccessToken,
   disconnectZoho,
   getConnectionStatus,
+  resolveOrgFromHeaders,
 } from './oauth';
 export type { ZohoRedirectEnvironment } from './oauth';
 

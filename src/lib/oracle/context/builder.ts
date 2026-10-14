@@ -294,7 +294,7 @@ async function buildContext(
 
   // Receivable risk
   if ((snapshot?.overdueReceivables ?? 0) > 0) {
-    const overdueShare = (snapshot?.receivables ?? 0) > 0
+    const overdueShare = (snapshot?.receivables ?? 0) > 0 && snapshot
       ? (snapshot.overdueReceivables / snapshot.receivables)
       : 0;
     riskSignals.push({
@@ -444,11 +444,11 @@ async function buildBusinessProfile(orgId: string, isDemo: boolean): Promise<Bus
   try {
     const firm = await db.firm.findUnique({
       where: { id: orgId },
-      select: { id: true, name: true, industry: true, gstin: true },
+      select: { id: true, name: true, gstin: true },
     }).catch(() => null);
     if (firm) {
       orgName = firm.name;
-      industry = firm.industry;
+      industry = null;
       gstin = firm.gstin;
     }
   } catch {}
@@ -473,11 +473,11 @@ async function buildIntegrations(orgId: string, isDemo: boolean): Promise<Integr
   try {
     const g = await db.googleWorkspaceToken.findFirst({
       where: { organizationId: orgId, revokedAt: null },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, createdAt: true, updatedAt: true },
+      orderBy: { connectedAt: 'desc' },
+      select: { id: true, connectedAt: true, updatedAt: true },
     }).catch(() => null);
     const connected = !!g;
-    const lastSync = g?.updatedAt ?? g?.createdAt ?? null;
+    const lastSync = g?.updatedAt ? g.updatedAt.toISOString() : g?.connectedAt ? g.connectedAt.toISOString() : null;
     const daysSince = lastSync ? Math.floor((Date.now() - new Date(lastSync).getTime()) / 86_400_000) : null;
     const env = resolveEnvironment(connected ? 'connected' : 'disconnected', lastSync, FRESHNESS_WINDOWS.google, isDemo);
     list.push({
@@ -499,12 +499,12 @@ async function buildIntegrations(orgId: string, isDemo: boolean): Promise<Integr
   try {
     const z = await db.zohoBooksToken.findFirst({
       where: { organizationId: orgId, revokedAt: null },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, createdAt: true, updatedAt: true, expiresAt: true },
+      orderBy: { connectedAt: 'desc' },
+      select: { id: true, connectedAt: true, updatedAt: true, expiryDate: true },
     }).catch(() => null);
     const connected = !!z;
-    const expired = z?.expiresAt ? new Date(z.expiresAt).getTime() < Date.now() : false;
-    const lastSync = z?.updatedAt ?? z?.createdAt ?? null;
+    const expired = z?.expiryDate ? new Date(z.expiryDate).getTime() < Date.now() : false;
+    const lastSync = z?.updatedAt ? z.updatedAt.toISOString() : z?.connectedAt ? z.connectedAt.toISOString() : null;
     const lastSyncLog = connected ? await db.zohoSyncLog.findFirst({
       where: { organizationId: orgId },
       orderBy: { startedAt: 'desc' },
@@ -538,7 +538,7 @@ async function buildIntegrations(orgId: string, isDemo: boolean): Promise<Integr
       select: { id: true, gstin: true, updatedAt: true },
     }).catch(() => null);
     gspConnected = !!profile;
-    const lastSync = profile?.updatedAt ?? null;
+    const lastSync = profile?.updatedAt ? profile.updatedAt.toISOString() : null;
     const daysSince = lastSync ? Math.floor((Date.now() - new Date(lastSync).getTime()) / 86_400_000) : null;
     const gstnProviderEnv = process.env.GSTN_PROVIDER ?? 'mock';
     const gstIsSandbox = !['official', 'clear'].includes(gstnProviderEnv);
@@ -569,7 +569,7 @@ async function buildIntegrations(orgId: string, isDemo: boolean): Promise<Integr
     const bankProviderEnv = process.env.BANK_PROVIDER ?? 'mock';
     const isSandbox = bankProviderEnv === 'setu' ? true : bankProviderEnv === 'mock' ? true : false;
     const connected = !!bankConn;
-    const lastSync = bankConn?.updatedAt ?? bankConn?.createdAt ?? null;
+    const lastSync = bankConn?.updatedAt ? bankConn.updatedAt.toISOString() : bankConn?.createdAt ? bankConn.createdAt.toISOString() : null;
     const daysSince = lastSync ? Math.floor((Date.now() - new Date(lastSync).getTime()) / 86_400_000) : null;
     const state: ConnectionState = !connected ? 'disconnected' : isSandbox ? 'sandbox' : 'connected';
     const env = resolveEnvironment(state, lastSync, FRESHNESS_WINDOWS.banking, isDemo);
@@ -727,19 +727,22 @@ async function buildCustomerDetail(orgId: string): Promise<CustomerSection> {
     // Top customers by revenue (sum of invoices per client)
     const topRaw = await db.invoice.groupBy({
       by: ['clientId'],
-      where: { client: { firmId: orgId }, clientId: { not: null } },
+      where: { client: { firmId: orgId }, clientId: { not: '' } },
       _sum: { totalAmount: true, balanceAmount: true },
       orderBy: { _sum: { totalAmount: 'desc' } },
       take: 10,
-    }).catch(() => []);
+    }).catch(() => [] as any[]);
 
-    const clientMap = new Map(clients.map(c => [c.id, c.tradeName]));
-    const totalRevenue = topRaw.reduce((s, r) => s + (r._sum.totalAmount ?? 0), 0);
+    const clientMap = new Map<string, string>();
+    for (const c of clients) {
+      clientMap.set(c.id, c.tradeName || c.legalName || 'Unknown');
+    }
+    const totalRevenue = topRaw.reduce((s, r) => s + (r._sum?.totalAmount ?? 0), 0);
 
     const topCustomers = topRaw.slice(0, 5).map(r => {
-      const name = clientMap.get(r.clientId ?? '') ?? 'Unknown';
-      const revenue = r._sum.totalAmount ?? 0;
-      const outstanding = r._sum.balanceAmount ?? 0;
+      const name: string = clientMap.get(r.clientId ?? '') ?? 'Unknown';
+      const revenue = r._sum?.totalAmount ?? 0;
+      const outstanding = r._sum?.balanceAmount ?? 0;
       return {
         id: r.clientId ?? '',
         name,
@@ -758,7 +761,7 @@ async function buildCustomerDetail(orgId: string): Promise<CustomerSection> {
       where: {
         client: { firmId: orgId },
         balanceAmount: { gt: 0 },
-        dueDate: { lt: new Date() },
+        dueDate: { lt: new Date().toISOString().slice(0, 10) },
       },
     }).catch(() => 0);
 
@@ -957,12 +960,12 @@ async function buildMonthlyRevenue(orgId: string): Promise<Array<{ month: string
     const months: Array<{ month: string; value: number }> = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const start = d;
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      const startStr = d.toISOString().slice(0, 10);
+      const endStr = new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().slice(0, 10);
       const agg = await db.invoice.aggregate({
         where: {
           client: { firmId: orgId },
-          invoiceDate: { gte: start, lt: end },
+          invoiceDate: { gte: startStr, lt: endStr },
         },
         _sum: { totalAmount: true },
       }).catch(() => ({ _sum: { totalAmount: 0 } }));

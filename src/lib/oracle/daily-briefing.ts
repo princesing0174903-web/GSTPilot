@@ -167,7 +167,7 @@ export async function getOracleDailyBriefing(
         where: { status: { in: ['not_started', 'prepared', 'draft'] } },
         take: 5,
         orderBy: { period: 'desc' },
-        select: { id: true, type: true, period: true, totalTax: true, status: true },
+        select: { id: true, type: true, period: true, totalTax: true, status: true, invoiceCount: true },
       }).catch(() => []),
       // Recent bank credits (incoming payments)
       db.bankTransaction.findMany({

@@ -13,6 +13,7 @@ export {
   ProTable,
   ProDivider,
   ProStat,
+  AnimatedNumber,
   springModalTransition,
   modalEnterVariants,
   backdropVariants,

@@ -716,3 +716,333 @@ export const TIER_GLYPH: Record<string, string> = {
   silver: '🥈',
   bronze: '🥉',
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PHASE 6 — NETWORK OS EXTENSIONS (Matching, Directory, Collaboration, Marketplace)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type NetworkTier = 'platinum' | 'gold' | 'silver' | 'bronze';
+export type BusinessSize = 'micro' | 'small' | 'medium' | 'enterprise';
+export type NetworkEntityType = 'ca' | 'business' | 'vendor' | 'partner';
+export type NetworkRelationshipType =
+  | 'client_of'
+  | 'vendor_to'
+  | 'partnered_with'
+  | 'auditor_of'
+  | 'supplier_to';
+
+export type VendorCategory =
+  | 'raw_materials'
+  | 'it_software'
+  | 'logistics'
+  | 'packaging'
+  | 'professional_services'
+  | 'machinery'
+  | 'utilities'
+  | 'other';
+
+export type MatchIntent =
+  | 'find_vendor'
+  | 'find_ca'
+  | 'find_buyer'
+  | 'partnership'
+  | 'rfq'
+  | 'funding';
+
+export interface MatchScore {
+  overall: number;
+  compliance: number;
+  relevance: number;
+  reliability: number;
+  geographic: number;
+}
+
+export interface MatchResult {
+  entityId: string;
+  entityType: NetworkEntityType;
+  name: string;
+  score: MatchScore;
+  reasons: string[];
+  highlights: string[];
+  distanceKm?: number;
+  tier: NetworkTier;
+}
+
+export interface SmartMatchResponse {
+  query: string;
+  intent: MatchIntent;
+  results: MatchResult[];
+  totalMatches: number;
+  executionTimeMs: number;
+  generatedAt: string;
+}
+
+export interface MatchRequest {
+  query?: string;
+  intent?: MatchIntent;
+  category?: string;
+  city?: string;
+  state?: string;
+  budget?: string;
+  industry?: string;
+  location?: string;
+  specialization?: string;
+  limit?: number;
+}
+
+export type CASpecialization =
+  | 'gst_audit'
+  | 'income_tax'
+  | 'corporate_tax'
+  | 'international_tax'
+  | 'statutory_audit'
+  | 'transfer_pricing'
+  | 'forensic_audit'
+  | 'startup_advisory'
+  | 'wealth_management';
+
+export interface CAReview {
+  id: string;
+  authorName: string;
+  rating: number;
+  comment: string;
+  date: string;
+  verifiedClient: boolean;
+}
+
+export interface CATeamMember {
+  name: string;
+  role: string;
+  qualification: string;
+}
+
+export interface CAProfile {
+  id: string;
+  name: string;
+  firmName: string;
+  membershipNo: string;
+  experienceYears: number;
+  city: string;
+  state: string;
+  specializations: CASpecialization[];
+  rating: number;
+  reviewCount: number;
+  activeClients: number;
+  verified: boolean;
+  bio: string;
+  tier: NetworkTier;
+  pricing: string;
+  consultationAvailable: boolean;
+}
+
+export interface CANetworkDetail {
+  profile: CAProfile;
+  reviews: CAReview[];
+  team: CATeamMember[];
+}
+
+export interface BusinessDirectoryEntry {
+  id: string;
+  name: string;
+  gstin: string;
+  industry: string;
+  subIndustry: string;
+  city: string;
+  state: string;
+  size: BusinessSize;
+  tier: NetworkTier;
+  trustScore: number;
+  verified: boolean;
+  turnoverRange: string;
+  employeeCount: number;
+  foundedYear: number;
+  connectedSince: string;
+}
+
+export interface BusinessNetworkDetail {
+  entry: BusinessDirectoryEntry;
+  connectionCount: number;
+  mutualConnections: number;
+  openRfqs: number;
+}
+
+export interface NetworkEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: NetworkRelationshipType;
+  weight?: number;
+}
+
+export interface BusinessNetworkGraph {
+  nodes: NetworkNode[];
+  edges: NetworkEdge[];
+}
+
+export interface VendorProfile {
+  id: string;
+  businessName: string;
+  gstin: string;
+  category: VendorCategory;
+  catalogItemCount: number;
+  rating: number;
+  fulfillmentRate: number;
+  city: string;
+  state: string;
+  tier: NetworkTier;
+  verified: boolean;
+  avgDeliveryDays: number;
+}
+
+export type CollaborationRoomType =
+  | 'audit'
+  | 'advisory'
+  | 'dispute'
+  | 'filing_prep'
+  | 'vendor_rfq'
+  | 'general';
+
+export interface CollaborationParticipant {
+  id: string;
+  name: string;
+  role: string;
+  avatarUrl?: string;
+  isOwner: boolean;
+}
+
+export interface CollaborationMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  timestamp: string;
+  attachments?: string[];
+}
+
+export interface CollaborationTask {
+  id: string;
+  title: string;
+  assignedTo?: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  dueDate?: string;
+}
+
+export interface CollaborationApproval {
+  id: string;
+  title: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestedBy: string;
+  approvedBy?: string;
+  updatedAt: string;
+}
+
+export interface CollaborationComment {
+  id: string;
+  authorName: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface CollaborationRoom {
+  id: string;
+  title: string;
+  type: CollaborationRoomType;
+  description?: string;
+  createdAt: string;
+  participants: CollaborationParticipant[];
+  messages: CollaborationMessage[];
+  tasks: CollaborationTask[];
+  approvals: CollaborationApproval[];
+  status: 'active' | 'archived';
+}
+
+export interface ReputationEntry {
+  category: string;
+  score: number;
+  trend: 'up' | 'down' | 'flat';
+  notes: string;
+}
+
+export interface ReputationScores {
+  overall: number;
+  complianceScore: number;
+  paymentScore: number;
+  transparencyScore: number;
+  fulfillmentScore: number;
+  tier: NetworkTier;
+  history: ReputationEntry[];
+}
+
+export interface FeedItem {
+  id: string;
+  authorName: string;
+  authorRole: string;
+  content: string;
+  timestamp: string;
+  type: 'announcement' | 'deal' | 'update' | 'regulatory';
+  likes: number;
+  comments: number;
+}
+
+export interface NetworkInsight {
+  id: string;
+  title: string;
+  description: string;
+  impact: 'high' | 'medium' | 'low';
+  type: 'trend' | 'risk' | 'opportunity';
+  metric?: string;
+}
+
+export type NetworkQueryIntent = 'search' | 'recommend' | 'analyze' | 'connect';
+
+export interface NetworkQueryResult {
+  intent: NetworkQueryIntent;
+  answer: string;
+  relatedEntities: any[];
+  confidence: number;
+}
+
+export interface NetworkState {
+  graph: BusinessNetworkGraph;
+  cas: CAProfile[];
+  businesses: BusinessDirectoryEntry[];
+  vendors: VendorProfile[];
+  rooms: CollaborationRoom[];
+  reputation: ReputationScores;
+  feed: FeedItem[];
+  insights: NetworkInsight[];
+  timestamp: string;
+}
+
+export type MarketplaceCategory =
+  | 'accounting_software'
+  | 'legal_services'
+  | 'insurance'
+  | 'cloud_hosting'
+  | 'payroll'
+  | 'logistics'
+  | 'marketing';
+
+export interface MarketplaceListing {
+  id: string;
+  title: string;
+  category: MarketplaceCategory;
+  providerName: string;
+  pricing: string;
+  rating: number;
+  reviewCount: number;
+  badge?: string;
+  description: string;
+  featured?: boolean;
+}
+
+export interface MarketplaceQuoteRequest {
+  id: string;
+  listingId: string;
+  requesterOrgId: string;
+  requesterEmail: string;
+  message: string;
+  createdAt: string;
+  status: 'submitted' | 'quoted' | 'closed';
+}
+

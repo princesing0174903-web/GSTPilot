@@ -1,42 +1,21 @@
 'use client';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VEYRO — HOME (Financial Operating System)
+// VEYRO — Minimalist Enterprise Dashboard
 // ═══════════════════════════════════════════════════════════════════════════════
+// A focused, fast, and minimal dashboard inspired by Vercel & OpenAI.
 //
-// A premium command center inspired by Stripe, Linear, Notion, Vercel & Ramp.
-//
-// The dashboard tells the user exactly what to do next. Every section has a
-// purpose; every card answers "Why should this exist?". Six connected sections:
-//
-//   1. Hero — greeting, Business Health Score, Today's Revenue, Pending GST,
-//      and the 3 most important quick actions.
-//   2. VEYRO AI — a single built-in assistant card. No "Activate" buttons,
-//      no duplicate Oracle CTAs.
-//   3. Business Snapshot — Revenue, Profit, Expenses, Cash Flow, Invoices,
-//      Clients, GST Returns. Real numbers + a real MoM indicator.
-//   4. Action Center — everything requiring action, each row clickable.
-//   5. AI Recommendations — Oracle's prioritized recommendations, each with
-//      View Details.
-//   6. Recent Activity — a single chronological feed of every business event
-//      (invoices, returns, payments, bank sync, Zoho sync, Google Drive).
-//
-// DATA CONTRACT
-//   Every number on this page comes from ONE of three real sources:
-//     • useBusinessSnapshot()  → /api/business/snapshot  (Prisma, single source
-//       of truth for revenue, profit, cash, GST, customers, invoices, returns,
-//       health score, forecast, runway).
-//     • useTimelineEvents()    → /api/timeline            (Prisma BusinessEvent).
-//     • useAIRecommendations() → /api/recommendations     (rules engine over
-//       the snapshot + targeted Prisma queries).
-//   No Math.random, no fake sparklines, no fabricated percentages, no mock
-//   widgets. When a value is 0, we show 0 with an honest subtitle.
+// Key Principles:
+//   1. Clean 1px borders, #0A0A0A canvas, #111111 cards.
+//   2. High signal-to-noise ratio: no competing multi-color badges or bloated widgets.
+//   3. Single clear primary action: Create Invoice [C].
+//   4. Zero-state aware: onboarding checklist when all values are zero.
+//   5. Unified operations: Financial Vitals + Live Workflow + Action Stream.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ProSkeleton, AnimatedNumber } from '@/components/ui-pro';
 import { boot } from '@/lib/perf/boot-tracer';
@@ -50,7 +29,6 @@ import {
   Brain,
   TrendingUp,
   TrendingDown,
-  Minus,
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
@@ -58,9 +36,8 @@ import {
   Activity,
   Zap,
   RefreshCw,
-  LifeBuoy,
-  Receipt,
   Wallet,
+  Receipt,
   Landmark,
   Database,
   Cloud,
@@ -71,86 +48,15 @@ import { motion } from 'framer-motion';
 import { useApp, type AppView } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusinessSnapshot } from '@/hooks/useBusinessSnapshot';
-import {
-  useLiveDashboardMetrics,
-  useFireReturns,
-} from '@/hooks/use-firestore';
+import { useLiveDashboardMetrics, useFireReturns } from '@/hooks/use-firestore';
 import { useTimelineEvents } from '@/hooks/useTimelineEvents';
 import { useAIRecommendations } from '@/hooks/useAIRecommendations';
 import { useWorkflowPipeline } from '@/hooks/useWorkflowPipeline';
 import { useOracleDailyBriefing } from '@/hooks/useOracleDailyBriefing';
-import { WorkflowPipeline } from '@/components/workflow/WorkflowPipeline';
-import { ProactiveOracleBriefing } from '@/components/oracle/ProactiveOracleBriefing';
 import { periodToLabel, getFilingDueDate } from '@/lib/gst-utils';
-import { toast } from 'sonner';
-import type { Recommendation as AIRecommendation } from '@/lib/recommendations/engine';
 import type { TimelineEvent } from '@/lib/timeline/emit';
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// LAZY BELOW-THE-FOLD — defers mounting of below-the-fold sections until the
-// user scrolls near them. Prevents expensive initial render of Action Center,
-// AI Recommendations, and Recent Activity when the user first lands on the
-// dashboard (they only see the Hero + Oracle + Snapshot above the fold).
-// ═══════════════════════════════════════════════════════════════════════════════
-function useInView(rootMargin = '400px 0px'): { ref: React.RefCallback<HTMLDivElement>; inView: boolean } {
-  const [inView, setInView] = useState(false);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-
-  const ref = useCallback((node: HTMLDivElement | null) => {
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-      observerRef.current = null;
-    }
-    if (node && !inView) {
-      observerRef.current = new IntersectionObserver(
-        (entries) => {
-          if (entries[0]?.isIntersecting) {
-            setInView(true);
-            observerRef.current?.disconnect();
-            observerRef.current = null;
-          }
-        },
-        { rootMargin },
-      );
-      observerRef.current.observe(node);
-      // Fallback: if the observer hasn't fired within 1.5s (e.g. in headless
-      // browsers or when the element is already in view on mount), force-show
-      // the section. This prevents content from being permanently hidden.
-      setTimeout(() => {
-        setInView((prev) => {
-          if (!prev) {
-            observerRef.current?.disconnect();
-            observerRef.current = null;
-          }
-          return true;
-        });
-      }, 1500);
-    }
-  }, [inView, rootMargin]);
-
-  useEffect(() => {
-    return () => {
-      observerRef.current?.disconnect();
-    };
-  }, []);
-
-  return { ref, inView };
-}
-
-function LazySection({ children, placeholderHeight = 320 }: { children: (inView: boolean) => React.ReactNode; placeholderHeight?: number }) {
-  const { ref, inView } = useInView();
-  return (
-    <div ref={ref} style={{ minHeight: inView ? undefined : placeholderHeight }}>
-      {children(inView)}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// FORMATTERS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/** Compact Indian-system currency abbreviation: ₹1.09L, ₹1.09Cr, ₹9.5K. */
+// ── Currency and string formatters ──────────────────────────────────────────
 function abbreviateINR(value: number): string {
   const abs = Math.abs(value);
   const sign = value < 0 ? '-' : '';
@@ -169,38 +75,11 @@ function getGreeting(): string {
 
 function cleanFirstName(name: string | undefined | null, email?: string | null): string {
   let raw = (name || '').trim();
-  if (!raw && email) {
-    raw = email.split('@')[0];
-  }
-  // Strip email domain if present in name
-  raw = raw.replace(/@.*$/, '').trim();
-  // Strip numbers at end (e.g. princesing0174903 -> princesing)
-  raw = raw.replace(/\d+$/, '').trim();
-  // Replace underscores, periods, dashes with space
-  raw = raw.replace(/[._-]/g, ' ').trim();
+  if (!raw && email) raw = email.split('@')[0];
+  raw = raw.replace(/@.*$/, '').replace(/\d+$/, '').replace(/[._-]/g, ' ').trim();
   const first = raw.split(/\s+/)[0];
   if (!first || first.length < 2) return '';
   return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
-}
-
-function MiniSparkline({ trend = 'up' }: { trend?: 'up' | 'down' | 'flat' }) {
-  const points = trend === 'up'
-    ? '0,13 8,11 16,12 24,8 32,9 40,5 48,6 56,2'
-    : trend === 'down'
-    ? '0,2 8,6 16,5 24,9 32,8 40,12 48,11 56,14'
-    : '0,8 8,8 16,8 24,8 32,8 40,8 48,8 56,8';
-  return (
-    <svg className="w-14 h-3.5 overflow-visible shrink-0 text-[#A1A1A1] opacity-40 group-hover:opacity-75 transition-opacity" viewBox="0 0 56 16">
-      <polyline
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={points}
-      />
-    </svg>
-  );
 }
 
 function timeAgo(dateStr: string): string {
@@ -225,256 +104,25 @@ function getDaysRemaining(dueDateStr: string): number {
   return Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// LOADING SKELETON
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function DashboardSkeleton() {
+function MiniSparkline({ trend = 'up' }: { trend?: 'up' | 'down' | 'flat' }) {
+  const points = trend === 'up'
+    ? '0,13 8,11 16,12 24,8 32,9 40,5 48,6 56,2'
+    : trend === 'down'
+    ? '0,2 8,6 16,5 24,9 32,8 40,12 48,11 56,14'
+    : '0,8 8,8 16,8 24,8 32,8 40,8 48,8 56,8';
   return (
-    <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-10 space-y-8">
-      <div className="space-y-3">
-        <ProSkeleton className="h-9 w-72" />
-        <ProSkeleton className="h-4 w-96" />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <ProSkeleton key={i} className="h-32 rounded-2xl" />
-        ))}
-      </div>
-      <ProSkeleton className="h-28 rounded-2xl" />
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        {Array.from({ length: 7 }).map((_, i) => (
-          <ProSkeleton key={i} className="h-28 rounded-2xl" />
-        ))}
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ProSkeleton className="h-80 rounded-2xl" />
-        <ProSkeleton className="h-80 rounded-2xl" />
-      </div>
-      <ProSkeleton className="h-72 rounded-2xl" />
-    </div>
+    <svg className="w-14 h-3.5 overflow-visible shrink-0 text-[#A1A1A1] opacity-40 group-hover:opacity-75 transition-opacity" viewBox="0 0 56 16">
+      <polyline
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points}
+      />
+    </svg>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════════════════════
-// COMPACT METRIC CARD (Vercel Style)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface CompactMetricCardProps {
-  label: string;
-  value: string;
-  subtitle?: string;
-  change?: { value: string; positive: boolean } | null;
-  trend?: 'up' | 'down' | 'flat';
-  index: number;
-}
-
-function CompactMetricCard({
-  label,
-  value,
-  subtitle,
-  change,
-  trend = 'flat',
-  index,
-}: CompactMetricCardProps) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' as const }}
-      className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 transition-colors hover:border-white/20 group flex flex-col justify-between"
-    >
-      <div>
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <span className="text-xs text-[#A1A1A1] font-normal">{label}</span>
-          <MiniSparkline trend={trend} />
-        </div>
-        <div className="text-2xl font-mono font-medium text-[#EDEDED] tracking-tight">
-          {value}
-        </div>
-      </div>
-      <div className="mt-3 flex items-center justify-between text-[11px] text-[#666666]">
-        {subtitle && <span className="truncate">{subtitle}</span>}
-        {change && (
-          <span className={`font-mono shrink-0 ml-auto ${change.positive ? 'text-emerald-400/90' : 'text-rose-400/90'}`}>
-            {change.value}
-          </span>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SNAPSHOT TILE (Section 3)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface SnapshotTileProps {
-  label: string;
-  numericValue?: number;
-  numericFormat?: 'currency' | 'currencyCompact' | 'integer' | 'decimal';
-  valueString?: string;
-  subtitle: string;
-  icon: React.ReactNode;
-  /** Real month-over-month delta: { pct: 12, direction: 'up'|'down'|'flat' }. Derived from real snapshot fields. */
-  mom?: { pct: number; direction: 'up' | 'down' | 'flat' };
-  index: number;
-  onClick?: () => void;
-}
-
-const MOM_STYLE: Record<'up' | 'down' | 'flat', { icon: LucideIcon; cls: string; verb: string }> = {
-  up: { icon: TrendingUp, cls: 'text-blue-400', verb: 'vs last month' },
-  down: { icon: TrendingDown, cls: 'text-rose-400', verb: 'vs last month' },
-  flat: { icon: Minus, cls: 'text-muted-foreground', verb: 'no change' },
-};
-
-function SnapshotTile({
-  label,
-  numericValue,
-  numericFormat = 'integer',
-  valueString,
-  subtitle,
-  icon,
-  mom,
-  index,
-  onClick,
-}: SnapshotTileProps) {
-  const MomIcon = mom ? MOM_STYLE[mom.direction].icon : null;
-  const interactive = Boolean(onClick);
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.04, ease: 'easeOut' as const }}
-      className="h-full"
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={!interactive}
-        aria-label={`${label}${valueString ? `: ${valueString}` : ''}${mom ? `, ${mom.direction === 'up' ? 'up' : mom.direction === 'down' ? 'down' : 'flat'} ${mom.pct}% vs last month` : ''}`}
-        className={`group relative w-full text-left rounded-[10px] border border-white/[0.08] bg-[#141414] p-3.5 h-full overflow-hidden transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20 ${interactive ? 'cursor-pointer hover:border-white/20' : 'cursor-default'}`}
-      >
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <span className="text-xs text-[#A1A1A1] truncate">
-            {label}
-          </span>
-          <div className="flex items-center justify-center h-6 w-6 rounded-md bg-white/[0.04] text-[#A1A1A1] shrink-0">
-            {icon}
-          </div>
-        </div>
-        <div className="flex items-baseline gap-1.5">
-          {numericValue !== undefined ? (
-            <AnimatedNumber value={numericValue} format={numericFormat} className="text-lg font-mono font-medium text-[#EDEDED] tracking-tight tabular-nums" />
-          ) : (
-            <span className="text-lg font-mono font-medium text-[#EDEDED] tracking-tight">{valueString ?? '—'}</span>
-          )}
-        </div>
-        {mom && MomIcon && (
-          <div className={`flex items-center gap-1 mt-1 text-[11px] ${MOM_STYLE[mom.direction].cls}`}>
-            <MomIcon className="h-3 w-3" />
-            <span className="font-mono">
-              {mom.direction === 'flat' ? '—' : `${mom.pct > 0 ? '+' : ''}${mom.pct}%`}
-            </span>
-            <span className="text-[#666666]">{MOM_STYLE[mom.direction].verb}</span>
-          </div>
-        )}
-        {!mom && (
-          <p className="text-[11px] text-[#666666] mt-1 leading-relaxed truncate">{subtitle}</p>
-        )}
-      </button>
-    </motion.div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// REVENUE vs EXPENSES MINI BAR (real data, pure SVG)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function RevenueExpenseBar({ revenue, expenses }: { revenue: number; expenses: number }) {
-  const total = revenue + expenses;
-  const revPct = total > 0 ? (revenue / total) * 100 : 0;
-  const expPct = total > 0 ? (expenses / total) * 100 : 0;
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2 text-[11px]">
-        <span className="flex items-center gap-1.5 text-muted-foreground">
-          <span className="h-2 w-2 rounded-full bg-blue-400" />
-          Revenue
-          <span className="font-semibold text-foreground gst-text-tabular">{abbreviateINR(revenue)}</span>
-        </span>
-        <span className="flex items-center gap-1.5 text-muted-foreground">
-          <span className="font-semibold text-foreground gst-text-tabular">{abbreviateINR(expenses)}</span>
-          Expenses
-          <span className="h-2 w-2 rounded-full bg-rose-400" />
-        </span>
-      </div>
-      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.04]">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${revPct}%` }}
-          transition={{ duration: 0.8, ease: 'easeOut' as const }}
-          className="bg-gradient-to-r from-blue-400 to-blue-600"
-        />
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${expPct}%` }}
-          transition={{ duration: 0.8, delay: 0.1, ease: 'easeOut' as const }}
-          className="bg-gradient-to-r from-rose-400 to-rose-600"
-        />
-      </div>
-      <p className="text-[11px] text-muted-foreground">
-        {total > 0
-          ? `${revPct.toFixed(0)}% revenue · ${expPct.toFixed(0)}% expenses (FY-to-date)`
-          : 'No revenue or expenses recorded yet for this financial year.'}
-      </p>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION HEADER
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function SectionHeader({
-  title,
-  icon,
-  actionLabel,
-  onAction,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 mb-4">
-      <div className="flex items-center gap-2 min-w-0">
-        <div className="flex items-center justify-center h-6 w-6 rounded-md border border-white/[0.08] bg-white/[0.04] text-[#A1A1A1] shrink-0">
-          {icon}
-        </div>
-        <h2 className="text-xs font-medium text-[#EDEDED] truncate">
-          {title}
-        </h2>
-      </div>
-      {actionLabel && onAction && (
-        <button
-          type="button"
-          onClick={onAction}
-          className="text-xs text-[#A1A1A1] hover:text-[#EDEDED] flex items-center gap-1 transition-colors"
-        >
-          {actionLabel}
-          <ArrowRight className="h-3 w-3" />
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ACTIVITY SOURCE ICON (Section 6)
-// ═══════════════════════════════════════════════════════════════════════════════
 
 function activityIconFor(type: string, source: string): { icon: LucideIcon; tone: string } {
   const t = type.toLowerCase();
@@ -492,10 +140,6 @@ function activityIconFor(type: string, source: string): { icon: LucideIcon; tone
   return { icon: Activity, tone: 'text-[#888888]' };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ACTION ITEM (Section 4)
-// ═══════════════════════════════════════════════════════════════════════════════
-
 interface ActionItem {
   id: string;
   icon: LucideIcon;
@@ -505,77 +149,75 @@ interface ActionItem {
   view: AppView;
 }
 
-const ACTION_TONE: Record<ActionItem['tone'], { chip: string; bar: string }> = {
-  rose: { chip: 'border-rose-500/30 bg-rose-500/10 text-rose-400', bar: 'bg-rose-400' },
-  amber: { chip: 'border-amber-500/30 bg-amber-500/10 text-amber-400', bar: 'bg-amber-400' },
-  blue: { chip: 'border-white/[0.08] bg-white/[0.04] text-[#EDEDED]', bar: 'bg-white' },
-  emerald: { chip: 'border-white/[0.08] bg-white/[0.04] text-[#EDEDED]', bar: 'bg-white' },
-};
-
-function ActionRow({ item, index }: { item: ActionItem; index: number }) {
-  const Icon = item.icon;
-  const tone = ACTION_TONE[item.tone];
+// ── Compact Metric Card ─────────────────────────────────────────────────────
+function CompactMetricCard({
+  label,
+  value,
+  subtitle,
+  change,
+  trend = 'flat',
+  index,
+}: {
+  label: string;
+  value: string;
+  subtitle?: string;
+  change?: { value: string; positive: boolean } | null;
+  trend?: 'up' | 'down' | 'flat';
+  index: number;
+}) {
   return (
-    <motion.button
-      type="button"
-      initial={{ opacity: 0, x: -6 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.25, delay: index * 0.03, ease: 'easeOut' as const }}
-      className="group w-full text-left flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/[0.04] transition-colors"
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.04, ease: 'easeOut' as const }}
+      className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-4 sm:p-5 transition-colors hover:border-white/20 group flex flex-col justify-between"
     >
-      <div className={`flex items-center justify-center h-7 w-7 rounded-md border shrink-0 ${tone.chip}`}>
-        <Icon className="h-3.5 w-3.5" />
+      <div>
+        <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
+          <span className="text-xs text-[#A1A1A1] font-normal">{label}</span>
+          <MiniSparkline trend={trend} />
+        </div>
+        <div className="text-xl sm:text-2xl font-mono font-medium text-[#EDEDED] tracking-tight">
+          {value}
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-[#EDEDED] truncate">{item.title}</p>
-        <p className="text-[11px] text-[#666666] truncate">{item.detail}</p>
+      <div className="mt-2 sm:mt-3 flex items-center justify-between text-[11px] text-[#666666]">
+        {subtitle && <span className="truncate">{subtitle}</span>}
+        {change && (
+          <span className={`font-mono shrink-0 ml-auto ${change.positive ? 'text-emerald-400/90' : 'text-rose-400/90'}`}>
+            {change.value}
+          </span>
+        )}
       </div>
-      <ArrowRight className="h-3.5 w-3.5 text-[#666666] group-hover:text-[#EDEDED] group-hover:translate-x-0.5 transition-all shrink-0" />
-    </motion.button>
+    </motion.div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// ── Main Dashboard Component ────────────────────────────────────────────────
 export default function DashboardPage() {
   const router = useRouter();
   const { setCurrentView } = useApp();
   const { user } = useAuth();
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // REAL DATA HOOKS (single source of truth)
-  // ═══════════════════════════════════════════════════════════════════════════
+  // Real data hooks
   const { snapshot, loading: snapshotLoading, error: snapshotError, refresh: refreshSnapshot } = useBusinessSnapshot();
   const { metrics, loading: metricsLoading } = useLiveDashboardMetrics();
   const { data: returns } = useFireReturns();
   const { events: timelineEvents, loading: timelineLoading } = useTimelineEvents(15);
   const { recommendations: aiRecommendations, loading: aiRecsLoading } = useAIRecommendations();
-
-  // ── Workflow Pipeline + Proactive Oracle Briefing (Task 12 · Steps 1 & 3) ──
-  // The workflow pipeline is the CENTRAL visual element — it shows the live
-  // state of every business object as it flows through Invoice → Payment →
-  // Bank → Match → GST → Oracle → Approve → Done.
-  // VEYRO AI daily briefing makes Oracle proactive — it wakes up with
-  // knowledge instead of waiting for prompts.
   const { pipeline, loading: pipelineLoading, refresh: refreshPipeline } = useWorkflowPipeline();
   const { briefing, loading: briefingLoading, refresh: refreshBriefing } = useOracleDailyBriefing();
 
-  // ── Loading safety timer (8s) — never let the skeleton hang forever ──
-  // The timer is armed while loading; if it fires before loading clears, we
-  // surface whatever data we have. We avoid calling setState synchronously in
-  // the effect body (which would trigger cascading renders) by only setting
-  // state from inside the async timeout callback.
-  // Reduced from 12s → 8s so the dashboard becomes interactive faster when
-  // the snapshot API is slow.
+  // Active tab state in the right-side stream: 'tasks' vs 'activity'
+  const [activeStreamTab, setActiveStreamTab] = useState<'tasks' | 'activity'>('tasks');
+
+  // Loading safety timer
   const [loadingTimedOut, setLoadingTimedOut] = useState(false);
   const allLoading = snapshotLoading || metricsLoading || timelineLoading;
+
   useEffect(() => {
     boot.mark('dashboard data started');
     if (!allLoading) {
-      // Loading cleared naturally — reset the flag on the NEXT tick via a
-      // microtask so we never call setState synchronously inside the effect.
       boot.mark('dashboard data complete');
       boot.measure('interactive');
       const id = setTimeout(() => setLoadingTimedOut(false), 0);
@@ -584,43 +226,14 @@ export default function DashboardPage() {
     const t = setTimeout(() => {
       setLoadingTimedOut(true);
       boot.mark('dashboard data complete (timeout)');
-      boot.measure('interactive (after timeout)');
     }, 8_000);
     return () => clearTimeout(t);
   }, [allLoading]);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // DERIVED HOOKS — all useMemo calls MUST run before any early return.
-  // React Rules of Hooks: hooks cannot be called conditionally or after a
-  // conditional return. We compute every derived value up-front here so the
-  // loading / error early-returns below are safe.
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  // ── Health score tier (CANONICAL — uses snapshot.healthScoreLabel) ──
-  // The rich snapshot engine (`src/lib/business/snapshot.ts::computeHealthScore`)
-  // is the SINGLE source of truth for the business health score + its label.
-  // We do NOT re-compute a label locally — we just look up the tone for the
-  // canonical label. This is the ONLY place on the dashboard where the health
-  // score number or label is displayed. (AI Recommendations used to duplicate
-  // it via a "Low Health Score" rule; that rule has been removed from
-  // `src/lib/recommendations/engine.ts`.)
-  const hasHealthScore = snapshot.healthScore > 0 && snapshot.hasLiveData;
-  const healthLabel = snapshot.healthScoreLabel;
-  const healthTier = useMemo<{ label: string; tone: 'emerald' | 'amber' | 'rose' } | null>(() => {
-    if (!hasHealthScore || !healthLabel) return null;
-    const tone: 'emerald' | 'amber' | 'rose' =
-      healthLabel === 'Excellent' || healthLabel === 'Good'
-        ? 'emerald'
-        : healthLabel === 'Fair'
-          ? 'amber'
-          : 'rose'; // Poor | Critical
-    return { label: healthLabel, tone };
-  }, [hasHealthScore, healthLabel]);
-
-  // ── Pending GST = net GST liability (output tax − input tax) ──
+  // Derived metrics
   const pendingGst = snapshot.gst?.netLiability ?? 0;
+  const todaysRevenue = snapshot.revenueThisMonth ?? 0;
 
-  // ── Real month-over-month revenue delta ──
   const revenueMom = useMemo(() => {
     const cur = snapshot.revenueThisMonth ?? 0;
     const prev = snapshot.revenueLastMonth ?? 0;
@@ -631,16 +244,17 @@ export default function DashboardPage() {
     return { pct: Math.abs(pct), direction: pct > 0 ? 'up' as const : 'down' as const };
   }, [snapshot.revenueThisMonth, snapshot.revenueLastMonth]);
 
-  // ── Action Center items (real, derived from snapshot + returns + metrics) ──
+  // Action Items
   const actionItems = useMemo<ActionItem[]>(() => {
     const items: ActionItem[] = [];
 
-    // 1. Overdue GST returns (from real returns with due dates)
+    // 1. Overdue GST returns
     const overdueReturnsList = returns
       .filter((r) => r.status !== 'filed')
       .map((r) => ({ r, days: getDaysRemaining(getFilingDueDate(r.returnType, r.period)) }))
       .filter((x) => x.days < 0)
       .sort((a, b) => a.days - b.days);
+
     if (overdueReturnsList.length > 0) {
       const top = overdueReturnsList[0];
       items.push({
@@ -648,50 +262,24 @@ export default function DashboardPage() {
         icon: AlertCircle,
         tone: 'rose',
         title: `${overdueReturnsList.length} GST return${overdueReturnsList.length > 1 ? 's' : ''} overdue`,
-        detail: `Most urgent: ${top.r.returnType} · ${periodToLabel(top.r.period)} · ${Math.abs(top.days)}d past due`,
+        detail: `${top.r.returnType} · ${periodToLabel(top.r.period)} · ${Math.abs(top.days)}d past due`,
         view: 'returns',
       });
-    } else {
-      // Nearest upcoming filing (due soon)
-      const upcoming = returns
-        .filter((r) => r.status !== 'filed')
-        .map((r) => ({ r, days: getDaysRemaining(getFilingDueDate(r.returnType, r.period)) }))
-        .filter((x) => x.days >= 0)
-        .sort((a, b) => a.days - b.days);
-      if (upcoming.length > 0) {
-        const top = upcoming[0];
-        const dueLabel = top.days === 0 ? 'due today' : top.days === 1 ? 'due tomorrow' : `due in ${top.days}d`;
-        items.push({
-          id: 'upcoming-return',
-          icon: Clock,
-          tone: top.days <= 2 ? 'amber' : 'blue',
-          title: `${top.r.returnType} ${dueLabel}`,
-          detail: `${periodToLabel(top.r.period)} · ${returns.filter((r) => r.status !== 'filed').length} return${returns.filter((r) => r.status !== 'filed').length > 1 ? 's' : ''} pending`,
-          view: 'returns',
-        });
-      }
     }
 
-    // 2. Overdue invoices (real snapshot.overdueInvoiceCount)
+    // 2. Overdue Invoices
     if (snapshot.overdueInvoiceCount > 0) {
       items.push({
         id: 'overdue-invoices',
         icon: FileText,
         tone: 'rose',
         title: `${snapshot.overdueInvoiceCount} overdue invoice${snapshot.overdueInvoiceCount > 1 ? 's' : ''}`,
-        detail: `${abbreviateINR(snapshot.overdueReceivables ?? 0)} past due · click to follow up`,
+        detail: `${abbreviateINR(snapshot.overdueReceivables ?? 0)} past due · follow up`,
         view: 'invoices',
       });
     }
 
-    // 3. Pending collections (real snapshot.collections.totalOutstanding)
-    // Shown ONLY when there are no overdue invoices (the overdue-invoices item
-    // above already covers that case). `snapshot.invoices.count` is the TOTAL
-    // invoice count (paid + unpaid), NOT the unpaid count — so we deliberately
-    // do NOT echo it here as "N invoices outstanding". The unpaid-count
-    // contradiction (₹89.5K pending collection reported alongside a "0
-    // invoices unpaid" widget elsewhere) came from mislabeling `invoices.count`
-    // as the unpaid count. The outstanding ₹ amount is the truthful metric.
+    // 3. Pending Collections
     const outstanding = snapshot.collections?.totalOutstanding ?? 0;
     if (outstanding > 0 && snapshot.overdueInvoiceCount === 0) {
       items.push({
@@ -699,151 +287,37 @@ export default function DashboardPage() {
         icon: Wallet,
         tone: 'amber',
         title: `${abbreviateINR(outstanding)} pending collection`,
-        detail: 'Awaiting customer payment · click to chase',
+        detail: 'Awaiting customer payment',
         view: 'invoices',
       });
     }
 
-    // 4. Critical compliance issues (real metrics.criticalIssues)
+    // 4. Critical compliance issues
     if (metrics.criticalIssues > 0) {
       items.push({
         id: 'critical-issues',
         icon: AlertTriangle,
         tone: 'amber',
         title: `${metrics.criticalIssues} reconciliation issue${metrics.criticalIssues > 1 ? 's' : ''}`,
-        detail: 'Bank reconciliation needs review — resolve before next filing',
+        detail: 'Review bank reconciliation before filing',
         view: 'reconcile',
       });
     }
 
-    // 5. Pending GST liability (real snapshot.gst.netLiability)
+    // 5. Pending GST liability
     if (pendingGst > 0) {
       items.push({
         id: 'gst-liability',
         icon: Receipt,
         tone: 'amber',
         title: `${abbreviateINR(pendingGst)} GST liability pending`,
-        detail: 'Net output tax − input tax credit · file to settle',
+        detail: 'Net tax payable after input credit',
         view: 'returns',
       });
     }
 
-    // NOTE: "Bank reconciliation up to date" was previously shown here as a
-    // pseudo-action. Removed — it was a status, not an action, and added
-    // noise to the Action Center. Real actions only now.
-
     return items;
   }, [returns, snapshot, metrics, pendingGst]);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // EARLY RETURNS — safe now because every hook above ran unconditionally.
-  // ═══════════════════════════════════════════════════════════════════════════
-  if (allLoading && !loadingTimedOut) {
-    return <DashboardSkeleton />;
-  }
-
-  // ── Hard error state (only for non-permission, non-network failures) ──
-  const isPermissionOrNetworkError = (msg: string | null): boolean => {
-    if (!msg) return false;
-    return /permission|insufficient|unauthenticated|not authorized|missing or|network|fetch|failed to fetch|load failed/i.test(msg);
-  };
-  if (snapshotError && !isPermissionOrNetworkError(snapshotError)) {
-    return (
-      <div className="relative max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-10">
-        <div className="glass-surface rounded-2xl p-8 text-center border border-rose-500/20">
-          <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 mx-auto mb-4">
-            <AlertTriangle className="h-6 w-6 text-rose-400" />
-          </div>
-          <h3 className="font-semibold text-foreground text-lg">
-            We couldn&apos;t load your dashboard
-          </h3>
-          <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
-            Something went wrong while fetching your business data. Please try again.
-          </p>
-          <div className="flex items-center justify-center gap-2 mt-5">
-            <Button onClick={refreshSnapshot} className="accent-gradient text-white hover:opacity-90 gap-1.5">
-              <RefreshCw className="h-4 w-4" />
-              Retry
-            </Button>
-            <Button variant="outline" onClick={() => window.location.reload()} className="gap-1.5">
-              Reload page
-            </Button>
-            <Button variant="ghost" onClick={() => setCurrentView('settings')} className="text-muted-foreground gap-1.5">
-              <LifeBuoy className="h-4 w-4" />
-              Support
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // NON-HOOK DERIVED VALUES (safe to compute after the early returns above)
-  // ═══════════════════════════════════════════════════════════════════════════
-  const firstName = cleanFirstName(user?.name, user?.email);
-  const greetingText = firstName ? `${getGreeting()}, ${firstName}` : getGreeting();
-  const todaysRevenue = snapshot.revenueThisMonth ?? 0;
-
-  const todayStr = useMemo(() => {
-    return new Intl.DateTimeFormat('en-US', {
-      weekday: 'long',
-      month: 'short',
-      day: 'numeric',
-    }).format(new Date());
-  }, []);
-
-  const subtitleLine = useMemo(() => {
-    if (actionItems.length > 0) {
-      return `${actionItems.length} task${actionItems.length === 1 ? '' : 's'} pending review`;
-    }
-    if (snapshot.overdueInvoiceCount > 0) {
-      return `${snapshot.overdueInvoiceCount} invoice${snapshot.overdueInvoiceCount === 1 ? '' : 's'} overdue`;
-    }
-    return 'Workspace active and up to date';
-  }, [actionItems.length, snapshot.overdueInvoiceCount]);
-
-  const isAllZero = (snapshot.bankBalance === 0 || !snapshot.bankBalance) &&
-    (todaysRevenue === 0 || !todaysRevenue) &&
-    (pendingGst === 0) &&
-    (snapshot.invoices?.count === 0 || !snapshot.invoices?.count);
-
-  const onboardingSteps = useMemo(() => [
-    {
-      title: 'Add business details',
-      description: 'Set legal name, GSTIN, and registered business address',
-      completed: Boolean(user?.orgName || (user as Record<string, unknown>)?.businessName),
-      action: () => setCurrentView('settings'),
-    },
-    {
-      title: 'Connect bank account',
-      description: 'Track real-time cash balance and automated statement sync',
-      completed: (snapshot.bankBalance ?? 0) > 0,
-      action: () => setCurrentView('banking'),
-    },
-    {
-      title: 'Add first client',
-      description: 'Add client contact info and GSTIN for invoicing',
-      completed: (snapshot.customers ?? 0) > 0,
-      action: () => setCurrentView('clients'),
-    },
-    {
-      title: 'Create first invoice',
-      description: 'Issue GST-compliant tax invoices and track payment',
-      completed: (snapshot.invoices?.count ?? 0) > 0,
-      action: () => setCurrentView('invoices'),
-    },
-    {
-      title: 'Connect Zoho or Google',
-      description: 'Sync email invoices, drive attachments, and ledgers',
-      completed: false,
-      action: () => setCurrentView('zoho-books'),
-    },
-  ], [user, snapshot, setCurrentView]);
-
-  const completedStepsCount = useMemo(() => {
-    return onboardingSteps.filter((s) => s.completed).length;
-  }, [onboardingSteps]);
 
   // Keyboard shortcut listener for quick actions (C, R, A)
   useEffect(() => {
@@ -868,565 +342,514 @@ export default function DashboardPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [setCurrentView]);
 
-  // ── AI recommendation icon mapping ──
-  const iconForAIRec = (type: AIRecommendation['type']): LucideIcon => {
-    switch (type) {
-      case 'cash': return IndianRupee;
-      case 'receivables': return Clock;
-      case 'compliance': return FileText;
-      case 'growth': return TrendingUp;
-      case 'risk': return AlertTriangle;
-      case 'customer': return Users;
-      default: return Sparkles;
-    }
-  };
+  if (allLoading && !loadingTimedOut) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-10 space-y-6">
+        <div className="space-y-2">
+          <ProSkeleton className="h-8 w-60" />
+          <ProSkeleton className="h-4 w-80" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <ProSkeleton key={i} className="h-28 rounded-[12px]" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <ProSkeleton className="lg:col-span-7 h-72 rounded-[12px]" />
+          <ProSkeleton className="lg:col-span-5 h-72 rounded-[12px]" />
+        </div>
+      </div>
+    );
+  }
 
-  const priorityTone: Record<string, ActionItem['tone']> = {
-    critical: 'rose',
-    high: 'amber',
-    medium: 'blue',
-    low: 'emerald',
-  };
+  const firstName = cleanFirstName(user?.name, user?.email);
+  const greetingText = firstName ? `${getGreeting()}, ${firstName}` : getGreeting();
+  const todayStr = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date());
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // RENDER
-  // ═══════════════════════════════════════════════════════════════════════════
+  const subtitleLine = actionItems.length > 0
+    ? `${actionItems.length} item${actionItems.length === 1 ? '' : 's'} require attention`
+    : 'Workspace active and up to date';
+
+  const isAllZero = (snapshot.bankBalance === 0 || !snapshot.bankBalance) &&
+    (todaysRevenue === 0 || !todaysRevenue) &&
+    (pendingGst === 0) &&
+    (snapshot.invoices?.count === 0 || !snapshot.invoices?.count);
+
+  const onboardingSteps = [
+    {
+      title: 'Add business details',
+      description: 'Set legal name, GSTIN, and registered address',
+      completed: Boolean(user?.orgName || (user as Record<string, unknown>)?.businessName),
+      action: () => setCurrentView('settings'),
+    },
+    {
+      title: 'Connect bank account',
+      description: 'Real-time cash balance and transaction sync',
+      completed: (snapshot.bankBalance ?? 0) > 0,
+      action: () => setCurrentView('banking'),
+    },
+    {
+      title: 'Add first client',
+      description: 'Client details and GSTIN for invoicing',
+      completed: (snapshot.customers ?? 0) > 0,
+      action: () => setCurrentView('clients'),
+    },
+    {
+      title: 'Create first invoice',
+      description: 'Issue GST-compliant tax invoices and track payment',
+      completed: (snapshot.invoices?.count ?? 0) > 0,
+      action: () => setCurrentView('invoices'),
+    },
+    {
+      title: 'Connect Zoho or Google',
+      description: 'Sync email invoices, drive attachments, and ledgers',
+      completed: false,
+      action: () => setCurrentView('zoho-books'),
+    },
+  ];
+
+  const completedStepsCount = onboardingSteps.filter((s) => s.completed).length;
+
+  // Real revenue vs expenses calculation
+  const totalRevExp = snapshot.revenue + snapshot.expenses;
+  const revPct = totalRevExp > 0 ? (snapshot.revenue / totalRevExp) * 100 : 0;
+  const expPct = totalRevExp > 0 ? (snapshot.expenses / totalRevExp) * 100 : 0;
+
   return (
-    <div className="relative z-10 max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
-      <div className="relative z-10 space-y-6 md:space-y-8">
-        {/* ════════════════════════════════════════════════════════════════════
-            SECTION 1 — HERO
-            Greeting + 4 compact metric cards (or onboarding checklist if 0)
-            + Quick Actions with keyboard shortcuts.
-        ════════════════════════════════════════════════════════════════════ */}
-        <motion.section
-          initial={{ opacity: 0, y: -6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: 'easeOut' as const }}
-          className="space-y-5"
-        >
-          {/* Greeting — clean, minimal, never showing email handles */}
-          <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
+    <div className="relative z-10 max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8 space-y-6">
+      {/* ── HEADER ──────────────────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+      >
+        <div>
+          <h1 className="text-2xl font-semibold tracking-[-0.02em] text-[#EDEDED]">
+            {greetingText}
+          </h1>
+          <p className="text-xs text-[#A1A1A1] mt-0.5">
+            {todayStr} · {subtitleLine}
+          </p>
+        </div>
+
+        {/* Primary & secondary action cluster */}
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => setCurrentView('invoices')}
+            className="h-8 gap-2 bg-white text-black hover:bg-white/90 font-medium px-3.5 rounded-lg text-xs shadow-none cursor-pointer"
+          >
+            <FileText className="h-3.5 w-3.5 text-black" strokeWidth={1.5} />
+            <span>Create Invoice</span>
+            <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-black/10 text-black/70">C</kbd>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentView('returns')}
+            className="h-8 gap-2 border border-white/[0.08] hover:border-white/20 bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] font-medium px-3.5 rounded-lg text-xs cursor-pointer"
+          >
+            <ShieldCheck className="h-3.5 w-3.5 text-[#A1A1A1]" strokeWidth={1.5} />
+            <span>File GST</span>
+            <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-white/[0.06] text-[#A1A1A1]">R</kbd>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentView('clients')}
+            className="h-8 gap-2 border border-white/[0.08] hover:border-white/20 bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] font-medium px-3.5 rounded-lg text-xs cursor-pointer"
+          >
+            <Users className="h-3.5 w-3.5 text-[#A1A1A1]" strokeWidth={1.5} />
+            <span>Add Client</span>
+            <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-white/[0.06] text-[#A1A1A1]">A</kbd>
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* ── METRIC CARDS / ONBOARDING ───────────────────────────────────── */}
+      {isAllZero ? (
+        <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-[#EDEDED]">
-                {greetingText}
-              </h1>
-              <p className="text-xs text-[#A1A1A1] mt-1 font-normal">
-                {todayStr} · {subtitleLine}
+              <h2 className="text-sm font-semibold text-[#EDEDED] tracking-[-0.01em]">
+                Get started with Veyro
+              </h2>
+              <p className="text-xs text-[#A1A1A1] mt-0.5">
+                Complete these steps to set up your financial operating system.
               </p>
             </div>
+            <span className="text-xs font-mono text-[#A1A1A1]">
+              {completedStepsCount} of 5 completed
+            </span>
           </div>
 
-          {/* EMPTY STATE CHECKLIST vs 4 METRIC CARDS */}
-          {isAllZero ? (
-            /* Onboarding Checklist Card (when all values are 0) */
-            <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-6 space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold text-[#EDEDED] tracking-[-0.01em]">
-                    Get started with Veyro
-                  </h2>
-                  <p className="text-xs text-[#A1A1A1] mt-0.5">
-                    Complete these steps to set up your financial operating system.
-                  </p>
-                </div>
-                <span className="text-xs font-mono text-[#A1A1A1]">
-                  {completedStepsCount} of 5 completed
-                </span>
-              </div>
-
-              {/* Progress bar */}
-              <div className="h-1 w-full bg-white/[0.06] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white transition-all duration-500 rounded-full"
-                  style={{ width: `${(completedStepsCount / 5) * 100}%` }}
-                />
-              </div>
-
-              {/* Steps list */}
-              <div className="divide-y divide-white/[0.06]">
-                {onboardingSteps.map((step, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={step.action}
-                    className="w-full text-left py-3.5 flex items-center justify-between gap-4 group hover:bg-white/[0.02] px-2 -mx-2 rounded-lg transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] transition-colors ${
-                        step.completed
-                          ? 'bg-white text-black font-semibold'
-                          : 'border border-white/20 text-[#666666] group-hover:border-white/40'
-                      }`}>
-                        {step.completed ? <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" /> : (idx + 1)}
-                      </div>
-                      <div className="min-w-0">
-                        <p className={`text-xs font-medium truncate ${
-                          step.completed ? 'text-[#888888] line-through' : 'text-[#EDEDED] group-hover:text-white'
-                        }`}>
-                          {step.title}
-                        </p>
-                        <p className="text-[11px] text-[#666666] truncate mt-0.5">
-                          {step.description}
-                        </p>
-                      </div>
-                    </div>
-                    <ArrowRight className="h-3.5 w-3.5 text-[#666666] group-hover:text-[#EDEDED] group-hover:translate-x-0.5 transition-all shrink-0" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            /* 4 Compact Metric Cards in one row */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <CompactMetricCard
-                index={0}
-                label="Cash position"
-                value={abbreviateINR(snapshot.bankBalance)}
-                subtitle="Bank balance"
-                change={
-                  snapshot.netCashFlow !== 0
-                    ? {
-                        value: `${snapshot.netCashFlow > 0 ? '+' : ''}${abbreviateINR(snapshot.netCashFlow)} net`,
-                        positive: snapshot.netCashFlow > 0,
-                      }
-                    : null
-                }
-                trend="up"
-              />
-
-              <CompactMetricCard
-                index={1}
-                label="Revenue this month"
-                value={abbreviateINR(todaysRevenue)}
-                subtitle={todaysRevenue > 0 ? `FY ${abbreviateINR(snapshot.revenue)}` : 'No sales yet'}
-                change={
-                  revenueMom.direction !== 'flat'
-                    ? {
-                        value: `${revenueMom.direction === 'up' ? '+' : '-'}${revenueMom.pct}% vs last mo.`,
-                        positive: revenueMom.direction === 'up',
-                      }
-                    : null
-                }
-                trend={revenueMom.direction}
-              />
-
-              <CompactMetricCard
-                index={2}
-                label="Pending GST"
-                value={abbreviateINR(pendingGst)}
-                subtitle={pendingGst > 0 ? 'Net liability due' : 'All offset by ITC'}
-                trend={pendingGst > 0 ? 'down' : 'flat'}
-              />
-
-              <CompactMetricCard
-                index={3}
-                label="Outstanding invoices"
-                value={abbreviateINR(snapshot.collections?.totalOutstanding ?? snapshot.overdueReceivables ?? 0)}
-                subtitle={
-                  snapshot.overdueInvoiceCount > 0
-                    ? `${snapshot.overdueInvoiceCount} overdue`
-                    : `${snapshot.invoices.count} issued`
-                }
-                trend="flat"
-              />
-            </div>
-          )}
-
-          {/* Primary Quick Actions — Create Invoice is the only primary button */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => setCurrentView('invoices')}
-              className="h-8 gap-2 bg-white text-black hover:bg-white/90 font-medium px-3.5 rounded-lg text-xs transition-all shadow-none"
-            >
-              <FileText className="h-3.5 w-3.5 text-black" strokeWidth={1.5} />
-              <span>Create Invoice</span>
-              <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-black/10 text-black/70 border border-black/10">C</kbd>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCurrentView('returns')}
-              className="h-8 gap-2 border border-white/[0.08] hover:border-white/20 bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] font-medium px-3.5 rounded-lg text-xs transition-all"
-            >
-              <ShieldCheck className="h-3.5 w-3.5 text-[#A1A1A1]" strokeWidth={1.5} />
-              <span>File GST Return</span>
-              <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-white/[0.06] text-[#A1A1A1] border border-white/[0.08]">R</kbd>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCurrentView('clients')}
-              className="h-8 gap-2 border border-white/[0.08] hover:border-white/20 bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] font-medium px-3.5 rounded-lg text-xs transition-all"
-            >
-              <Users className="h-3.5 w-3.5 text-[#A1A1A1]" strokeWidth={1.5} />
-              <span>Add Client</span>
-              <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-white/[0.06] text-[#A1A1A1] border border-white/[0.08]">A</kbd>
-            </Button>
-          </div>
-        </motion.section>
-
-        {/* ════════════════════════════════════════════════════════════════════
-            SECTION 2 — WORKFLOW PIPELINE (Task 12 · Step 1)
-            The CENTRAL visual element. Shows the live state of every business
-            object as it flows through the canonical workflow:
-              Invoice → Payment → Bank → Match → GST → Oracle → Approve → Done
-            Every stage count comes from real Prisma data. Clicking a stage
-            navigates to the relevant module. The "User Approves" stage pulses
-            when it has items waiting — it's the action bottleneck.
-        ════════════════════════════════════════════════════════════════════ */}
-        <WorkflowPipeline
-          pipeline={pipeline}
-          loading={pipelineLoading}
-          onNavigate={(view) => setCurrentView(view as AppView)}
-          onRefresh={refreshPipeline}
-        />
-
-        {/* ════════════════════════════════════════════════════════════════════
-            SECTION 3 — PROACTIVE ORACLE BRIEFING (Task 12 · Step 3)
-            Oracle does NOT wait for prompts. Oracle wakes up with knowledge.
-            This renders the daily briefing as a CFO would speak — what Oracle
-            already done, what needs the user's sign-off, and what Oracle is
-            watching. One-click approve/review actions on every attention item.
-        ════════════════════════════════════════════════════════════════════ */}
-        <ProactiveOracleBriefing
-          briefing={briefing}
-          loading={briefingLoading}
-          onNavigate={(view) => setCurrentView(view as AppView)}
-          onRefresh={refreshBriefing}
-          onOpenOracle={() => setCurrentView('oracle-brain')}
-        />
-
-        {/* ════════════════════════════════════════════════════════════════════
-            SECTION 3 — BUSINESS SNAPSHOT
-            7 tiles: Revenue, Profit, Expenses, Cash Flow, Invoices, Clients,
-            GST Returns. Real numbers + real MoM indicator + a real revenue vs
-            expenses bar.
-        ════════════════════════════════════════════════════════════════════ */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.16, ease: 'easeOut' as const }}
-          className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6"
-        >
-          <SectionHeader
-            title="Business snapshot"
-            icon={<Database className="h-3.5 w-3.5 text-[#A1A1A1]" />}
-            actionLabel="View analytics"
-            onAction={() => setCurrentView('analytics')}
-          />
-
-          {/* 7-tile responsive grid: 2 cols mobile, 4 cols tablet, 7 cols desktop */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-            <SnapshotTile
-              index={0}
-              label="Revenue"
-              numericValue={snapshot.revenue}
-              numericFormat="currencyCompact"
-              subtitle="FY-to-date invoiced sales"
-              icon={<IndianRupee className="h-3.5 w-3.5 text-blue-400" />}
-              mom={revenueMom}
-              onClick={() => setCurrentView('invoices')}
-            />
-            <SnapshotTile
-              index={1}
-              label="Profit"
-              numericValue={snapshot.profit}
-              numericFormat="currencyCompact"
-              subtitle={`${snapshot.profitMargin > 0 ? `${(snapshot.profitMargin * 100).toFixed(0)}% margin` : 'revenue − expenses'}`}
-              icon={<TrendingUp className="h-3.5 w-3.5 text-blue-400" />}
-              onClick={() => setCurrentView('analytics')}
-            />
-            <SnapshotTile
-              index={2}
-              label="Expenses"
-              numericValue={snapshot.expenses}
-              numericFormat="currencyCompact"
-              subtitle="Purchases + operating costs"
-              icon={<TrendingDown className="h-3.5 w-3.5 text-rose-400" />}
-              onClick={() => setCurrentView('expenses')}
-            />
-            <SnapshotTile
-              index={3}
-              label="Cash Flow"
-              numericValue={snapshot.netCashFlow}
-              numericFormat="currencyCompact"
-              subtitle={`Collected − paid · bank ${abbreviateINR(snapshot.bankBalance)}`}
-              icon={<Wallet className="h-3.5 w-3.5 text-blue-300" />}
-              onClick={() => setCurrentView('banking')}
-            />
-            <SnapshotTile
-              index={4}
-              label="Invoices"
-              numericValue={snapshot.invoices.count}
-              numericFormat="integer"
-              subtitle={`${snapshot.invoices.overdue > 0 ? `${snapshot.invoices.overdue} overdue` : 'none overdue'}`}
-              icon={<FileText className="h-3.5 w-3.5 text-blue-400" />}
-              onClick={() => setCurrentView('invoices')}
-            />
-            <SnapshotTile
-              index={5}
-              label="Clients"
-              numericValue={snapshot.customers}
-              numericFormat="integer"
-              subtitle={`${snapshot.customers === 1 ? '1 active client' : `${snapshot.customers} active clients`}`}
-              icon={<Users className="h-3.5 w-3.5 text-blue-300" />}
-              onClick={() => setCurrentView('clients')}
-            />
-            <SnapshotTile
-              index={6}
-              label="GST Returns"
-              numericValue={snapshot.filedReturns + snapshot.pendingReturns}
-              numericFormat="integer"
-              subtitle={`${snapshot.filedReturns} filed · ${snapshot.pendingReturns} pending`}
-              icon={<Receipt className="h-3.5 w-3.5 text-amber-400" />}
-              onClick={() => setCurrentView('returns')}
+          <div className="h-1 w-full bg-white/[0.06] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-white transition-all duration-500 rounded-full"
+              style={{ width: `${(completedStepsCount / 5) * 100}%` }}
             />
           </div>
 
-          {/* Revenue vs Expenses real bar */}
-          <div className="mt-5 pt-5 border-t border-white/[0.06]">
-            <RevenueExpenseBar revenue={snapshot.revenue} expenses={snapshot.expenses} />
-          </div>
-        </motion.section>
-
-        {/* ════════════════════════════════════════════════════════════════════
-            SECTION 4 — ACTION CENTER + SECTION 5 — AI RECOMMENDATIONS
-            (side by side on desktop, lazy-loaded when scrolled into view)
-        ════════════════════════════════════════════════════════════════════ */}
-        <LazySection placeholderHeight={380}>
-          {(inView) => inView ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* SECTION 4 — ACTION CENTER */}
-          <motion.section
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.22, ease: 'easeOut' as const }}
-            className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6 flex flex-col"
-          >
-            <SectionHeader
-              title="Action center"
-              icon={<Zap className="h-3.5 w-3.5 text-[#A1A1A1]" />}
-            />
-            {actionItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center py-10 flex-1">
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-white/[0.04] border border-white/[0.08] mb-3">
-                  <CheckCircle2 className="h-5 w-5 text-[#EDEDED]" />
-                </div>
-                <h3 className="text-xs font-medium text-[#EDEDED]">You&apos;re all caught up</h3>
-                <p className="text-[11px] text-[#666666] mt-1 max-w-xs leading-relaxed">
-                  Nothing requires your attention right now. New actions will appear here as invoices come due, returns need filing, or syncs complete.
-                </p>
-              </div>
-            ) : (
-              <ScrollArea className="max-h-[420px] -mx-1 px-1 flex-1">
-                <div className="space-y-1">
-                  {actionItems.map((item, i) => (
-                    <div key={item.id} onClick={() => setCurrentView(item.view)}>
-                      <ActionRow item={item} index={i} />
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-          </motion.section>
-
-          {/* SECTION 5 — AI RECOMMENDATIONS */}
-          <motion.section
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.28, ease: 'easeOut' as const }}
-            className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6 flex flex-col"
-          >
-            <SectionHeader
-              title="AI recommendations"
-              icon={<Sparkles className="h-3.5 w-3.5 text-[#A1A1A1]" />}
-              actionLabel={aiRecommendations.length > 0 ? `View all (${aiRecommendations.length})` : undefined}
-              onAction={aiRecommendations.length > 0 ? () => setCurrentView('oracle-brain') : undefined}
-            />
-            {aiRecsLoading ? (
-              <div className="space-y-2 flex-1">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="h-16 rounded-xl bg-white/[0.04] animate-pulse" />
-                ))}
-              </div>
-            ) : aiRecommendations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center py-10 flex-1">
-                <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-white/[0.04] border border-white/[0.08] mb-3">
-                  <Brain className="h-5 w-5 text-[#A1A1A1]" />
-                </div>
-                <h3 className="text-xs font-medium text-[#EDEDED]">No recommendations yet</h3>
-                <p className="text-[11px] text-[#666666] mt-1 max-w-xs leading-relaxed">
-                  Oracle generates recommendations from your live business data. Connect Zoho Books or create invoices to unlock AI-driven insights on GST liability, cash flow, and risk.
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setCurrentView('oracle-brain')}
-                  className="mt-3 gap-1.5 border-white/[0.08] bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] text-xs h-7"
-                >
-                  <Brain className="h-3.5 w-3.5" />
-                  Open Oracle
-                </Button>
-              </div>
-            ) : (
-              <ScrollArea className="max-h-[420px] -mx-1 px-1 flex-1">
-                <div className="space-y-2">
-                  {aiRecommendations.slice(0, 6).map((rec, i) => {
-                    const Icon = iconForAIRec(rec.type);
-                    const tone = priorityTone[rec.priority] ?? 'blue';
-                    const actionCfg = ACTION_TONE[tone];
-                    return (
-                      <motion.div
-                        key={rec.id}
-                        initial={{ opacity: 0, x: -6 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' as const }}
-                        className="group flex items-start gap-3 p-2.5 rounded-lg hover:bg-white/[0.04] transition-colors"
-                      >
-                        <div className={`flex items-center justify-center h-7 w-7 rounded-md border shrink-0 ${actionCfg.chip}`}>
-                          <Icon className="h-3.5 w-3.5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <p className="text-xs font-medium text-[#EDEDED] leading-snug">{rec.title}</p>
-                            <span className="text-[10px] px-1.5 py-0.2 rounded border border-white/[0.08] bg-white/[0.04] text-[#A1A1A1] capitalize">
-                              {rec.priority}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#666666] line-clamp-2 leading-relaxed">{rec.description}</p>
-                          <button
-                            type="button"
-                            onClick={() => rec.actionView ? setCurrentView(rec.actionView as AppView) : setCurrentView('oracle-brain')}
-                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-[#A1A1A1] hover:text-[#EDEDED] transition-colors"
-                          >
-                            View details
-                            <ArrowRight className="h-3 w-3" />
-                          </button>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </ScrollArea>
-            )}
-          </motion.section>
-        </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6 h-[380px] flex items-center justify-center">
-                <ProSkeleton className="h-8 w-32" />
-              </div>
-              <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6 h-[380px] flex items-center justify-center">
-                <ProSkeleton className="h-8 w-32" />
-              </div>
-            </div>
-          )}
-        </LazySection>
-
-        {/* ════════════════════════════════════════════════════════════════════
-            SECTION 6 — RECENT ACTIVITY (lazy-loaded when scrolled into view)
-            A single chronological feed of every business event: invoices,
-            returns, payments, bank sync, Zoho sync, Google Drive.
-        ════════════════════════════════════════════════════════════════════ */}
-        <LazySection placeholderHeight={360}>
-          {(inView) => inView ? (
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.34, ease: 'easeOut' as const }}
-          className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 md:p-6"
-        >
-          <SectionHeader
-            title="Recent activity"
-            icon={<Activity className="h-3.5 w-3.5 text-[#A1A1A1]" />}
-            actionLabel="View timeline"
-            onAction={() => setCurrentView('timeline')}
-          />
-          {timelineLoading && timelineEvents.length === 0 ? (
-            <div className="space-y-3">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-white/[0.04] animate-pulse shrink-0" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3 w-1/2 rounded bg-white/[0.04] animate-pulse" />
-                    <div className="h-2.5 w-1/4 rounded bg-white/[0.04] animate-pulse" />
+          <div className="divide-y divide-white/[0.06]">
+            {onboardingSteps.map((step, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={step.action}
+                className="w-full text-left py-3 flex items-center justify-between gap-4 group hover:bg-white/[0.02] px-2 -mx-2 rounded-lg transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] transition-colors ${
+                    step.completed
+                      ? 'bg-white text-black font-semibold'
+                      : 'border border-white/20 text-[#666666] group-hover:border-white/40'
+                  }`}>
+                    {step.completed ? <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" /> : (idx + 1)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`text-xs font-medium truncate ${
+                      step.completed ? 'text-[#888888] line-through' : 'text-[#EDEDED] group-hover:text-white'
+                    }`}>
+                      {step.title}
+                    </p>
+                    <p className="text-[11px] text-[#666666] truncate mt-0.5">
+                      {step.description}
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : timelineEvents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center py-10">
-              <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-white/[0.04] border border-white/[0.06] mb-3">
-                <Activity className="h-6 w-6 text-muted-foreground" />
+                <ArrowRight className="h-3.5 w-3.5 text-[#666666] group-hover:text-[#EDEDED] group-hover:translate-x-0.5 transition-all shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <CompactMetricCard
+            index={0}
+            label="Cash position"
+            value={abbreviateINR(snapshot.bankBalance)}
+            subtitle="Bank balance"
+            change={
+              snapshot.netCashFlow !== 0
+                ? {
+                    value: `${snapshot.netCashFlow > 0 ? '+' : ''}${abbreviateINR(snapshot.netCashFlow)} net`,
+                    positive: snapshot.netCashFlow > 0,
+                  }
+                : null
+            }
+            trend="up"
+          />
+
+          <CompactMetricCard
+            index={1}
+            label="Revenue this month"
+            value={abbreviateINR(todaysRevenue)}
+            subtitle={todaysRevenue > 0 ? `FY ${abbreviateINR(snapshot.revenue)}` : 'No sales yet'}
+            change={
+              revenueMom.direction !== 'flat'
+                ? {
+                    value: `${revenueMom.direction === 'up' ? '+' : '-'}${revenueMom.pct}% vs last mo.`,
+                    positive: revenueMom.direction === 'up',
+                  }
+                : null
+            }
+            trend={revenueMom.direction}
+          />
+
+          <CompactMetricCard
+            index={2}
+            label="Pending GST"
+            value={abbreviateINR(pendingGst)}
+            subtitle={pendingGst > 0 ? 'Net liability due' : 'All offset by ITC'}
+            trend={pendingGst > 0 ? 'down' : 'flat'}
+          />
+
+          <CompactMetricCard
+            index={3}
+            label="Outstanding invoices"
+            value={abbreviateINR(snapshot.collections?.totalOutstanding ?? snapshot.overdueReceivables ?? 0)}
+            subtitle={
+              snapshot.overdueInvoiceCount > 0
+                ? `${snapshot.overdueInvoiceCount} overdue`
+                : `${snapshot.invoices.count} issued`
+            }
+            trend="flat"
+          />
+        </div>
+      )}
+
+      {/* ── CORE OPERATIONS: 2-COLUMN COMMAND CENTER ────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* LEFT COLUMN (7 cols): Financial Vitals & Workflow Overview */}
+        <div className="lg:col-span-7 space-y-6">
+          {/* Financial Vitals Card */}
+          <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4 text-[#A1A1A1]" />
+                <h2 className="text-xs font-medium text-[#EDEDED]">Financial Vitals</h2>
               </div>
-              <h3 className="text-sm font-semibold text-foreground">No activity yet</h3>
-              <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
-                Actions you take — invoices created, returns filed, payments received, bank/Zoho/Google syncs — will appear here chronologically.
-              </p>
+              <button
+                type="button"
+                onClick={() => setCurrentView('reports')}
+                className="text-[11px] text-[#A1A1A1] hover:text-[#EDEDED] flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                View reports
+                <ArrowRight className="h-3 w-3" />
+              </button>
             </div>
-          ) : (
-            <ScrollArea className="max-h-[440px] -mx-1 px-1">
-              <div className="relative">
-                <ul className="space-y-0">
-                  {timelineEvents.slice(0, 12).map((ev: TimelineEvent, i: number) => {
-                    const isLast = i === Math.min(timelineEvents.length, 12) - 1;
-                    const { icon: Icon, tone } = activityIconFor(ev.type, ev.source);
-                    return (
-                      <li key={ev.id} className="relative flex gap-3 pb-4 last:pb-0">
-                        {!isLast && (
-                          <span
-                            className="absolute left-[15px] top-8 bottom-0 w-px bg-white/[0.06]"
-                            aria-hidden
-                          />
-                        )}
-                        <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.02] shrink-0 mt-0.5">
-                          <Icon className={`h-4 w-4 ${tone}`} />
-                        </span>
-                        <div className="min-w-0 flex-1 pt-0.5">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-[13px] font-medium text-foreground leading-snug">
-                              {ev.title}
-                            </p>
-                            <span className="text-[11px] text-muted-foreground/70 shrink-0 tabular-nums">
-                              {ev.createdAt ? timeAgo(ev.createdAt) : ''}
-                            </span>
+
+            {/* 4-cell metric grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setCurrentView('invoices')}
+                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-colors cursor-pointer"
+              >
+                <span className="text-[11px] text-[#A1A1A1] block">Total Revenue</span>
+                <span className="text-base font-mono font-medium text-[#EDEDED] mt-1 block">
+                  {abbreviateINR(snapshot.revenue)}
+                </span>
+                <span className="text-[10px] text-[#666666] mt-0.5 block">FY to date</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentView('expenses')}
+                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-colors cursor-pointer"
+              >
+                <span className="text-[11px] text-[#A1A1A1] block">Total Expenses</span>
+                <span className="text-base font-mono font-medium text-[#EDEDED] mt-1 block">
+                  {abbreviateINR(snapshot.expenses)}
+                </span>
+                <span className="text-[10px] text-[#666666] mt-0.5 block">Operating costs</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentView('reports')}
+                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-colors cursor-pointer"
+              >
+                <span className="text-[11px] text-[#A1A1A1] block">Net Profit</span>
+                <span className="text-base font-mono font-medium text-[#EDEDED] mt-1 block">
+                  {abbreviateINR(snapshot.profit)}
+                </span>
+                <span className="text-[10px] text-[#666666] mt-0.5 block">
+                  {snapshot.profitMargin > 0 ? `${(snapshot.profitMargin * 100).toFixed(0)}% margin` : 'Net balance'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentView('clients')}
+                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-colors cursor-pointer"
+              >
+                <span className="text-[11px] text-[#A1A1A1] block">Active Clients</span>
+                <span className="text-base font-mono font-medium text-[#EDEDED] mt-1 block">
+                  {snapshot.customers}
+                </span>
+                <span className="text-[10px] text-[#666666] mt-0.5 block">In registry</span>
+              </button>
+            </div>
+
+            {/* Clean Revenue vs Expenses ratio bar */}
+            <div className="pt-2">
+              <div className="flex items-center justify-between text-[11px] mb-1.5">
+                <span className="text-[#A1A1A1]">Revenue: {abbreviateINR(snapshot.revenue)}</span>
+                <span className="text-[#A1A1A1]">Expenses: {abbreviateINR(snapshot.expenses)}</span>
+              </div>
+              <div className="h-1.5 w-full bg-white/[0.06] rounded-full overflow-hidden flex">
+                <div style={{ width: `${revPct}%` }} className="bg-white/80 h-full" />
+                <div style={{ width: `${expPct}%` }} className="bg-white/20 h-full" />
+              </div>
+            </div>
+          </div>
+
+          {/* Streamlined Live Workflow Card */}
+          <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-[#A1A1A1]" />
+                <h2 className="text-xs font-medium text-[#EDEDED]">Operations Pipeline</h2>
+              </div>
+              <span className="text-[11px] text-[#666666] font-mono">
+                {pipeline.invoicesUnpaid} pending payment
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentView('invoices')}
+                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-left cursor-pointer"
+              >
+                <span className="text-[11px] text-[#666666] block">1. Invoicing</span>
+                <span className="text-sm font-mono font-medium text-[#EDEDED] mt-0.5 block">
+                  {pipeline.invoicesUnpaid} unpaid
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentView('banking')}
+                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-left cursor-pointer"
+              >
+                <span className="text-[11px] text-[#666666] block">2. Banking</span>
+                <span className="text-sm font-mono font-medium text-[#EDEDED] mt-0.5 block">
+                  {pipeline.bankCreditsUnreconciled} credits
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentView('gst-reconciliation')}
+                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-left cursor-pointer"
+              >
+                <span className="text-[11px] text-[#666666] block">3. Matching</span>
+                <span className="text-sm font-mono font-medium text-[#EDEDED] mt-0.5 block">
+                  {pipeline.gstr2bUnmatched} 2B items
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentView('returns')}
+                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-left cursor-pointer"
+              >
+                <span className="text-[11px] text-[#666666] block">4. GST Returns</span>
+                <span className="text-sm font-mono font-medium text-[#EDEDED] mt-0.5 block">
+                  {pipeline.returnsPrepared} ready
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN (5 cols): Activity & Action Items Stream */}
+        <div className="lg:col-span-5 rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 flex flex-col min-h-[380px]">
+          {/* Stream Header & Tab Switcher */}
+          <div className="flex items-center justify-between pb-3 border-b border-white/[0.06] mb-3">
+            <div className="flex items-center gap-1.5 bg-white/[0.04] p-0.5 rounded-lg border border-white/[0.06]">
+              <button
+                type="button"
+                onClick={() => setActiveStreamTab('tasks')}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  activeStreamTab === 'tasks'
+                    ? 'bg-white/10 text-[#EDEDED] font-medium'
+                    : 'text-[#A1A1A1] hover:text-[#EDEDED]'
+                }`}
+              >
+                Tasks ({actionItems.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveStreamTab('activity')}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                  activeStreamTab === 'activity'
+                    ? 'bg-white/10 text-[#EDEDED] font-medium'
+                    : 'text-[#A1A1A1] hover:text-[#EDEDED]'
+                }`}
+              >
+                Activity
+              </button>
+            </div>
+
+            {activeStreamTab === 'activity' && (
+              <button
+                type="button"
+                onClick={() => setCurrentView('timeline')}
+                className="text-[11px] text-[#A1A1A1] hover:text-[#EDEDED] flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                Full timeline
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Stream Content */}
+          <div className="flex-1 flex flex-col">
+            {activeStreamTab === 'tasks' ? (
+              actionItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center py-12 flex-1">
+                  <div className="flex items-center justify-center h-9 w-9 rounded-full bg-white/[0.04] border border-white/[0.08] mb-2.5">
+                    <CheckCircle2 className="h-4 w-4 text-[#EDEDED]" />
+                  </div>
+                  <h3 className="text-xs font-medium text-[#EDEDED]">All tasks complete</h3>
+                  <p className="text-[11px] text-[#666666] mt-1 max-w-xs leading-relaxed">
+                    No urgent actions pending. New tasks appear automatically when returns or invoices require attention.
+                  </p>
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[380px] -mx-1 px-1">
+                  <div className="space-y-2">
+                    {actionItems.map((item, idx) => {
+                      const Icon = item.icon;
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => setCurrentView(item.view)}
+                          className="group flex items-start gap-3 p-3 rounded-lg border border-white/[0.04] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.1] transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center justify-center h-7 w-7 rounded-md border border-white/[0.08] bg-white/[0.04] text-[#EDEDED] shrink-0 mt-0.5">
+                            <Icon className="h-3.5 w-3.5" />
                           </div>
-                          {ev.description && (
-                            <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
-                              {ev.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                              {ev.source}
-                            </span>
-                            {ev.severity && ev.severity !== 'info' && (
-                              <span className={`text-[11px] font-semibold uppercase tracking-wider ${
-                                ev.severity === 'critical' ? 'text-rose-400'
-                                : ev.severity === 'warning' ? 'text-amber-400'
-                                : 'text-blue-400'
-                              }`}>
-                                · {ev.severity}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-[#EDEDED] leading-snug">{item.title}</p>
+                            <p className="text-[11px] text-[#666666] mt-0.5 truncate">{item.detail}</p>
+                          </div>
+                          <ArrowRight className="h-3.5 w-3.5 text-[#666666] group-hover:text-[#EDEDED] group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )
+            ) : (
+              timelineEvents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center py-12 flex-1">
+                  <Activity className="h-6 w-6 text-[#666666] mb-2" />
+                  <h3 className="text-xs font-medium text-[#EDEDED]">No recent activity</h3>
+                  <p className="text-[11px] text-[#666666] mt-1 max-w-xs leading-relaxed">
+                    Actions you take will be logged chronologically here.
+                  </p>
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[380px] -mx-1 px-1">
+                  <ul className="space-y-2">
+                    {timelineEvents.slice(0, 8).map((ev: TimelineEvent) => {
+                      const { icon: Icon } = activityIconFor(ev.type, ev.source);
+                      return (
+                        <li key={ev.id} className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-md border border-white/[0.06] bg-white/[0.02] shrink-0 mt-0.5">
+                            <Icon className="h-3 w-3 text-[#A1A1A1]" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <p className="text-xs font-medium text-[#EDEDED] truncate">{ev.title}</p>
+                              <span className="text-[10px] text-[#666666] shrink-0 font-mono">
+                                {ev.createdAt ? timeAgo(ev.createdAt) : ''}
                               </span>
+                            </div>
+                            {ev.description && (
+                              <p className="text-[11px] text-[#666666] truncate mt-0.5">{ev.description}</p>
                             )}
                           </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </ScrollArea>
-          )}
-        </motion.section>
-          ) : (
-            <div className="glass-surface rounded-2xl p-5 md:p-6 h-[360px] flex items-center justify-center">
-              <ProSkeleton className="h-8 w-32" />
-            </div>
-          )}
-        </LazySection>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </ScrollArea>
+              )
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

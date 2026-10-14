@@ -734,7 +734,7 @@ export default function InvoiceWorkspacePage() {
             <Button
               size="sm"
               onClick={handleOpenCreate}
-              className="h-9 bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 font-semibold"
+              className="h-9 font-medium"
             >
               <Plus className="h-4 w-4 mr-1.5" />
               <span className="hidden sm:inline">New Invoice</span>
@@ -859,21 +859,21 @@ export default function InvoiceWorkspacePage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCurrentView('dashboard')}
-              className="hover:text-foreground transition-colors"
+              className="hover:text-foreground transition-colors cursor-pointer active:scale-95"
             >
               Dashboard
             </button>
             <span className="text-muted-foreground/40">·</span>
             <button
               onClick={() => setCurrentView('returns')}
-              className="hover:text-foreground transition-colors"
+              className="hover:text-foreground transition-colors cursor-pointer active:scale-95"
             >
               Returns
             </button>
             <span className="text-muted-foreground/40">·</span>
             <button
               onClick={() => setCurrentView('settings')}
-              className="hover:text-foreground transition-colors"
+              className="hover:text-foreground transition-colors cursor-pointer active:scale-95"
             >
               Settings
             </button>

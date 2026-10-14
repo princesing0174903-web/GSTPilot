@@ -270,7 +270,7 @@ export default function BankingPage() {
                 <TabsTrigger
                   key={tab.key}
                   value={tab.key}
-                  className="rounded-none border-b-2 border-transparent bg-transparent px-4 text-xs font-medium text-muted-foreground data-[state=active]:border-blue-400 data-[state=active]:bg-transparent data-[state=active]:text-blue-300 data-[state=active]:shadow-none"
+                  className="rounded-none border-b-2 border-transparent bg-transparent px-4 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer transition-colors data-[state=active]:border-white data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none"
                 >
                   {tab.label}
                 </TabsTrigger>
@@ -449,10 +449,9 @@ function BankingHeader({
             <span className="hidden sm:inline">Refresh</span>
           </Button>
           <Button
-            variant="outline"
             size="sm"
             onClick={onImport}
-            className="gap-1.5 border-white/[0.12] bg-white/[0.02] hover:bg-white/[0.04]"
+            className="gap-1.5 font-medium"
           >
             <Upload className="h-4 w-4" />
             <span className="hidden sm:inline">Import</span>

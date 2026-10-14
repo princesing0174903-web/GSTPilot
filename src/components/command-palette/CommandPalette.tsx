@@ -1713,7 +1713,7 @@ function CommandItemRow({
               e.stopPropagation();
               onToggleFavorite();
             }}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-white/[0.08] rounded"
+            className="opacity-0 group-hover:opacity-100 transition-all p-0.5 hover:bg-white/[0.08] rounded cursor-pointer active:scale-95"
             aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
             <Star

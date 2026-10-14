@@ -156,7 +156,7 @@ export function DashboardContent() {
             rendered in the two-column workspace below. */}
         <button
           onClick={() => setMobileNavOpen(true)}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60 lg:hidden"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 cursor-pointer active:scale-95 lg:hidden"
           aria-label="Open navigation menu"
         >
           <Menu className="h-5 w-5" />
@@ -171,7 +171,7 @@ export function DashboardContent() {
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <button
             onClick={() => setCurrentView('dashboard')}
-            className="rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
+            className="rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.04] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 cursor-pointer active:scale-95"
             aria-label="Go to home"
           >
             Home
@@ -190,25 +190,25 @@ export function DashboardContent() {
         <div className="ml-auto flex items-center gap-1.5">
           <button
             onClick={() => setCommandPaletteOpen(true)}
-            className="flex h-8 items-center gap-2 rounded-lg border border-[#222222] bg-[#111111] px-2.5 text-xs text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60 cursor-pointer"
+            className="flex h-8 items-center gap-2 rounded-lg border border-white/[0.08] bg-[#111111] px-2.5 text-xs text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white hover:border-white/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 cursor-pointer active:scale-[0.98]"
             aria-label="Search (Cmd+K)"
           >
             <Search className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="hidden sm:inline">Search</span>
-            <kbd className="hidden rounded bg-[#1A1A1A] px-1 py-0.5 text-[9px] font-semibold sm:inline">⌘K</kbd>
+            <kbd className="hidden rounded bg-[#1A1A1A] px-1 py-0.5 text-[9px] font-semibold sm:inline border border-white/[0.08]">⌘K</kbd>
           </button>
           <button
             onClick={() => setNotificationsOpen(true)}
-            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
+            className="relative flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 cursor-pointer active:scale-95"
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" aria-hidden="true" />
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#2563EB]" aria-hidden="true" />
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-white" aria-hidden="true" />
           </button>
           <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger
-              className="flex items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors hover:bg-[#181818] focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
+              className="flex items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-colors hover:bg-[#181818] focus-visible:ring-1 focus-visible:ring-white/30 cursor-pointer active:scale-95"
               aria-label="Account menu"
             >
               <Avatar className="h-7 w-7">
@@ -331,7 +331,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]/60"
+      className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A1A1AA] transition-all hover:bg-[#181818] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 cursor-pointer active:scale-95"
       aria-label="Toggle theme"
     >
       {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -372,14 +372,14 @@ export function EmailVerificationBanner() {
             <button
               onClick={handleResend}
               disabled={sending}
-              className="text-xs font-semibold text-[#3B82F6] hover:text-[#60A5FA] underline disabled:opacity-50"
+              className="text-xs font-semibold text-[#3B82F6] hover:text-[#60A5FA] underline disabled:opacity-50 cursor-pointer active:scale-95"
             >
               {sending ? 'Sending...' : 'Resend email'}
             </button>
           )}
           <button
             onClick={logout}
-            className="text-xs text-[#3B82F6] hover:text-[#60A5FA] font-medium"
+            className="text-xs text-[#3B82F6] hover:text-[#60A5FA] font-medium cursor-pointer active:scale-95"
           >
             Sign out
           </button>

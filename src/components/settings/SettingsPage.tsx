@@ -371,19 +371,13 @@ function SettingsSidebar({
                       key={s.id}
                       onClick={() => onSelect(s.id)}
                       aria-current={active ? 'page' : undefined}
-                      className={`group relative flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-all duration-150 ${
+                      className={`group relative flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-all duration-150 cursor-pointer active:scale-[0.98] ${
                         active
-                          ? 'bg-blue-500/10 text-white'
-                          : 'text-zinc-400 hover:bg-[#141414] hover:text-white'
+                          ? 'bg-white/[0.08] text-[#EDEDED]'
+                          : 'text-[#A1A1A1] hover:bg-white/[0.04] hover:text-[#EDEDED]'
                       }`}
                     >
-                      {/* Blue left accent bar for the active item */}
-                      <span
-                        className={`absolute left-0 top-1/2 h-5 w-[2.5px] -translate-y-1/2 rounded-full transition-all duration-150 ${
-                          active ? 'bg-blue-400' : 'bg-transparent'
-                        }`}
-                      />
-                      <span className={active ? 'text-blue-400' : 'text-zinc-500 group-hover:text-zinc-300'}>
+                      <span className={active ? 'text-[#EDEDED]' : 'text-[#666666] group-hover:text-[#A1A1A1]'}>
                         {s.icon}
                       </span>
                       <span className="truncate">{s.label}</span>
@@ -470,10 +464,10 @@ function PrimaryButton({
   return (
     <Button
       {...props}
+      loading={loading}
       disabled={loading || props.disabled}
-      className="gst-btn gst-btn-primary h-9 gap-2 border-0 disabled:cursor-not-allowed"
+      className="h-9 gap-2 font-medium"
     >
-      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
       {children}
     </Button>
   );
@@ -486,7 +480,7 @@ function GhostButton({
     <Button
       {...props}
       variant="outline"
-      className="gst-btn gst-btn-outline h-9 gap-2"
+      className="h-9 gap-2"
     >
       {children}
     </Button>
@@ -499,10 +493,11 @@ function DangerButton({
   return (
     <Button
       {...props}
+      variant="destructive"
+      loading={loading}
       disabled={loading || props.disabled}
-      className="gst-btn gst-btn-danger h-9 gap-2 border-0 disabled:cursor-not-allowed"
+      className="h-9 gap-2"
     >
-      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
       {children}
     </Button>
   );
@@ -2277,7 +2272,8 @@ function BillingSection() {
                   <p className="text-xs text-zinc-500 mt-2">Up to {p.maxClients.toLocaleString('en-IN')} clients</p>
                   {!p.current && (
                     <Button
-                      className="mt-4 w-full bg-transparent border border-zinc-700 text-zinc-200 hover:bg-zinc-800"
+                      variant="outline"
+                      className="mt-4 w-full"
                       onClick={() => toast.info('Online checkout is coming soon. Contact sales to upgrade.')}
                     >
                       Switch to {p.label}

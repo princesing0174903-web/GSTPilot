@@ -611,7 +611,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setCurrentView('invoices')}
-                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-colors cursor-pointer"
+                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-all cursor-pointer active:scale-[0.98]"
               >
                 <span className="text-[11px] text-[#A1A1A1] block">Total Revenue</span>
                 <span className="text-base font-mono font-medium text-[#EDEDED] mt-1 block">
@@ -623,7 +623,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setCurrentView('expenses')}
-                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-colors cursor-pointer"
+                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-all cursor-pointer active:scale-[0.98]"
               >
                 <span className="text-[11px] text-[#A1A1A1] block">Total Expenses</span>
                 <span className="text-base font-mono font-medium text-[#EDEDED] mt-1 block">
@@ -635,7 +635,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setCurrentView('reports')}
-                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-colors cursor-pointer"
+                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-all cursor-pointer active:scale-[0.98]"
               >
                 <span className="text-[11px] text-[#A1A1A1] block">Net Profit</span>
                 <span className="text-base font-mono font-medium text-[#EDEDED] mt-1 block">
@@ -649,7 +649,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setCurrentView('clients')}
-                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-colors cursor-pointer"
+                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left hover:border-white/20 transition-all cursor-pointer active:scale-[0.98]"
               >
                 <span className="text-[11px] text-[#A1A1A1] block">Active Clients</span>
                 <span className="text-base font-mono font-medium text-[#EDEDED] mt-1 block">
@@ -688,7 +688,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setCurrentView('invoices')}
-                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-left cursor-pointer"
+                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-all text-left cursor-pointer active:scale-[0.98]"
               >
                 <span className="text-[11px] text-[#666666] block">1. Invoicing</span>
                 <span className="text-sm font-mono font-medium text-[#EDEDED] mt-0.5 block">
@@ -699,7 +699,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setCurrentView('banking')}
-                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-left cursor-pointer"
+                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-all text-left cursor-pointer active:scale-[0.98]"
               >
                 <span className="text-[11px] text-[#666666] block">2. Banking</span>
                 <span className="text-sm font-mono font-medium text-[#EDEDED] mt-0.5 block">
@@ -710,7 +710,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setCurrentView('gst-reconciliation')}
-                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-left cursor-pointer"
+                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-all text-left cursor-pointer active:scale-[0.98]"
               >
                 <span className="text-[11px] text-[#666666] block">3. Matching</span>
                 <span className="text-sm font-mono font-medium text-[#EDEDED] mt-0.5 block">
@@ -721,7 +721,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setCurrentView('returns')}
-                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-left cursor-pointer"
+                className="p-3 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-all text-left cursor-pointer active:scale-[0.98]"
               >
                 <span className="text-[11px] text-[#666666] block">4. GST Returns</span>
                 <span className="text-sm font-mono font-medium text-[#EDEDED] mt-0.5 block">
@@ -795,7 +795,7 @@ export default function DashboardPage() {
                         <div
                           key={item.id}
                           onClick={() => setCurrentView(item.view)}
-                          className="group flex items-start gap-3 p-3 rounded-lg border border-white/[0.04] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.1] transition-colors cursor-pointer"
+                          className="group flex items-start gap-3 p-3 rounded-lg border border-white/[0.04] bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/[0.1] transition-all cursor-pointer active:scale-[0.98]"
                         >
                           <div className="flex items-center justify-center h-7 w-7 rounded-md border border-white/[0.08] bg-white/[0.04] text-[#EDEDED] shrink-0 mt-0.5">
                             <Icon className="h-3.5 w-3.5" />

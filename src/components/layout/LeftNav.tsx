@@ -181,7 +181,7 @@ export function LeftNav({
             }
           }}
           className={cn(
-            'group/brand mb-4 flex h-10 shrink-0 items-center gap-2.5 rounded-lg px-2 outline-none',
+            'group/brand mb-4 flex h-10 shrink-0 items-center gap-2.5 rounded-lg px-2 outline-none cursor-pointer active:scale-[0.98]',
             'transition-colors duration-150 hover:bg-white/[0.04]',
             forceExpanded ? 'justify-start px-2.5' : 'xl:justify-start xl:px-2.5 justify-center',
           )}
@@ -227,7 +227,7 @@ export function LeftNav({
                     aria-current={isActive ? 'page' : undefined}
                     aria-label={item.label}
                     className={cn(
-                      'group relative flex h-8 items-center rounded-md text-[13px] outline-none',
+                      'group relative flex h-8 items-center rounded-md text-[13px] outline-none cursor-pointer active:scale-[0.98]',
                       'transition-colors duration-150',
                       expandedBtn,
                       isActive
@@ -284,7 +284,7 @@ export function LeftNav({
                 onClick={() => handleNavigate('settings')}
                 aria-current={isSettingsActive ? 'page' : undefined}
                 className={cn(
-                  'group relative flex h-8 items-center rounded-md text-[13px] outline-none transition-colors duration-150',
+                  'group relative flex h-8 items-center rounded-md text-[13px] outline-none transition-colors duration-150 cursor-pointer active:scale-[0.98]',
                   expandedBtn,
                   isSettingsActive
                     ? 'bg-white/[0.08] text-[#EDEDED] font-medium'
@@ -338,7 +338,7 @@ export function LeftNav({
               onClick={logout}
               title="Sign out"
               className={cn(
-                'text-[#666666] hover:text-[#EDEDED] p-1 rounded hover:bg-white/[0.06] transition-colors',
+                'text-[#666666] hover:text-[#EDEDED] p-1 rounded hover:bg-white/[0.06] transition-colors cursor-pointer active:scale-95',
                 labelInline,
               )}
             >

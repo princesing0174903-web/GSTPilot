@@ -6,28 +6,33 @@ import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all duration-150 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive active:scale-[0.98] gst-btn-press gst-ripple relative overflow-hidden",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-3.5 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-none active:scale-[0.98] select-none",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:shadow-sm",
-        destructive:
-          "bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
-        outline:
-          "border border-white/[0.08] bg-background shadow-xs hover:bg-white/[0.04] hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
+          "bg-white text-black hover:bg-white/90 active:bg-white/80 shadow-none border border-transparent font-medium",
+        primary:
+          "bg-white text-black hover:bg-white/90 active:bg-white/80 shadow-none border border-transparent font-medium",
+        brand:
+          "bg-[#2563EB] text-white hover:bg-[#1D4ED8] active:bg-[#1E40AF] shadow-none border border-transparent font-medium",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+          "bg-[#181818] text-[#EDEDED] border border-white/[0.08] hover:bg-[#222222] hover:border-white/20 active:bg-[#141414]",
+        outline:
+          "border border-white/[0.08] bg-transparent text-[#EDEDED] hover:bg-white/[0.04] hover:border-white/20 hover:text-white active:bg-white/[0.08]",
         ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "text-primary underline-offset-4 hover:underline active:scale-100",
+          "bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] active:bg-white/[0.08]",
+        destructive:
+          "bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 hover:border-rose-500/30 active:bg-rose-500/25",
+        link: "text-[#EDEDED] underline-offset-4 hover:underline active:opacity-70 p-0 h-auto",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        xl: "h-12 rounded-md px-8 text-base has-[>svg]:px-6",
-        icon: "size-9",
+        default: "h-9 px-3.5 py-2 has-[>svg]:px-3",
+        sm: "h-8 rounded-lg gap-1.5 px-3 text-xs has-[>svg]:px-2.5",
+        lg: "h-10 rounded-lg px-5 text-sm has-[>svg]:px-4",
+        xl: "h-11 rounded-lg px-6 text-sm has-[>svg]:px-5",
+        icon: "size-8 rounded-lg p-0",
+        "icon-sm": "size-7 rounded-md p-0",
       },
     },
     defaultVariants: {
@@ -37,34 +42,6 @@ const buttonVariants = cva(
   }
 )
 
-// ─── Ripple hook ─────────────────────────────────────────────────────────────
-// Creates a ripple ink element at the click position. Premium Material-style
-// feedback that works on every button variant. No-op on disabled buttons.
-function useRipple() {
-  const [ripples, setRipples] = React.useState<
-    Array<{ x: number; y: number; size: number; key: number }>
-  >([])
-
-  const addRipple = React.useCallback(
-    (e: React.MouseEvent<HTMLElement>) => {
-      const button = e.currentTarget
-      const rect = button.getBoundingClientRect()
-      const size = Math.max(rect.width, rect.height)
-      const x = e.clientX - rect.left - size / 2
-      const y = e.clientY - rect.top - size / 2
-      const key = Date.now()
-      setRipples((prev) => [...prev, { x, y, size, key }])
-      // Auto-remove after animation
-      window.setTimeout(() => {
-        setRipples((prev) => prev.filter((r) => r.key !== key))
-      }, 550)
-    },
-    []
-  )
-
-  return { ripples, addRipple }
-}
-
 function Button({
   className,
   variant,
@@ -73,7 +50,6 @@ function Button({
   loading = false,
   disabled,
   children,
-  onClick,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
@@ -81,44 +57,16 @@ function Button({
     loading?: boolean
   }) {
   const Comp = asChild ? Slot : "button"
-  const { ripples, addRipple } = useRipple()
-
-  const handleClick = React.useCallback(
-    (e: React.MouseEvent<HTMLElement>) => {
-      if (!disabled && !loading) {
-        addRipple(e)
-      }
-      onClick?.(e as React.MouseEvent<HTMLButtonElement>)
-    },
-    [addRipple, disabled, loading, onClick]
-  )
 
   return (
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       disabled={disabled || loading}
-      onClick={handleClick}
       {...props}
     >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+      {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-current shrink-0" />}
       {children}
-      {!asChild && ripples.length > 0 && (
-        <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
-          {ripples.map((r) => (
-            <span
-              key={r.key}
-              className="gst-ripple-ink"
-              style={{
-                left: r.x,
-                top: r.y,
-                width: r.size,
-                height: r.size,
-              }}
-            />
-          ))}
-        </span>
-      )}
     </Comp>
   )
 }

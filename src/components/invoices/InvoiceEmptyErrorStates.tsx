@@ -61,7 +61,6 @@ export function InvoiceEmptyState({
         <div className="flex flex-wrap gap-3 justify-center">
           <Button
             onClick={onClearFilters}
-            className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Clear All Filters
@@ -69,7 +68,6 @@ export function InvoiceEmptyState({
           <Button
             onClick={onCreate}
             variant="outline"
-            className="border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-foreground"
           >
             <Plus className="h-4 w-4 mr-2" />
             New Invoice
@@ -119,7 +117,6 @@ export function InvoiceEmptyState({
         <Button
           onClick={onCreate}
           size="lg"
-          className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/25 font-semibold"
         >
           <Plus className="h-4 w-4 mr-2" />
           Create Invoice
@@ -129,7 +126,6 @@ export function InvoiceEmptyState({
             onClick={onImport}
             size="lg"
             variant="outline"
-            className="border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-foreground"
           >
             <Upload className="h-4 w-4 mr-2" />
             Import Invoices
@@ -140,7 +136,6 @@ export function InvoiceEmptyState({
             onClick={onConnectZoho}
             size="lg"
             variant="ghost"
-            className="text-muted-foreground hover:text-foreground"
           >
             <Sparkles className="h-4 w-4 mr-2" />
             Connect Zoho Books
@@ -219,7 +214,6 @@ export function InvoiceErrorState({
       <div className="flex flex-wrap gap-3 justify-center">
         <Button
           onClick={onRetry}
-          className="bg-amber-500 hover:bg-amber-400 text-amber-950 shadow-lg shadow-amber-500/20"
         >
           <RefreshCw className="h-4 w-4 mr-2" />
           Try Again

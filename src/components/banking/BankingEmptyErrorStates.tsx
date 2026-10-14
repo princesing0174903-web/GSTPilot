@@ -38,7 +38,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
           unlocking VEYRO AI insights.
         </p>
         {onConnect && (
-          <Button onClick={onConnect} className="gap-2 bg-blue-500 hover:bg-blue-400 text-zinc-950">
+          <Button onClick={onConnect} className="gap-2">
             <Landmark className="h-4 w-4" />
             Connect Bank Account
           </Button>
@@ -101,7 +101,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
           {onConnect && (
             <Button
               onClick={onConnect}
-              className="gap-2 bg-blue-500 hover:bg-blue-400 text-zinc-950 shadow-lg shadow-blue-500/20"
+              className="gap-2"
             >
               <Landmark className="h-4 w-4" />
               Connect Your First Bank
@@ -111,7 +111,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
             <Button
               onClick={onImport}
               variant="outline"
-              className="gap-2 border-white/[0.12] bg-white/[0.02] hover:bg-white/[0.04]"
+              className="gap-2"
             >
               <Upload className="h-4 w-4" />
               Import Statement
@@ -121,7 +121,7 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
             <Button
               onClick={onAskOracle}
               variant="ghost"
-              className="gap-2 text-amber-300 hover:bg-amber-400/10 hover:text-amber-200"
+              className="gap-2 text-[#EDEDED]"
             >
               <Sparkles className="h-4 w-4" />
               Ask VEYRO AI AI
@@ -176,7 +176,7 @@ export function BankingErrorState({ message, onRetry, onAskOracle, onBack }: Err
           {onRetry && (
             <Button
               onClick={onRetry}
-              className="gap-2 bg-blue-500 hover:bg-blue-400 text-zinc-950"
+              className="gap-2"
             >
               <RefreshCw className="h-4 w-4" />
               Try Again
@@ -186,7 +186,7 @@ export function BankingErrorState({ message, onRetry, onAskOracle, onBack }: Err
             <Button
               onClick={onAskOracle}
               variant="outline"
-              className="gap-2 border-amber-400/25 text-amber-300 hover:bg-amber-400/10"
+              className="gap-2"
             >
               <Sparkles className="h-4 w-4" />
               Ask VEYRO AI AI

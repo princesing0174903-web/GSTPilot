@@ -344,7 +344,7 @@ export default function DashboardPage() {
 
   if (allLoading && !loadingTimedOut) {
     return (
-      <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-8 md:py-10 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 md:py-6 space-y-5">
         <div className="space-y-2">
           <ProSkeleton className="h-8 w-60" />
           <ProSkeleton className="h-4 w-80" />
@@ -420,13 +420,13 @@ export default function DashboardPage() {
   const expPct = totalRevExp > 0 ? (snapshot.expenses / totalRevExp) * 100 : 0;
 
   return (
-    <div className="relative z-10 max-w-6xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8 space-y-6">
+    <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-5 md:py-6 space-y-5">
       {/* ── HEADER ──────────────────────────────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
       >
         <div>
           <h1 className="text-2xl font-semibold tracking-[-0.02em] text-[#EDEDED]">
@@ -586,11 +586,11 @@ export default function DashboardPage() {
       )}
 
       {/* ── CORE OPERATIONS: 2-COLUMN COMMAND CENTER ────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* LEFT COLUMN (7 cols): Financial Vitals & Workflow Overview */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-4">
           {/* Financial Vitals Card */}
-          <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 space-y-4">
+          <div className="rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 space-y-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Database className="h-4 w-4 text-[#A1A1A1]" />
@@ -733,7 +733,7 @@ export default function DashboardPage() {
         </div>
 
         {/* RIGHT COLUMN (5 cols): Activity & Action Items Stream */}
-        <div className="lg:col-span-5 rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 flex flex-col min-h-[380px]">
+        <div className="lg:col-span-5 rounded-[12px] border border-white/[0.08] bg-[#111111] p-5 flex flex-col">
           {/* Stream Header & Tab Switcher */}
           <div className="flex items-center justify-between pb-3 border-b border-white/[0.06] mb-3">
             <div className="flex items-center gap-1.5 bg-white/[0.04] p-0.5 rounded-lg border border-white/[0.06]">
@@ -777,8 +777,8 @@ export default function DashboardPage() {
           <div className="flex-1 flex flex-col">
             {activeStreamTab === 'tasks' ? (
               actionItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center py-12 flex-1">
-                  <div className="flex items-center justify-center h-9 w-9 rounded-full bg-white/[0.04] border border-white/[0.08] mb-2.5">
+                <div className="flex flex-col items-center justify-center text-center py-6 sm:py-8 flex-1">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-white/[0.04] border border-white/[0.08] mb-2">
                     <CheckCircle2 className="h-4 w-4 text-[#EDEDED]" />
                   </div>
                   <h3 className="text-xs font-medium text-[#EDEDED]">All tasks complete</h3>
@@ -813,8 +813,8 @@ export default function DashboardPage() {
               )
             ) : (
               timelineEvents.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center py-12 flex-1">
-                  <Activity className="h-6 w-6 text-[#666666] mb-2" />
+                <div className="flex flex-col items-center justify-center text-center py-6 sm:py-8 flex-1">
+                  <Activity className="h-5 w-5 text-[#666666] mb-1.5" />
                   <h3 className="text-xs font-medium text-[#EDEDED]">No recent activity</h3>
                   <p className="text-[11px] text-[#666666] mt-1 max-w-xs leading-relaxed">
                     Actions you take will be logged chronologically here.

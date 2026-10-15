@@ -24,22 +24,21 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
   if (variant === 'compact') {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="glass-surface flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] p-12 text-center"
+        transition={{ duration: 0.3 }}
+        className="flex flex-col items-center justify-center rounded-xl border border-white/[0.08] bg-[#111111] p-6 sm:p-8 text-center"
       >
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10">
-          <Landmark className="h-7 w-7 text-blue-400" />
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.04] border border-white/[0.08]">
+          <Landmark className="h-5 w-5 text-[#EDEDED]" strokeWidth={1.5} />
         </div>
-        <h3 className="mb-1.5 text-base font-semibold text-foreground">No bank accounts connected</h3>
-        <p className="mb-4 max-w-sm text-sm text-muted-foreground">
-          Connect your first bank account to start tracking transactions, reconciling payments, and
-          unlocking VEYRO AI insights.
+        <h3 className="mb-1 text-sm font-semibold text-[#EDEDED]">No bank accounts connected</h3>
+        <p className="mb-4 max-w-sm text-xs text-[#A1A1A1]">
+          Connect a bank account to track cash flow, reconcile invoice payments, and unlock real-time financial vitals.
         </p>
         {onConnect && (
-          <Button onClick={onConnect} className="gap-2">
-            <Landmark className="h-4 w-4" />
+          <Button onClick={onConnect} size="sm" className="gap-1.5">
+            <Landmark className="h-3.5 w-3.5" />
             Connect Bank Account
           </Button>
         )}
@@ -49,71 +48,59 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="glass-surface relative overflow-hidden rounded-2xl border border-white/[0.06] p-12"
+      transition={{ duration: 0.3 }}
+      className="relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#111111] p-6 sm:p-8"
     >
-      {/* Background glow */}
-      <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-blue-500/[0.08] blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-cyan-500/[0.06] blur-3xl" />
-
       <div className="relative flex flex-col items-center text-center">
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-500/20 to-cyan-500/10 border border-blue-500/20"
-        >
-          <Landmark className="h-10 w-10 text-blue-400" />
-        </motion.div>
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.04] border border-white/[0.08]">
+          <Landmark className="h-6 w-6 text-[#EDEDED]" strokeWidth={1.5} />
+        </div>
 
-        <h2 className="mb-2 text-2xl font-bold tracking-tight text-foreground">
-          Welcome to VEYRO Banking™
+        <h2 className="mb-1 text-lg font-semibold tracking-tight text-[#EDEDED]">
+          VEYRO Banking
         </h2>
-        <p className="mb-8 max-w-lg text-sm text-muted-foreground leading-relaxed">
-          The complete banking & reconciliation platform. Connect your bank accounts, auto-reconcile
-          invoices, predict cash flow, and detect fraud — all in one place. Built for billion-dollar
-          operations.
+        <p className="mb-6 max-w-md text-xs text-[#A1A1A1] leading-relaxed">
+          Integrated banking and automated invoice reconciliation. Link your business accounts or use sandbox mode to simulate cash flows.
         </p>
 
-        <div className="mb-8 grid gap-3 sm:grid-cols-3">
+        <div className="mb-6 grid gap-2.5 sm:grid-cols-3 w-full max-w-xl">
           {[
-            { icon: Landmark, title: 'Connect Accounts', desc: 'HDFC, ICICI, Axis & more' },
-            { icon: RefreshCw, title: 'Auto-Reconcile', desc: 'Invoice → Payment → Bank' },
-            { icon: Sparkles, title: 'VEYRO AI Insights', desc: 'Predict cash flow & fraud' },
+            { icon: Landmark, title: 'Connect Accounts', desc: 'HDFC, ICICI, Axis, SBI' },
+            { icon: RefreshCw, title: 'Auto-Reconcile', desc: 'Invoice to bank matching' },
+            { icon: Sparkles, title: 'Cash Flow Insights', desc: 'Forecast vitals & risk' },
           ].map((feature, i) => (
-            <motion.div
+            <div
               key={feature.title}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 + i * 0.08 }}
-              className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-left"
+              className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left"
             >
-              <feature.icon className="mb-2 h-5 w-5 text-blue-400" />
-              <p className="mb-0.5 text-sm font-semibold text-foreground">{feature.title}</p>
-              <p className="text-xs text-muted-foreground">{feature.desc}</p>
-            </motion.div>
+              <feature.icon className="mb-1.5 h-4 w-4 text-[#EDEDED]" strokeWidth={1.5} />
+              <p className="text-xs font-semibold text-[#EDEDED]">{feature.title}</p>
+              <p className="text-[11px] text-[#A1A1A1] mt-0.5">{feature.desc}</p>
+            </div>
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-2.5">
           {onConnect && (
             <Button
               onClick={onConnect}
-              className="gap-2"
+              size="sm"
+              className="gap-1.5"
             >
-              <Landmark className="h-4 w-4" />
-              Connect Your First Bank
+              <Landmark className="h-3.5 w-3.5" />
+              Connect Bank
             </Button>
           )}
           {onImport && (
             <Button
               onClick={onImport}
               variant="outline"
-              className="gap-2"
+              size="sm"
+              className="gap-1.5"
             >
-              <Upload className="h-4 w-4" />
+              <Upload className="h-3.5 w-3.5" />
               Import Statement
             </Button>
           )}
@@ -121,10 +108,11 @@ export function BankingEmptyState({ onConnect, onImport, onAskOracle, variant = 
             <Button
               onClick={onAskOracle}
               variant="ghost"
-              className="gap-2 text-[#EDEDED]"
+              size="sm"
+              className="gap-1.5 text-[#EDEDED]"
             >
-              <Sparkles className="h-4 w-4" />
-              Ask VEYRO AI AI
+              <Sparkles className="h-3.5 w-3.5" />
+              Ask VEYRO AI
             </Button>
           )}
         </div>
@@ -148,37 +136,31 @@ export function BankingErrorState({ message, onRetry, onAskOracle, onBack }: Err
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="glass-surface relative overflow-hidden rounded-2xl border border-red-500/20 p-8"
+      transition={{ duration: 0.3 }}
+      className="relative overflow-hidden rounded-xl border border-red-500/20 bg-[#111111] p-6 sm:p-8"
     >
-      <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-red-500/[0.08] blur-3xl" />
-
       <div className="relative flex flex-col items-center text-center">
-        <motion.div
-          initial={{ scale: 0.8 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20"
-        >
-          <AlertCircle className="h-8 w-8 text-red-400" />
-        </motion.div>
+        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20">
+          <AlertCircle className="h-5 w-5 text-red-400" />
+        </div>
 
-        <h2 className="mb-2 text-xl font-bold tracking-tight text-foreground">
+        <h2 className="mb-1 text-base font-semibold tracking-tight text-[#EDEDED]">
           Something went wrong
         </h2>
-        <p className="mb-6 max-w-md text-sm text-muted-foreground leading-relaxed">
+        <p className="mb-4 max-w-md text-xs text-[#A1A1A1] leading-relaxed">
           {safeMessage}
         </p>
 
-        <div className="flex flex-wrap items-center justify-center gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           {onRetry && (
             <Button
               onClick={onRetry}
-              className="gap-2"
+              size="sm"
+              className="gap-1.5"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className="h-3.5 w-3.5" />
               Try Again
             </Button>
           )}
@@ -186,23 +168,24 @@ export function BankingErrorState({ message, onRetry, onAskOracle, onBack }: Err
             <Button
               onClick={onAskOracle}
               variant="outline"
-              className="gap-2"
+              size="sm"
+              className="gap-1.5"
             >
-              <Sparkles className="h-4 w-4" />
-              Ask VEYRO AI AI
+              <Sparkles className="h-3.5 w-3.5" />
+              Ask VEYRO AI
             </Button>
           )}
           {onBack && (
-            <Button onClick={onBack} variant="ghost" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
+            <Button onClick={onBack} variant="ghost" size="sm" className="gap-1.5">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Dashboard
             </Button>
           )}
         </div>
 
-        <div className="mt-6 flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-          <ShieldAlert className="h-3.5 w-3.5 text-amber-400" />
-          <span className="text-[11px] text-muted-foreground">
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-1.5">
+          <ShieldAlert className="h-3.5 w-3.5 text-[#A1A1A1]" />
+          <span className="text-[11px] text-[#666666]">
             Error details are sanitized for security. Contact support if the issue persists.
           </span>
         </div>
@@ -216,25 +199,26 @@ export function BankingErrorState({ message, onRetry, onAskOracle, onBack }: Err
 export function BankingFilteredEmptyState({ onClearFilters }: { onClearFilters: () => void }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="glass-surface flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] p-12 text-center"
+      transition={{ duration: 0.3 }}
+      className="flex flex-col items-center justify-center rounded-xl border border-white/[0.06] bg-[#111111] p-6 sm:p-8 text-center"
     >
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10">
-        <RefreshCw className="h-6 w-6 text-cyan-400" />
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.04] border border-white/[0.08]">
+        <RefreshCw className="h-5 w-5 text-[#A1A1A1]" />
       </div>
-      <h3 className="mb-1.5 text-base font-semibold text-foreground">No matching transactions</h3>
-      <p className="mb-4 max-w-sm text-sm text-muted-foreground">
+      <h3 className="mb-1 text-sm font-semibold text-[#EDEDED]">No matching transactions</h3>
+      <p className="mb-4 max-w-sm text-xs text-[#A1A1A1]">
         No transactions match your current filters. Try adjusting the date range, category, or search query.
       </p>
       <Button
         onClick={onClearFilters}
+        size="sm"
         variant="outline"
-        className="gap-2 border-white/[0.12] bg-white/[0.02] hover:bg-white/[0.04]"
+        className="gap-1.5"
       >
-        <RefreshCw className="h-4 w-4" />
-        Clear All Filters
+        <RefreshCw className="h-3.5 w-3.5" />
+        Clear Filters
       </Button>
     </motion.div>
   );

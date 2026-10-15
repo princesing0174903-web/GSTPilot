@@ -2053,7 +2053,7 @@ export default function ReportsPage() {
   // stale engine, GST, or banking data.
   if (loading || engineLoading || gstLoading || bankingLoading) {
     return (
-      <div className="gst-container-wide py-6 md:py-8 space-y-8">
+      <div className="gst-container-wide py-5 md:py-6 space-y-5">
         <div className="flex items-start gap-4">
           <Skeleton className="size-12 rounded-xl" />
           <div className="space-y-2 pt-1">
@@ -2110,7 +2110,7 @@ export default function ReportsPage() {
 
   // ─── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="gst-container-wide py-6 md:py-8 space-y-8">
+    <div className="gst-container-wide py-5 md:py-6 space-y-5">
       {/* ═══════════════════════════════════════════════════════════════════════
           HEADER — page title + summary KPIs
       ═══════════════════════════════════════════════════════════════════════ */}

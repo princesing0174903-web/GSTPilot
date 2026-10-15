@@ -5,7 +5,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { BrandLogo } from '@/components/brand';
 import { Button } from '@/components/ui/button';
-import { ChevronRight, ArrowRight, CheckCircle2, PlayCircle, BarChart3, Bot, LayoutDashboard, Shield, Zap, Globe } from 'lucide-react';
+import { ChevronRight, ArrowRight, CheckCircle2, PlayCircle, BarChart3, Bot, LayoutDashboard, Shield, Zap, Globe, Sparkles } from 'lucide-react';
 
 interface LandingPageProps {
   onGetStarted: () => void;

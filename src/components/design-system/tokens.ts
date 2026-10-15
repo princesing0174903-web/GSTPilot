@@ -84,19 +84,19 @@ export const typography = {
 // Every card in the app uses the same padding, radius, shadow, title size.
 export const cardSpec = {
   // The base card class — applies to ALL cards
-  base: 'glass-surface rounded-2xl',
+  base: 'rounded-xl border border-white/[0.08] bg-[#111111]',
   // Standard content padding
-  padding: 'p-6',
+  padding: 'p-4 sm:p-5',
   // Compact content padding (for dense layouts)
-  paddingCompact: 'p-4',
+  paddingCompact: 'p-3 sm:p-4',
   // Card title (h3 equivalent)
-  title: 'text-sm font-semibold tracking-tight text-foreground',
+  title: 'text-sm font-semibold tracking-tight text-[#EDEDED]',
   // Card subtitle / description
-  subtitle: 'text-xs text-muted-foreground leading-relaxed',
+  subtitle: 'text-xs text-[#A1A1A1] leading-relaxed',
   // Card header row (title + optional action)
-  header: 'flex items-center justify-between gap-3 mb-4',
+  header: 'flex items-center justify-between gap-3 mb-3',
   // Icon chip inside card header
-  iconChip: 'flex items-center justify-center h-8 w-8 rounded-lg accent-gradient-soft shrink-0',
+  iconChip: 'flex items-center justify-center h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.08] shrink-0 text-[#EDEDED]',
 } as const;
 
 // ── ANIMATION PRESETS ─────────────────────────────────────────────────────────

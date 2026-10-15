@@ -40,36 +40,34 @@ export function InvoiceEmptyState({
   if (hasFilters) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col items-center justify-center py-16 px-6 text-center"
+        transition={{ duration: 0.3 }}
+        className="flex flex-col items-center justify-center py-8 px-4 text-center rounded-xl border border-white/[0.06] bg-[#111111]"
       >
-        <div className="relative mb-6">
-          <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full" />
-          <div className="relative h-20 w-20 rounded-3xl bg-gradient-to-br from-blue-500/20 to-blue-500/5 ring-1 ring-blue-400/20 flex items-center justify-center">
-            <FileText className="h-9 w-9 text-blue-300" />
-          </div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.04] border border-white/[0.08] mb-3">
+          <FileText className="h-5 w-5 text-[#A1A1A1]" strokeWidth={1.5} />
         </div>
-        <h3 className="text-xl font-semibold text-foreground mb-2">
+        <h3 className="text-sm font-semibold text-[#EDEDED] mb-1">
           No invoices match your filters
         </h3>
-        <p className="text-sm text-muted-foreground max-w-md mb-6">
-          We couldn&apos;t find any invoices matching the current filters. Try
-          adjusting your search or clearing all filters to see everything.
+        <p className="text-xs text-[#A1A1A1] max-w-sm mb-4">
+          Try adjusting your search query, status filters, or date range.
         </p>
-        <div className="flex flex-wrap gap-3 justify-center">
+        <div className="flex items-center gap-2 justify-center">
           <Button
+            size="sm"
             onClick={onClearFilters}
           >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Clear All Filters
+            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+            Clear Filters
           </Button>
           <Button
+            size="sm"
             onClick={onCreate}
             variant="outline"
           >
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
             New Invoice
           </Button>
         </div>
@@ -79,66 +77,48 @@ export function InvoiceEmptyState({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="flex flex-col items-center justify-center py-20 px-6 text-center"
+      transition={{ duration: 0.3 }}
+      className="flex flex-col items-center justify-center py-10 px-4 text-center rounded-xl border border-white/[0.06] bg-[#111111]"
     >
-      <div className="relative mb-8">
-        <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full" />
-        <motion.div
-          initial={{ scale: 0.9, rotate: -5 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
-          className="relative h-24 w-24 rounded-3xl bg-gradient-to-br from-blue-500/25 to-blue-500/5 ring-1 ring-blue-400/25 flex items-center justify-center shadow-2xl shadow-blue-500/20"
-        >
-          <FileText className="h-11 w-11 text-blue-300" strokeWidth={1.5} />
-          <motion.div
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.4, duration: 0.4 }}
-            className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-blue-600 ring-4 ring-black flex items-center justify-center"
-          >
-            <Plus className="h-4 w-4 text-white" strokeWidth={3} />
-          </motion.div>
-        </motion.div>
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.04] border border-white/[0.08] mb-3.5">
+        <FileText className="h-6 w-6 text-[#EDEDED]" strokeWidth={1.5} />
       </div>
 
-      <h3 className="text-2xl font-bold tracking-tight text-foreground mb-3">
+      <h3 className="text-base font-semibold text-[#EDEDED] mb-1">
         Create your first invoice
       </h3>
-      <p className="text-sm text-muted-foreground max-w-md mb-8 leading-relaxed">
-        Start billing your customers in seconds. Build a GST-compliant invoice
-        with auto-calculated CGST/SGST/IGST, send it via email or WhatsApp, and
-        track payments — all in one place.
+      <p className="text-xs text-[#A1A1A1] max-w-md mb-5 leading-relaxed">
+        Issue GST-compliant invoices with automatic CGST, SGST, and IGST calculation. Send invoices and track payment milestones.
       </p>
 
-      <div className="flex flex-wrap gap-3 justify-center mb-10">
+      <div className="flex flex-wrap gap-2.5 justify-center mb-6">
         <Button
           onClick={onCreate}
-          size="lg"
+          size="sm"
         >
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="h-3.5 w-3.5 mr-1.5" />
           Create Invoice
         </Button>
         {onImport && (
           <Button
             onClick={onImport}
-            size="lg"
+            size="sm"
             variant="outline"
           >
-            <Upload className="h-4 w-4 mr-2" />
+            <Upload className="h-3.5 w-3.5 mr-1.5" />
             Import Invoices
           </Button>
         )}
         {onConnectZoho && (
           <Button
             onClick={onConnectZoho}
-            size="lg"
+            size="sm"
             variant="ghost"
           >
-            <Sparkles className="h-4 w-4 mr-2" />
-            Connect Zoho Books
+            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+            Connect Zoho
           </Button>
         )}
       </div>
@@ -189,48 +169,42 @@ export function InvoiceErrorState({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="flex flex-col items-center justify-center py-16 px-6 text-center"
+      transition={{ duration: 0.3 }}
+      className="flex flex-col items-center justify-center py-8 px-4 text-center rounded-xl border border-white/[0.06] bg-[#111111]"
     >
-      <div className="relative mb-6">
-        <div className="absolute inset-0 bg-amber-500/10 blur-3xl rounded-full" />
-        <div className="relative h-20 w-20 rounded-3xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 ring-1 ring-amber-400/20 flex items-center justify-center">
-          <LifeBuoy className="h-9 w-9 text-amber-300" />
-        </div>
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.04] border border-white/[0.08] mb-3">
+        <LifeBuoy className="h-5 w-5 text-[#EDEDED]" strokeWidth={1.5} />
       </div>
 
-      <h3 className="text-xl font-semibold text-foreground mb-2">
+      <h3 className="text-sm font-semibold text-[#EDEDED] mb-1">
         Something went wrong
       </h3>
-      <p className="text-sm text-muted-foreground max-w-md mb-6 leading-relaxed">
-        {friendlyMessage}{' '}
-        <span className="text-amber-300/80">
-          You can retry, or ask VEYRO AI to help diagnose the issue.
-        </span>
+      <p className="text-xs text-[#A1A1A1] max-w-sm mb-4 leading-relaxed">
+        {friendlyMessage}
       </p>
 
-      <div className="flex flex-wrap gap-3 justify-center">
+      <div className="flex flex-wrap gap-2 justify-center">
         <Button
+          size="sm"
           onClick={onRetry}
         >
-          <RefreshCw className="h-4 w-4 mr-2" />
+          <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
           Try Again
         </Button>
         <Button
+          size="sm"
           variant="outline"
-          className="border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-foreground"
           onClick={() => {
-            // Ask VEYRO AI AI — opens the global Oracle drawer.
             const event = new CustomEvent('gstpilot:oracle:ask', {
               detail: { query: `I can't load my invoices. Error: ${friendlyMessage}` },
             });
             window.dispatchEvent(event);
           }}
         >
-          <Sparkles className="h-4 w-4 mr-2" />
-          Ask VEYRO AI AI
+          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+          Ask VEYRO AI
         </Button>
         {onGoBack && (
           <Button

@@ -627,7 +627,7 @@ export function PageContainer({
   maxWidth?: string;
 }) {
   return (
-    <div className={cn('relative mx-auto w-full', maxWidth, 'px-4 md:px-6 py-8 md:py-10', className)}>
+    <div className={cn('relative mx-auto w-full', maxWidth, 'px-4 sm:px-6 py-5 md:py-6', className)}>
       {children}
     </div>
   );

@@ -51,7 +51,7 @@ export function FeaturePlaceholder({
       >
         <div className="glass-surface rounded-2xl overflow-hidden">
           {/* ── Animated header band ── */}
-          <div className="relative h-32 overflow-hidden border-b border-white/[0.06]">
+          <div className="relative h-20 overflow-hidden border-b border-white/[0.06]">
             <div
               className="absolute inset-0 opacity-60"
               style={{
@@ -76,28 +76,28 @@ export function FeaturePlaceholder({
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ duration: 0.6, ease: 'easeOut', delay: 0.1 }}
-                className="flex items-center justify-center h-16 w-16 rounded-2xl glass-surface-strong"
+                className="flex items-center justify-center h-11 w-11 rounded-xl glass-surface-strong"
               >
-                <Icon className="h-7 w-7 accent-text" />
+                <Icon className="h-5 w-5 accent-text" />
               </motion.div>
             </div>
           </div>
 
           {/* ── Content ── */}
-          <div className="p-8 md:p-10 text-center">
+          <div className="p-5 sm:p-6 text-center">
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.2 }}
             >
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-400 mb-4">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400 mb-3">
                 <Sparkles className="h-3 w-3" />
                 On the roadmap
               </div>
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
                 {featureName}
               </h1>
-              <p className="mt-3 text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
+              <p className="mt-2 text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
                 {description}
               </p>
             </motion.div>

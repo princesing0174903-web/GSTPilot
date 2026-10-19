@@ -752,7 +752,7 @@ export default function ReconciliationPage() {
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm">
+              <Button className="gap-2">
                 <Play className="h-4 w-4" />
                 New Reconciliation
               </Button>
@@ -823,9 +823,10 @@ export default function ReconciliationPage() {
                 <Button
                   onClick={handleCreateReconciliation}
                   disabled={creating || !selectedClientId || !selectedPeriod || !selectedSource}
-                  className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+                  loading={creating}
+                  className="gap-2"
                 >
-                  {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                  {!creating && <Play className="h-4 w-4" />}
                   Run Reconciliation
                 </Button>
               </DialogFooter>
@@ -879,7 +880,7 @@ export default function ReconciliationPage() {
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm">
+            <Button className="gap-2">
               <Play className="h-4 w-4" />
               New Reconciliation
             </Button>
@@ -950,9 +951,10 @@ export default function ReconciliationPage() {
               <Button
                 onClick={handleCreateReconciliation}
                 disabled={creating || !selectedClientId || !selectedPeriod || !selectedSource}
-                className="bg-emerald-600 hover:bg-emerald-700 gap-2"
+                loading={creating}
+                className="gap-2"
               >
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                {!creating && <Play className="h-4 w-4" />}
                 Run Reconciliation
               </Button>
             </DialogFooter>

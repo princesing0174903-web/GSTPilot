@@ -415,14 +415,12 @@ export default function InvoicesView() {
           <Button
             onClick={() => setUploadOpen(true)}
             variant="outline"
-            className="border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300 hover:bg-emerald-500/[0.12] hover:text-emerald-200"
           >
             <UploadCloud className="mr-2 h-4 w-4" />
             Upload Invoice
           </Button>
           <Button
             onClick={openCreate}
-            className="bg-emerald-500 text-black hover:bg-emerald-400"
           >
             <Plus className="mr-2 h-4 w-4" />
             Create Invoice
@@ -860,9 +858,8 @@ export default function InvoicesView() {
             <Button
               onClick={handleSubmit}
               disabled={saving}
-              className="bg-emerald-500 text-black hover:bg-emerald-400"
+              loading={saving}
             >
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editing ? 'Save Changes' : 'Create Invoice'}
             </Button>
           </DialogFooter>

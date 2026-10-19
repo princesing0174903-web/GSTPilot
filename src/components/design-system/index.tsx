@@ -31,7 +31,26 @@ import {
   Inbox,
   type LucideIcon,
 } from 'lucide-react';
-import { typography, cardSpec, statusColors, type StatusTone } from './tokens';
+import { typography, cardSpec, statusColors, instructionalText, type StatusTone } from './tokens';
+import { LoadingRing, LoadingRingState, FullPageLoadingRing } from '@/components/ui/loading-ring';
+
+export { LoadingRing, LoadingRingState, FullPageLoadingRing };
+
+export interface InstructionalTextProps extends React.HTMLAttributes<HTMLParagraphElement> {
+  children: React.ReactNode;
+}
+
+/**
+ * InstructionalText — canonical text style for instructions & contextual microcopy.
+ * Matches "Customize your view" / "Choose a client" reference design.
+ */
+export function InstructionalText({ className, children, ...props }: InstructionalTextProps) {
+  return (
+    <p className={cn(instructionalText, className)} {...props}>
+      {children}
+    </p>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PageHeader — every page starts with this. Title + subtitle + breadcrumb + actions
@@ -291,7 +310,7 @@ export function UnifiedEmptyState({
             <Button
               size="sm"
               onClick={onPrimary}
-              className="accent-gradient text-white hover:opacity-90 gap-1.5 h-8"
+              className="gap-1.5 h-8 font-semibold"
             >
               {primaryLabel}
             </Button>
@@ -301,7 +320,7 @@ export function UnifiedEmptyState({
               size="sm"
               variant="outline"
               onClick={onSecondary}
-              className="border-border gap-1.5 h-8"
+              className="gap-1.5 h-8"
             >
               {secondaryLabel}
             </Button>

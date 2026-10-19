@@ -1,39 +1,42 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * VEYRO™ — ONE Unified Design System
+ * GSTPilot Infinity — Global Black & White Design System Tokens
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * This is the SINGLE source of truth for every visual decision in VEYRO.
- * Every page MUST use these tokens and primitives. No exceptions.
- *
- * DESIGN PRINCIPLES:
- *   1. One spacing scale (4 / 6 / 8 / 12 / 16 / 24 / 32 / 48 px)
- *   2. One typography scale (H1 / H2 / H3 / Body / Caption)
- *   3. One color system (Primary blue, Success blue, Warning amber,
- *      Danger red, Info blue — NO random colors. ZERO green/indigo/purple/pink
- *      in the UI. The GREEN NEUTRALIZATION CASCADE in globals.css converts any
- *      stray emerald/green/teal to blue at runtime.)
- *   4. One radius scale (sm 8, md 12, lg 16, xl 20, 2xl 24)
- *   5. One shadow scale (sm, md, lg, glow)
- *   6. One animation system (150ms micro, 250ms standard, 400ms section)
- *   7. One card system (same padding, radius, shadow, title size)
- *
- * Reference: Stripe / Linear / Vercel / Apple Vision Pro
+ * Visual standard:
+ *   • Canvas: pure black rgb(0 0 0) / #000000
+ *   • Primary action button: pure white #FFFFFF with bold black #000000 text in rounded-full pill
+ *   • Primary text: pure white #FFFFFF
+ *   • Secondary surfaces: dark grayscale (#0A0A0A, #0E0E0E, #141414, #181818)
+ *   • Secondary / Instructional text: accessible neutral gray (#A1A1A1)
+ *   • Borders: subtle grayscale borders (rgba(255, 255, 255, 0.08))
+ *   • Loading: circular progress ring with blue/cyan active arc on black
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-// ── SEMANTIC STATUS COLORS ────────────────────────────────────────────────────
-// One color per meaning. Never use random Tailwind colors for status.
-// NOTE: emerald/cyan tokens below are remapped to blue at runtime by the
-// GREEN NEUTRALIZATION CASCADE in globals.css. They are kept here as semantic
-// hooks only — the rendered color is always blue.
+// ── CORE COLORS ───────────────────────────────────────────────────────────────
+export const coreColors = {
+  canvas: '#000000',
+  surface: '#0E0E0E',
+  surfaceMuted: '#141414',
+  surfaceHover: '#181818',
+  border: 'rgba(255, 255, 255, 0.08)',
+  borderHover: 'rgba(255, 255, 255, 0.18)',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#A1A1A1',
+  textMuted: '#666666',
+  buttonPrimaryBg: '#FFFFFF',
+  buttonPrimaryText: '#000000',
+} as const;
+
+// ── SEMANTIC STATUS COLORS (Restrained) ────────────────────────────────────────
 export const statusColors = {
   success: {
-    bg: 'bg-blue-500/10',
-    border: 'border-blue-500/20',
-    text: 'text-blue-400',
-    dot: 'bg-blue-400',
-    solid: 'bg-blue-500',
+    bg: 'bg-emerald-500/10',
+    border: 'border-emerald-500/20',
+    text: 'text-emerald-400',
+    dot: 'bg-emerald-400',
+    solid: 'bg-emerald-500',
   },
   warning: {
     bg: 'bg-amber-500/10',
@@ -43,23 +46,23 @@ export const statusColors = {
     solid: 'bg-amber-500',
   },
   danger: {
-    bg: 'bg-red-500/10',
-    border: 'border-red-500/20',
-    text: 'text-red-400',
-    dot: 'bg-red-400',
-    solid: 'bg-red-500',
+    bg: 'bg-rose-500/10',
+    border: 'border-rose-500/20',
+    text: 'text-rose-400',
+    dot: 'bg-rose-400',
+    solid: 'bg-rose-500',
   },
   info: {
-    bg: 'bg-blue-500/10',
-    border: 'border-blue-500/20',
-    text: 'text-blue-400',
-    dot: 'bg-blue-400',
-    solid: 'bg-blue-500',
+    bg: 'bg-white/[0.04]',
+    border: 'border-white/[0.12]',
+    text: 'text-white',
+    dot: 'bg-white/60',
+    solid: 'bg-white',
   },
   neutral: {
-    bg: 'bg-white/[0.04]',
+    bg: 'bg-white/[0.03]',
     border: 'border-white/[0.08]',
-    text: 'text-muted-foreground',
+    text: 'text-[#A1A1A1]',
     dot: 'bg-white/40',
     solid: 'bg-white/10',
   },
@@ -68,59 +71,65 @@ export const statusColors = {
 export type StatusTone = keyof typeof statusColors;
 
 // ── TYPOGRAPHY SCALE ──────────────────────────────────────────────────────────
-// One heading system. Every page uses the same sizes.
 export const typography = {
-  h1: 'text-3xl md:text-4xl font-bold tracking-tight text-foreground',
-  h2: 'text-xl md:text-2xl font-bold tracking-tight text-foreground',
-  h3: 'text-base font-semibold tracking-tight text-foreground',
-  body: 'text-sm text-foreground leading-relaxed',
-  bodyMuted: 'text-sm text-muted-foreground leading-relaxed',
-  caption: 'text-xs text-muted-foreground',
-  label: 'text-[11px] font-medium uppercase tracking-wider text-muted-foreground',
-  stat: 'text-2xl md:text-3xl font-bold tracking-tight text-foreground tabular-nums',
+  h1: 'text-2xl sm:text-3xl font-bold tracking-tight text-white',
+  h2: 'text-xl sm:text-2xl font-bold tracking-tight text-white',
+  h3: 'text-base font-semibold tracking-tight text-white',
+  body: 'text-sm text-white leading-relaxed',
+  bodyMuted: 'text-sm text-[#A1A1A1] leading-relaxed',
+  instructional: 'text-xs sm:text-sm text-[#A1A1A1] font-normal leading-relaxed',
+  caption: 'text-xs text-[#A1A1A1]',
+  label: 'text-[11px] font-medium uppercase tracking-wider text-[#A1A1A1]',
+  stat: 'text-2xl md:text-3xl font-bold tracking-tight text-white tabular-nums',
+} as const;
+
+// ── INSTRUCTIONAL & CONTEXTUAL MICROCOPY ──────────────────────────────────────
+// Canonical text style for "Customize your view", "Choose a client", etc.
+export const instructionalText = typography.instructional;
+
+// ── UNIVERSAL BUTTON SPECIFICATION ───────────────────────────────────────────
+// Matches the white "Post" pill button reference screenshot
+export const buttonSpec = {
+  pill: 'rounded-full font-semibold active:scale-[0.98] transition-all duration-150',
+  primary:
+    'bg-white text-black hover:bg-neutral-200 active:bg-neutral-300 rounded-full font-semibold shadow-none border border-transparent',
+  secondary:
+    'bg-[#181818] text-[#EDEDED] border border-white/[0.08] hover:bg-[#222222] hover:border-white/20 rounded-full font-medium',
+  outline:
+    'border border-white/[0.12] bg-transparent text-[#EDEDED] hover:bg-white/[0.06] hover:border-white/20 hover:text-white rounded-full font-medium',
+  ghost:
+    'bg-transparent text-[#A1A1A1] hover:text-white hover:bg-white/[0.04] rounded-full font-medium',
 } as const;
 
 // ── CARD SPEC ─────────────────────────────────────────────────────────────────
-// Every card in the app uses the same padding, radius, shadow, title size.
 export const cardSpec = {
-  // The base card class — applies to ALL cards
-  base: 'rounded-xl border border-white/[0.08] bg-[#111111]',
-  // Standard content padding
+  base: 'rounded-xl border border-white/[0.08] bg-[#0E0E0E]',
   padding: 'p-4 sm:p-5',
-  // Compact content padding (for dense layouts)
   paddingCompact: 'p-3 sm:p-4',
-  // Card title (h3 equivalent)
   title: 'text-sm font-semibold tracking-tight text-[#EDEDED]',
-  // Card subtitle / description
   subtitle: 'text-xs text-[#A1A1A1] leading-relaxed',
-  // Card header row (title + optional action)
   header: 'flex items-center justify-between gap-3 mb-3',
-  // Icon chip inside card header
   iconChip: 'flex items-center justify-center h-8 w-8 rounded-lg bg-white/[0.04] border border-white/[0.08] shrink-0 text-[#EDEDED]',
 } as const;
 
 // ── ANIMATION PRESETS ─────────────────────────────────────────────────────────
 export const animations = {
-  // Section entrance (fade + slide up)
   sectionEnter: {
-    initial: { opacity: 0, y: 16 },
+    initial: { opacity: 0, y: 12 },
     animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.5, ease: 'easeOut' as const },
+    transition: { duration: 0.35, ease: 'easeOut' as const },
   },
-  // Staggered children entrance
-  stagger: (index: number, base = 0.08) => ({
-    initial: { opacity: 0, y: 16 },
+  stagger: (index: number, base = 0.05) => ({
+    initial: { opacity: 0, y: 12 },
     animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.5, delay: index * base, ease: 'easeOut' as const },
+    transition: { duration: 0.35, delay: index * base, ease: 'easeOut' as const },
   }),
-  // Modal entrance (scale + fade)
   modalEnter: {
-    initial: { opacity: 0, scale: 0.96, y: 8 },
+    initial: { opacity: 0, scale: 0.98, y: 6 },
     animate: { opacity: 1, scale: 1, y: 0 },
-    exit: { opacity: 0, scale: 0.97, y: 6 },
-    transition: { type: 'spring' as const, damping: 20, stiffness: 90 },
+    exit: { opacity: 0, scale: 0.98, y: 6 },
+    transition: { type: 'spring' as const, damping: 25, stiffness: 200 },
   },
-  // Backdrop entrance
   backdropEnter: {
     initial: { opacity: 0 },
     animate: { opacity: 1 },
@@ -130,8 +139,8 @@ export const animations = {
 
 // ── SPACING ───────────────────────────────────────────────────────────────────
 export const spacing = {
-  pageX: 'px-4 md:px-6',
-  pageY: 'py-8 md:py-10',
-  sectionGap: 'gap-6 md:gap-8',
-  cardGap: 'gap-4 md:gap-6',
+  pageX: 'px-4 sm:px-6',
+  pageY: 'py-5 md:py-6',
+  sectionGap: 'gap-4 md:gap-5',
+  cardGap: 'gap-3 md:gap-4',
 } as const;

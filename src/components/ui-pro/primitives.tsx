@@ -24,18 +24,18 @@ type ProButtonVariant = 'primary' | 'glass' | 'ghost' | 'accent';
 type ProButtonSize = 'sm' | 'md' | 'lg';
 
 const proButtonVariants: Record<ProButtonVariant, string> = {
-  // White-on-black CTA (theme spec) with press-scale + premium easing
+  // White-on-black CTA (pill shape)
   primary:
-    'bg-white text-black hover:bg-white/90 press-scale glow-accent-btn rounded-full font-semibold',
+    'bg-white text-black hover:bg-neutral-200 active:scale-[0.98] rounded-full font-semibold shadow-sm transition-all',
   // Glass secondary
   glass:
-    'glass-surface text-white hover:bg-white/10 press-scale rounded-full font-semibold',
+    'bg-white/[0.06] border border-white/10 text-white hover:bg-white/[0.12] active:scale-[0.98] rounded-full font-semibold transition-all',
   // Ghost (text only)
   ghost:
-    'text-white/70 hover:text-white hover:bg-white/5 rounded-lg font-medium transition-colors',
-  // Blue accent (theme spec #3B82F6)
+    'text-white/70 hover:text-white hover:bg-white/5 rounded-full font-medium transition-colors',
+  // Accent maps to pure white pill button
   accent:
-    'bg-[#3B82F6] text-white hover:bg-[#2563EB] press-scale glow-accent-btn rounded-full font-semibold',
+    'bg-white text-black hover:bg-neutral-200 active:scale-[0.98] rounded-full font-semibold shadow-sm transition-all',
 };
 
 const proButtonSizes: Record<ProButtonSize, string> = {

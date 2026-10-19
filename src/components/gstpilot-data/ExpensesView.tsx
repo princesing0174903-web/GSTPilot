@@ -356,7 +356,6 @@ export default function ExpensesView() {
         </div>
         <Button
           onClick={openCreate}
-          className="bg-emerald-500 text-black hover:bg-emerald-400"
         >
           <Plus className="mr-2 h-4 w-4" />
           Record Expense
@@ -736,9 +735,8 @@ export default function ExpensesView() {
             <Button
               onClick={handleSubmit}
               disabled={saving}
-              className="bg-emerald-500 text-black hover:bg-emerald-400"
+              loading={saving}
             >
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editing ? 'Save Changes' : 'Record Expense'}
             </Button>
           </DialogFooter>
@@ -788,7 +786,7 @@ function EmptyState({ onCreate, hasSearch }: { onCreate: () => void; hasSearch: 
         </p>
       </div>
       {!hasSearch && (
-        <Button onClick={onCreate} className="bg-emerald-500 text-black hover:bg-emerald-400">
+        <Button onClick={onCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Record Expense
         </Button>

@@ -589,7 +589,6 @@ export function InvoiceUploadDialog({
               <Button
                 onClick={runPipeline}
                 disabled={!file}
-                className="bg-emerald-500 text-black hover:bg-emerald-400"
               >
                 <Sparkles className="mr-2 h-4 w-4" />
                 Upload &amp; Extract
@@ -618,13 +617,9 @@ export function InvoiceUploadDialog({
               <Button
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-emerald-500 text-black hover:bg-emerald-400"
+                loading={saving}
               >
-                {saving ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                )}
+                {!saving && <CheckCircle2 className="mr-2 h-4 w-4" />}
                 {saving ? 'Saving…' : 'Save Invoice'}
               </Button>
             </>

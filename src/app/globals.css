@@ -74,86 +74,86 @@
      border             = hsl(0, 0%, 18%)    #383838   (subtle)
    ─────────────────────────────────────────────────────────────────────────────── */
 :root {
-  --background: hsl(0, 0%, 0%);
+  --background: #000000;
   --foreground: #FFFFFF;
-  --surface: hsl(0, 0%, 6%);
+  --surface: #0E0E0E;
   --surface-foreground: #FFFFFF;
-  --surface-elevated: hsl(0, 0%, 6%);
+  --surface-elevated: #141414;
   --surface-elevated-foreground: #FFFFFF;
-  --card: hsl(0, 0%, 6%);
+  --card: #0E0E0E;
   --card-foreground: #FFFFFF;
-  --popover: hsl(0, 0%, 6%);
+  --popover: #0E0E0E;
   --popover-foreground: #FFFFFF;
-  --primary: #2563EB;
-  --primary-foreground: #FFFFFF;
-  --secondary: hsl(0, 0%, 12%);
-  --secondary-foreground: #FFFFFF;
-  --muted: hsl(0, 0%, 6%);
-  --muted-foreground: hsla(0, 0%, 100%, 0.55);
-  --accent: hsl(0, 0%, 12%);
+  --primary: #FFFFFF;
+  --primary-foreground: #000000;
+  --secondary: #181818;
+  --secondary-foreground: #EDEDED;
+  --muted: #141414;
+  --muted-foreground: #A1A1A1;
+  --accent: #181818;
   --accent-foreground: #FFFFFF;
   --destructive: #EF4444;
   --destructive-foreground: #FFFFFF;
-  --border: hsl(0, 0%, 18%);
-  --input: hsl(0, 0%, 6%);
-  --ring: #2563EB;
-  --chart-1: #2563EB;
-  --chart-2: #8B5CF6;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: #121212;
+  --ring: rgba(255, 255, 255, 0.8);
+  --chart-1: #FFFFFF;
+  --chart-2: #A1A1A1;
   --chart-3: #F59E0B;
   --chart-4: #EF4444;
   --chart-5: #64748B;
-  --radius: 0.625rem;
-  --sidebar: hsl(0, 0%, 6%);
+  --radius: 9999px;
+  --sidebar: #000000;
   --sidebar-foreground: #FFFFFF;
-  --sidebar-primary: #2563EB;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: hsl(0, 0%, 6%);
+  --sidebar-primary: #FFFFFF;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #141414;
   --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: hsl(0, 0%, 20%);
-  --sidebar-ring: #2563EB;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: rgba(255, 255, 255, 0.8);
   --caret-color: #FFFFFF;
 }
 
 /* `.dark` class inherits the same `:root` values — kept for backward-compat
    with shadcn components that use `dark:` Tailwind variants. */
 .dark {
-  --background: hsl(0, 0%, 0%);
+  --background: #000000;
   --foreground: #FFFFFF;
-  --surface: hsl(0, 0%, 6%);
+  --surface: #0E0E0E;
   --surface-foreground: #FFFFFF;
-  --surface-elevated: hsl(0, 0%, 6%);
+  --surface-elevated: #141414;
   --surface-elevated-foreground: #FFFFFF;
-  --card: hsl(0, 0%, 6%);
+  --card: #0E0E0E;
   --card-foreground: #FFFFFF;
-  --popover: hsl(0, 0%, 6%);
+  --popover: #0E0E0E;
   --popover-foreground: #FFFFFF;
-  --primary: #2563EB;
-  --primary-foreground: #FFFFFF;
-  --secondary: hsl(0, 0%, 12%);
-  --secondary-foreground: #FFFFFF;
-  --muted: hsl(0, 0%, 6%);
-  --muted-foreground: hsla(0, 0%, 100%, 0.55);
-  --accent: hsl(0, 0%, 12%);
+  --primary: #FFFFFF;
+  --primary-foreground: #000000;
+  --secondary: #181818;
+  --secondary-foreground: #EDEDED;
+  --muted: #141414;
+  --muted-foreground: #A1A1A1;
+  --accent: #181818;
   --accent-foreground: #FFFFFF;
   --destructive: #EF4444;
   --destructive-foreground: #FFFFFF;
-  --border: hsl(0, 0%, 18%);
-  --input: hsl(0, 0%, 6%);
-  --ring: #2563EB;
-  --chart-1: #2563EB;
-  --chart-2: #8B5CF6;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: #121212;
+  --ring: rgba(255, 255, 255, 0.8);
+  --chart-1: #FFFFFF;
+  --chart-2: #A1A1A1;
   --chart-3: #F59E0B;
   --chart-4: #EF4444;
   --chart-5: #64748B;
-  --radius: 0.625rem;
-  --sidebar: hsl(0, 0%, 6%);
+  --radius: 9999px;
+  --sidebar: #000000;
   --sidebar-foreground: #FFFFFF;
-  --sidebar-primary: #2563EB;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: hsl(0, 0%, 6%);
+  --sidebar-primary: #FFFFFF;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #141414;
   --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: hsl(0, 0%, 20%);
-  --sidebar-ring: #2563EB;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: rgba(255, 255, 255, 0.8);
   --caret-color: #FFFFFF;
 }
 
@@ -2237,61 +2237,84 @@
 
 @layer components {
   .gst-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:ring-offset-0 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed whitespace-nowrap active:scale-[0.98] select-none;
-    /* Height + padding are variant-specific (see below) but the base is h-9 */
-    @apply h-9 px-4 text-xs;
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed whitespace-nowrap active:scale-[0.98] select-none;
+    @apply h-9 px-4 text-xs sm:text-sm;
   }
-  .gst-btn-sm { @apply h-8 px-3 text-xs rounded-md; }
-  .gst-btn-lg { @apply h-10 px-5 text-sm rounded-lg; }
-  .gst-btn-xl { @apply h-11 px-6 text-sm rounded-lg; }
+  .gst-btn-sm { @apply h-8 px-3.5 text-xs rounded-full font-semibold; }
+  .gst-btn-lg { @apply h-10 px-5 text-sm rounded-full font-semibold; }
+  .gst-btn-xl { @apply h-11 px-6 text-sm rounded-full font-semibold; }
 
-  /* Primary — minimal solid white on black */
+  /* Primary — white pill button with bold black text */
   .gst-btn-primary {
-    @apply bg-white text-black hover:bg-white/90 active:bg-white/80 shadow-none border border-transparent font-medium;
+    @apply bg-white text-black hover:bg-neutral-200 active:bg-neutral-300 shadow-none border border-transparent font-semibold rounded-full px-4;
   }
 
-  /* Secondary — subtle surface */
+  /* Secondary — subtle dark surface pill */
   .gst-btn-secondary {
-    @apply bg-[#181818] text-[#EDEDED] border border-white/[0.08] hover:bg-[#222222] hover:border-white/20 active:bg-[#141414];
+    @apply bg-[#181818] text-[#EDEDED] border border-white/[0.08] hover:bg-[#222222] hover:border-white/20 active:bg-[#141414] font-medium rounded-full px-4;
   }
   :root:not(.dark) .gst-btn-secondary {
-    @apply bg-[#F4F4F5] text-[#0A0A0A] border-[#E4E4E7] hover:bg-[#E4E4E7];
+    @apply bg-[#F4F4F5] text-[#0A0A0A] border-[#E4E4E7] hover:bg-[#E4E4E7] rounded-full;
   }
 
-  /* Ghost — transparent, hover surface */
+  /* Ghost — transparent pill */
   .gst-btn-ghost {
-    @apply bg-transparent text-[#A1A1A1] hover:bg-white/[0.04] hover:text-[#EDEDED] active:bg-white/[0.08];
+    @apply bg-transparent text-[#A1A1A1] hover:bg-white/[0.04] hover:text-[#EDEDED] active:bg-white/[0.08] font-medium rounded-full px-3;
   }
   :root:not(.dark) .gst-btn-ghost {
-    @apply hover:bg-[#F4F4F5];
+    @apply hover:bg-[#F4F4F5] rounded-full;
   }
 
-  /* Danger — subtle rose */
+  /* Danger — subtle rose pill */
   .gst-btn-danger {
-    @apply bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 hover:border-rose-500/30 active:bg-rose-500/25;
+    @apply bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 hover:border-rose-500/30 active:bg-rose-500/25 font-medium rounded-full px-4;
   }
 
-  /* Success — crisp neutral */
+  /* Success — crisp neutral white pill */
   .gst-btn-success {
-    @apply bg-white text-black hover:bg-white/90;
+    @apply bg-white text-black hover:bg-neutral-200 rounded-full font-semibold px-4;
   }
 
-  /* Outline — border only */
+  /* Outline — border only pill */
   .gst-btn-outline {
-    @apply bg-transparent text-[#EDEDED] border border-white/[0.08] hover:bg-white/[0.04] hover:border-white/20 active:bg-white/[0.08];
+    @apply bg-transparent text-[#EDEDED] border border-white/[0.12] hover:bg-white/[0.06] hover:border-white/20 active:bg-white/[0.08] font-medium rounded-full px-4;
   }
   :root:not(.dark) .gst-btn-outline {
-    @apply border-[#E4E4E7] hover:bg-[#F4F4F5] hover:border-[#D4D4D8];
+    @apply border-[#E4E4E7] hover:bg-[#F4F4F5] hover:border-[#D4D4D8] rounded-full;
   }
 
-  /* Loading state — spinner replaces text */
+  /* Loading state — circular progress indicator */
   .gst-btn-loading {
     @apply pointer-events-none opacity-80;
   }
   .gst-btn-loading::after {
     content: '';
-    @apply inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin;
+    display: inline-block;
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 9999px;
+    border: 2px solid rgba(0, 0, 0, 0.15);
+    border-top-color: #000000;
+    border-right-color: #000000;
+    animation: gst-spin-smooth 0.75s linear infinite;
   }
+  .gst-btn-secondary.gst-btn-loading::after,
+  .gst-btn-outline.gst-btn-loading::after,
+  .gst-btn-ghost.gst-btn-loading::after {
+    border-color: rgba(255, 255, 255, 0.15);
+    border-top-color: #00E5FF;
+    border-right-color: #00E5FF;
+  }
+
+  /* Instructional and contextual microcopy standard ("Customize your view") */
+  .gst-instructional {
+    @apply text-xs sm:text-sm text-[#A1A1A1] font-normal leading-relaxed;
+  }
+}
+
+@keyframes gst-spin-smooth {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -2599,13 +2622,13 @@ html {
   transition: background-color 0.12s ease, opacity 0.12s ease;
 }
 .gst-table-row:hover {
-  background-color: rgba(37, 99, 235, 0.04);
+  background-color: rgba(255, 255, 255, 0.03);
 }
 .gst-table-row-selected {
-  background-color: rgba(37, 99, 235, 0.08);
+  background-color: rgba(255, 255, 255, 0.06);
 }
 .gst-table-row-selected:hover {
-  background-color: rgba(37, 99, 235, 0.12);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 /* Sticky header shadow */
@@ -2667,7 +2690,7 @@ html {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: 9999px;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.4;
@@ -2675,9 +2698,9 @@ html {
   transition: all 0.15s ease;
 }
 .gst-badge-success {
-  background: rgba(37, 99, 235, 0.12);
-  color: #60A5FA;
-  border: 1px solid rgba(37, 99, 235, 0.2);
+  background: rgba(16, 185, 129, 0.12);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 .gst-badge-warning {
   background: rgba(245, 158, 11, 0.12);
@@ -2690,9 +2713,9 @@ html {
   border: 1px solid rgba(239, 68, 68, 0.2);
 }
 .gst-badge-neutral {
-  background: rgba(161, 161, 170, 0.12);
-  color: #A1A1AA;
-  border: 1px solid rgba(161, 161, 170, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: #EDEDED;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* ─── 7. PREMIUM TOOLTIP ───────────────────────────────────────────────────── */
@@ -2750,8 +2773,8 @@ html {
 }
 .gst-input-premium:focus-visible {
   outline: none;
-  border-color: #2563EB;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 
 /* ─── 12. PREMIUM DIVIDER ───────────────────────────────────────────────────── */
@@ -2770,17 +2793,17 @@ html {
 .gst-progress-track {
   position: relative;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 9999px;
 }
 :root:not(.dark) .gst-progress-track {
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.08);
 }
 .gst-progress-fill {
   position: relative;
   height: 100%;
   border-radius: 9999px;
-  background: #2563EB;
+  background: #FFFFFF;
   transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
 }
@@ -2791,7 +2814,7 @@ html {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(255, 255, 255, 0.2),
+    rgba(0, 0, 0, 0.15),
     transparent
   );
   animation: gst-progress-shine 1.8s ease-in-out infinite;
@@ -2815,7 +2838,7 @@ html {
   inset: 0;
   background: radial-gradient(
     circle at top right,
-    rgba(37, 99, 235, 0.06),
+    rgba(255, 255, 255, 0.04),
     transparent 60%
   );
   opacity: 0;
@@ -2824,7 +2847,7 @@ html {
 }
 .gst-metric-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(37, 99, 235, 0.25);
+  border-color: rgba(255, 255, 255, 0.2);
   box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.5);
 }
 .gst-metric-card:hover::before {
@@ -2845,7 +2868,7 @@ html {
   position: absolute;
   bottom: 0;
   height: 2px;
-  background: #2563EB;
+  background: #FFFFFF;
   border-radius: 2px 2px 0 0;
   transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1),
               width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
@@ -2888,11 +2911,11 @@ html {
   transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 .gst-selectable:hover {
-  background-color: rgba(37, 99, 235, 0.03);
+  background-color: rgba(255, 255, 255, 0.03);
 }
 .gst-selectable[data-selected="true"] {
-  background-color: rgba(37, 99, 235, 0.06);
-  box-shadow: inset 2px 0 0 #2563EB;
+  background-color: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 2px 0 0 #FFFFFF;
 }
 
 /* ─── 21. COMPACT LAYOUT (reduce vertical whitespace) ───────────────────────── */

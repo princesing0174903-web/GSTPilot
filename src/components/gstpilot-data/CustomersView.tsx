@@ -257,9 +257,9 @@ export default function CustomersView() {
         </div>
         <Button
           onClick={openCreate}
-          className="bg-emerald-500 text-black hover:bg-emerald-400"
+          className="gap-2"
         >
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="h-4 w-4 mr-1" />
           Create Customer
         </Button>
       </div>
@@ -579,9 +579,9 @@ export default function CustomersView() {
             <Button
               onClick={handleSubmit}
               disabled={saving}
-              className="bg-emerald-500 text-black hover:bg-emerald-400"
+              loading={saving}
+              className="gap-2"
             >
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editing ? 'Save Changes' : 'Create Customer'}
             </Button>
           </DialogFooter>
@@ -633,8 +633,8 @@ function EmptyState({ onCreate, hasSearch }: { onCreate: () => void; hasSearch: 
         </p>
       </div>
       {!hasSearch && (
-        <Button onClick={onCreate} className="bg-emerald-500 text-black hover:bg-emerald-400">
-          <Plus className="mr-2 h-4 w-4" />
+        <Button onClick={onCreate} className="gap-2">
+          <Plus className="h-4 w-4 mr-1" />
           Create Customer
         </Button>
       )}

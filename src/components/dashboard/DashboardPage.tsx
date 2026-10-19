@@ -442,33 +442,33 @@ export default function DashboardPage() {
           <Button
             size="sm"
             onClick={() => setCurrentView('invoices')}
-            className="h-8 gap-2 bg-white text-black hover:bg-white/90 font-medium px-3.5 rounded-lg text-xs shadow-none cursor-pointer"
+            className="h-8 gap-2 px-3.5 text-xs shadow-none cursor-pointer"
           >
             <FileText className="h-3.5 w-3.5 text-black" strokeWidth={1.5} />
             <span>Create Invoice</span>
-            <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-black/10 text-black/70">C</kbd>
+            <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded-full bg-black/10 text-black/70">C</kbd>
           </Button>
 
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setCurrentView('returns')}
-            className="h-8 gap-2 border border-white/[0.08] hover:border-white/20 bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] font-medium px-3.5 rounded-lg text-xs cursor-pointer"
+            className="h-8 gap-2 border border-white/[0.08] hover:border-white/20 bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] px-3.5 text-xs cursor-pointer"
           >
             <ShieldCheck className="h-3.5 w-3.5 text-[#A1A1A1]" strokeWidth={1.5} />
             <span>File GST</span>
-            <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-white/[0.06] text-[#A1A1A1]">R</kbd>
+            <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded-full bg-white/[0.06] text-[#A1A1A1]">R</kbd>
           </Button>
 
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setCurrentView('clients')}
-            className="h-8 gap-2 border border-white/[0.08] hover:border-white/20 bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] font-medium px-3.5 rounded-lg text-xs cursor-pointer"
+            className="h-8 gap-2 border border-white/[0.08] hover:border-white/20 bg-transparent text-[#A1A1A1] hover:text-[#EDEDED] hover:bg-white/[0.04] px-3.5 text-xs cursor-pointer"
           >
             <Users className="h-3.5 w-3.5 text-[#A1A1A1]" strokeWidth={1.5} />
             <span>Add Client</span>
-            <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded bg-white/[0.06] text-[#A1A1A1]">A</kbd>
+            <kbd className="hidden sm:inline-flex items-center text-[10px] font-mono px-1 py-0.2 rounded-full bg-white/[0.06] text-[#A1A1A1]">A</kbd>
           </Button>
         </div>
       </motion.div>

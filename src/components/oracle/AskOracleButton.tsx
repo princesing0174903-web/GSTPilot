@@ -100,10 +100,10 @@ export function AskOracleButton({
     router.push('/oracle');
   }, [context, prompt, router, setPendingPrompt]);
 
-  const heightClass = size === 'sm' ? 'h-8' : 'h-9';
-  const paddingClass = size === 'sm' ? 'px-2.5' : 'px-3';
-  const iconClass = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
-  const textClass = size === 'sm' ? 'text-xs' : 'text-[13px]';
+  const heightClass = size === 'sm' ? 'min-h-[38px] h-9' : 'min-h-[44px] h-11';
+  const paddingClass = size === 'sm' ? 'px-5' : 'px-7';
+  const iconClass = 'h-4 w-4';
+  const textClass = size === 'sm' ? 'text-xs sm:text-sm font-bold' : 'text-sm font-bold';
 
   return (
     <button
@@ -112,17 +112,16 @@ export function AskOracleButton({
       aria-label={label}
       title={prompt ?? DEFAULT_PROMPTS[context] ?? DEFAULT_PROMPTS.generic}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/[0.06] font-medium text-amber-400 outline-none transition-all duration-150',
-        'hover:border-amber-500/40 hover:bg-amber-500/[0.12] hover:text-amber-300',
-        'focus-visible:ring-2 focus-visible:ring-amber-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-        'active:scale-[0.98] gst-btn-press',
+        'inline-flex items-center gap-2 rounded-full bg-white text-black font-bold outline-none shadow-none transition-all duration-150',
+        'hover:bg-[#E5E5E5] active:bg-[#D4D4D4] active:scale-[0.98] select-none',
+        'focus-visible:ring-2 focus-visible:ring-white/80',
         heightClass,
         paddingClass,
         textClass,
         className,
       )}
     >
-      <Brain className={iconClass} aria-hidden />
+      <Brain className={cn(iconClass, 'stroke-[2.5] text-black')} aria-hidden />
       <span className="truncate">{label}</span>
     </button>
   );

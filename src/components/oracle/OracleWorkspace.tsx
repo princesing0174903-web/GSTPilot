@@ -914,10 +914,9 @@ export function OracleWorkspace({
                 type="button"
                 onClick={handleNewChat}
                 disabled={isStreaming}
-                className="flex w-full items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/[0.05] disabled:opacity-40"
-                style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#111111' }}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition-all hover:bg-neutral-200 active:scale-95 disabled:opacity-40"
               >
-                <Plus className="h-4 w-4 text-emerald-400" />
+                <Plus className="h-4 w-4 stroke-[2.5]" />
                 New Chat
               </button>
             </div>
@@ -1150,7 +1149,7 @@ export function OracleWorkspace({
                     <button
                       type="button"
                       onClick={handleStop}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white transition-colors hover:bg-white/[0.08]"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.08]"
                       style={{ background: 'rgba(255,255,255,0.06)' }}
                       aria-label="Stop"
                     >
@@ -1161,13 +1160,10 @@ export function OracleWorkspace({
                       type="button"
                       onClick={() => sendMessage(input)}
                       disabled={!input.trim()}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-lg shadow-emerald-500/20 transition-all hover:opacity-90 disabled:opacity-30 disabled:shadow-none"
-                      style={{
-                        background: 'linear-gradient(135deg, #10B981 0%, #047857 100%)',
-                      }}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black font-bold shadow-none transition-all hover:bg-neutral-200 active:scale-95 disabled:opacity-30 disabled:hover:bg-white"
                       aria-label="Send"
                     >
-                      <ArrowUp className="h-4 w-4" />
+                      <ArrowUp className="h-4 w-4 stroke-[2.5]" />
                     </button>
                   )}
                 </div>
@@ -1431,10 +1427,9 @@ function MessageBubble({
                 key={i}
                 type="button"
                 onClick={() => a.view && onNavigate(a.view)}
-                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:brightness-110"
-                style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-1.5 text-xs font-bold text-black shadow-none transition-all hover:bg-neutral-200 active:scale-95"
               >
-                <ArrowRight className="h-3 w-3" />
+                <ArrowRight className="h-3 w-3 stroke-[2.5]" />
                 {a.label}
               </button>
             ))}

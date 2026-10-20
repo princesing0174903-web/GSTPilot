@@ -2922,11 +2922,11 @@ function ActionConfirmCard({
               disabled={isExecuting}
               onClick={() => onConfirm?.(part.toolCallId)}
               className={isStrongConfirm
-                ? 'h-8 gap-1.5 bg-rose-600 hover:bg-rose-500 text-white border-0'
-                : 'h-8 gap-1.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white border-0'
+                ? 'h-9 px-5 gap-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-full border-0'
+                : 'h-9 px-5 gap-1.5 font-bold'
               }
             >
-              {isExecuting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              {isExecuting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" />}
               {isExecuting ? 'Executing…' : isStrongConfirm ? 'Approve (irreversible)' : 'Confirm & Execute'}
             </Button>
             <Button

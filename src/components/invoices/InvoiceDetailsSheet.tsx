@@ -786,9 +786,9 @@ function PaymentsTab({
           onClick={onMarkPaid}
           disabled={saving || isPaid}
           loading={saving}
-          className="w-full gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-500"
+          className="w-full gap-2 h-11 text-sm font-bold"
         >
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
           {isPaid ? 'Already Paid' : 'Record Payment'}
         </Button>
       )}
@@ -953,9 +953,9 @@ function ActionBar({
             onClick={onMarkPaid}
             disabled={saving}
             loading={saving}
-            className="gap-1.5 rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-500/25 hover:bg-blue-500"
+            className="gap-1.5 h-9 px-5 font-bold"
           >
-            <CheckCircle2 className="h-3.5 w-3.5" />
+            <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" />
             <span className="hidden sm:inline">Mark Paid</span>
           </Button>
         )}

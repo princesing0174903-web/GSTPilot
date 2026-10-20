@@ -155,11 +155,11 @@ export function OracleInputBar({
             className={cn(
               'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all',
               value.trim() && !disabled
-                ? 'bg-[#2563EB] text-white hover:bg-[#1D4ED8] hover:shadow-[0_4px_14px_-2px_rgba(37,99,235,0.45)]'
+                ? 'bg-white text-black font-bold hover:bg-neutral-200 active:scale-95 shadow-none'
                 : 'cursor-not-allowed bg-white/[0.05] text-white/35',
             )}
           >
-            <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
+            <ArrowUp className="h-4 w-4 stroke-[2.5]" />
           </motion.button>
         )}
       </motion.div>

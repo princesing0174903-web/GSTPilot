@@ -311,7 +311,7 @@ export function WorkflowPlanCard({
             <Button
               size="sm"
               onClick={() => onConfirm?.(plan)}
-              className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border-0"
+              className="h-9 px-5 gap-1.5 font-bold"
             >
               <Sparkles className="h-3.5 w-3.5" />
               Run workflow ({plan.steps.length} steps)

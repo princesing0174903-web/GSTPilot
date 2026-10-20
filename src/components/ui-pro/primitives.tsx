@@ -26,22 +26,22 @@ type ProButtonSize = 'sm' | 'md' | 'lg';
 const proButtonVariants: Record<ProButtonVariant, string> = {
   // White-on-black CTA (pill shape)
   primary:
-    'bg-white text-black hover:bg-neutral-200 active:scale-[0.98] rounded-full font-semibold shadow-sm transition-all',
+    'bg-white text-black hover:bg-[#E5E5E5] active:scale-[0.98] rounded-full font-bold shadow-none transition-all',
   // Glass secondary
   glass:
-    'bg-white/[0.06] border border-white/10 text-white hover:bg-white/[0.12] active:scale-[0.98] rounded-full font-semibold transition-all',
+    'bg-white text-black hover:bg-[#E5E5E5] active:scale-[0.98] rounded-full font-bold shadow-none transition-all',
   // Ghost (text only)
   ghost:
-    'text-white/70 hover:text-white hover:bg-white/5 rounded-full font-medium transition-colors',
+    'bg-white/[0.08] text-white hover:bg-white hover:text-black rounded-full font-bold transition-colors',
   // Accent maps to pure white pill button
   accent:
-    'bg-white text-black hover:bg-neutral-200 active:scale-[0.98] rounded-full font-semibold shadow-sm transition-all',
+    'bg-white text-black hover:bg-[#E5E5E5] active:scale-[0.98] rounded-full font-bold shadow-none transition-all',
 };
 
 const proButtonSizes: Record<ProButtonSize, string> = {
-  sm: 'px-3.5 py-1.5 text-xs gap-1.5',
-  md: 'px-5 py-2.5 text-sm gap-2',
-  lg: 'px-7 py-3.5 text-base gap-2',
+  sm: 'min-h-[38px] px-6 py-2 text-xs sm:text-sm gap-2',
+  md: 'min-h-[44px] px-8 py-3 text-sm sm:text-[15px] gap-2',
+  lg: 'min-h-[48px] px-10 py-3.5 text-base gap-2.5',
 };
 
 export interface ProButtonProps

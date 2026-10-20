@@ -290,13 +290,13 @@ export const OracleInput = forwardRef<OracleInputHandle, OracleInputProps>(
                 className={cn(
                   'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all',
                   canSend
-                    ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-white hover:shadow-[0_4px_14px_-2px_rgba(245,158,11,0.5)] hover:brightness-110'
+                    ? 'bg-white text-black font-bold hover:bg-neutral-200 active:scale-95 shadow-none'
                     : 'cursor-not-allowed bg-white/[0.05] text-white/35'
                 )}
                 aria-label="Send message"
                 title="Send (Enter)"
               >
-                <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
+                <ArrowUp className="h-4 w-4 stroke-[2.5]" />
               </button>
             )}
           </div>

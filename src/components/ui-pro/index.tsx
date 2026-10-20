@@ -24,24 +24,24 @@ type ProButtonVariant = 'primary' | 'glass' | 'ghost' | 'accent';
 type ProButtonSize = 'sm' | 'md' | 'lg';
 
 const proButtonVariants: Record<ProButtonVariant, string> = {
-  // White-on-black CTA (theme spec) with press-scale + premium easing
+  // White-on-black CTA (pill shape)
   primary:
-    'bg-white text-black hover:bg-white/90 press-scale glow-accent-btn rounded-full font-semibold',
+    'bg-white text-black hover:bg-[#E5E5E5] active:scale-[0.98] rounded-full font-bold shadow-none transition-all',
   // Glass secondary
   glass:
-    'glass-surface text-white hover:bg-white/10 press-scale rounded-full font-semibold',
+    'bg-white text-black hover:bg-[#E5E5E5] active:scale-[0.98] rounded-full font-bold shadow-none transition-all',
   // Ghost (text only)
   ghost:
-    'text-white/70 hover:text-white hover:bg-white/5 rounded-lg font-medium transition-colors',
-  // Blue accent (theme spec #3B82F6)
+    'bg-white/[0.08] text-white hover:bg-white hover:text-black rounded-full font-bold transition-colors',
+  // Accent maps to pure white pill button
   accent:
-    'bg-[#3B82F6] text-white hover:bg-[#2563EB] press-scale glow-accent-btn rounded-full font-semibold',
+    'bg-white text-black hover:bg-[#E5E5E5] active:scale-[0.98] rounded-full font-bold shadow-none transition-all',
 };
 
 const proButtonSizes: Record<ProButtonSize, string> = {
-  sm: 'px-3.5 py-1.5 text-xs gap-1.5',
-  md: 'px-5 py-2.5 text-sm gap-2',
-  lg: 'px-7 py-3.5 text-base gap-2',
+  sm: 'min-h-[38px] px-6 py-2 text-xs sm:text-sm gap-2',
+  md: 'min-h-[44px] px-8 py-3 text-sm sm:text-[15px] gap-2',
+  lg: 'min-h-[48px] px-10 py-3.5 text-base gap-2.5',
 };
 
 export interface ProButtonProps

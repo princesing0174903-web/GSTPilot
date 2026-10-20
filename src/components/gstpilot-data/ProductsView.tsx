@@ -256,7 +256,7 @@ export default function ProductsView() {
             Live product & service catalog — synced with Firestore in real-time.
           </p>
         </div>
-        <Button onClick={openCreate} className="bg-emerald-500 text-black hover:bg-emerald-400">
+        <Button onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Create Product
         </Button>
@@ -620,9 +620,8 @@ export default function ProductsView() {
             <Button
               onClick={handleSubmit}
               disabled={saving}
-              className="bg-emerald-500 text-black hover:bg-emerald-400"
+              loading={saving}
             >
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editing ? 'Save Changes' : 'Create Product'}
             </Button>
           </DialogFooter>
@@ -670,7 +669,7 @@ function EmptyState({ onCreate, hasSearch }: { onCreate: () => void; hasSearch: 
         </p>
       </div>
       {!hasSearch && (
-        <Button onClick={onCreate} className="bg-emerald-500 text-black hover:bg-emerald-400">
+        <Button onClick={onCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Create Product
         </Button>

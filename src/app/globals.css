@@ -2237,50 +2237,35 @@
 
 @layer components {
   .gst-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed whitespace-nowrap active:scale-[0.98] select-none;
-    @apply h-9 px-4 text-xs sm:text-sm;
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-bold transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed whitespace-nowrap active:scale-[0.98] select-none;
+    @apply min-h-[44px] h-11 px-8 py-3 text-sm sm:text-[15px];
   }
-  .gst-btn-sm { @apply h-8 px-3.5 text-xs rounded-full font-semibold; }
-  .gst-btn-lg { @apply h-10 px-5 text-sm rounded-full font-semibold; }
-  .gst-btn-xl { @apply h-11 px-6 text-sm rounded-full font-semibold; }
+  .gst-btn-sm { @apply min-h-[38px] h-9 px-6 text-xs sm:text-sm rounded-full font-bold; }
+  .gst-btn-lg { @apply min-h-[48px] h-12 px-9 text-base rounded-full font-bold; }
+  .gst-btn-xl { @apply min-h-[54px] h-14 px-10 text-lg rounded-full font-bold; }
 
   /* Primary — white pill button with bold black text */
-  .gst-btn-primary {
-    @apply bg-white text-black hover:bg-neutral-200 active:bg-neutral-300 shadow-none border border-transparent font-semibold rounded-full px-4;
-  }
-
-  /* Secondary — subtle dark surface pill */
-  .gst-btn-secondary {
-    @apply bg-[#181818] text-[#EDEDED] border border-white/[0.08] hover:bg-[#222222] hover:border-white/20 active:bg-[#141414] font-medium rounded-full px-4;
+  .gst-btn-primary,
+  .gst-btn-secondary,
+  .gst-btn-outline,
+  .gst-btn-success {
+    @apply bg-white text-black hover:bg-[#E5E5E5] active:bg-[#D4D4D4] shadow-none border-0 font-bold rounded-full min-h-[44px] px-8 py-3;
   }
   :root:not(.dark) .gst-btn-secondary {
-    @apply bg-[#F4F4F5] text-[#0A0A0A] border-[#E4E4E7] hover:bg-[#E4E4E7] rounded-full;
+    @apply bg-white text-black rounded-full;
   }
 
-  /* Ghost — transparent pill */
+  /* Ghost — subtle pill */
   .gst-btn-ghost {
-    @apply bg-transparent text-[#A1A1A1] hover:bg-white/[0.04] hover:text-[#EDEDED] active:bg-white/[0.08] font-medium rounded-full px-3;
+    @apply bg-white/[0.08] text-white hover:bg-white hover:text-black active:bg-[#E5E5E5] font-bold rounded-full min-h-[44px] px-6;
   }
   :root:not(.dark) .gst-btn-ghost {
-    @apply hover:bg-[#F4F4F5] rounded-full;
+    @apply hover:bg-white hover:text-black rounded-full;
   }
 
   /* Danger — subtle rose pill */
   .gst-btn-danger {
-    @apply bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 hover:border-rose-500/30 active:bg-rose-500/25 font-medium rounded-full px-4;
-  }
-
-  /* Success — crisp neutral white pill */
-  .gst-btn-success {
-    @apply bg-white text-black hover:bg-neutral-200 rounded-full font-semibold px-4;
-  }
-
-  /* Outline — border only pill */
-  .gst-btn-outline {
-    @apply bg-transparent text-[#EDEDED] border border-white/[0.12] hover:bg-white/[0.06] hover:border-white/20 active:bg-white/[0.08] font-medium rounded-full px-4;
-  }
-  :root:not(.dark) .gst-btn-outline {
-    @apply border-[#E4E4E7] hover:bg-[#F4F4F5] hover:border-[#D4D4D8] rounded-full;
+    @apply bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-600 hover:text-white active:bg-rose-700 font-bold rounded-full min-h-[44px] px-6;
   }
 
   /* Loading state — circular progress indicator */
@@ -2290,20 +2275,13 @@
   .gst-btn-loading::after {
     content: '';
     display: inline-block;
-    width: 0.875rem;
-    height: 0.875rem;
+    width: 1rem;
+    height: 1rem;
     border-radius: 9999px;
     border: 2px solid rgba(0, 0, 0, 0.15);
     border-top-color: #000000;
     border-right-color: #000000;
     animation: gst-spin-smooth 0.75s linear infinite;
-  }
-  .gst-btn-secondary.gst-btn-loading::after,
-  .gst-btn-outline.gst-btn-loading::after,
-  .gst-btn-ghost.gst-btn-loading::after {
-    border-color: rgba(255, 255, 255, 0.15);
-    border-top-color: #00E5FF;
-    border-right-color: #00E5FF;
   }
 
   /* Instructional and contextual microcopy standard ("Customize your view") */
@@ -2315,6 +2293,140 @@
 @keyframes gst-spin-smooth {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   UNIVERSAL PILL BUTTON ARCHITECTURE (EXACT MATCH TO REFERENCE "POST" BUTTON)
+   Pure solid white fill (#FFFFFF), bold black text (#000000), rounded-full pill
+   Dimensions: "a little big" — 44px min-height, generous horizontal padding
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+button[data-slot="button"]:not([data-variant="link"]):not([data-variant="ghost"]):not([data-variant="destructive"]),
+button.gst-btn,
+button.gst-btn-primary,
+button.gst-btn-secondary,
+button.gst-btn-outline,
+button.gst-btn-success,
+button.btn,
+button.btn-primary,
+.gst-btn,
+.gst-btn-primary,
+.gst-btn-secondary,
+.gst-btn-outline,
+.gst-btn-success {
+  border-radius: 9999px !important;
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+  color: #000000 !important;
+  font-weight: 700 !important;
+  font-size: 0.9375rem !important;
+  min-height: 44px !important;
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
+  box-shadow: none !important;
+  border: none !important;
+  letter-spacing: -0.01em !important;
+}
+
+button[data-slot="button"]:not([data-variant="link"]):not([data-variant="ghost"]):not([data-variant="destructive"]):hover,
+button.gst-btn:hover,
+button.gst-btn-primary:hover,
+button.gst-btn-secondary:hover,
+button.gst-btn-outline:hover,
+button.gst-btn-success:hover,
+button.btn:hover,
+button.btn-primary:hover,
+.gst-btn:hover,
+.gst-btn-primary:hover,
+.gst-btn-secondary:hover,
+.gst-btn-outline:hover,
+.gst-btn-success:hover {
+  background-color: #E5E5E5 !important;
+  color: #000000 !important;
+}
+
+button[data-slot="button"]:not([data-variant="link"]):not([data-variant="ghost"]):not([data-variant="destructive"]):active,
+button.gst-btn:active,
+button.gst-btn-primary:active,
+button.gst-btn-secondary:active,
+button.gst-btn-outline:active,
+button.gst-btn-success:active,
+.gst-btn:active,
+.gst-btn-primary:active,
+.gst-btn-secondary:active,
+.gst-btn-outline:active,
+.gst-btn-success:active {
+  background-color: #D4D4D4 !important;
+  transform: scale(0.98);
+}
+
+button[data-slot="button"]:not([data-variant="link"]):not([data-variant="ghost"]):not([data-variant="destructive"]) svg,
+button.gst-btn svg,
+button.gst-btn-primary svg,
+button.gst-btn-secondary svg,
+button.gst-btn-outline svg,
+button.gst-btn-success svg,
+.gst-btn svg,
+.gst-btn-primary svg {
+  color: #000000 !important;
+  stroke: #000000 !important;
+}
+
+/* Ensure ALL buttons have rounded-full pill curvature across the SaaS */
+button[data-slot="button"]:not([data-variant="link"]),
+.gst-btn,
+.gst-btn-secondary,
+.gst-btn-outline,
+.gst-btn-ghost,
+.gst-btn-danger,
+.gst-btn-success {
+  border-radius: 9999px !important;
+}
+
+/* Neutralize legacy primary action colored classes into the universal white pill button */
+button[class*="bg-emerald-"]:not([data-slot="badge"]),
+button[class*="bg-green-"]:not([data-slot="badge"]),
+button[class*="bg-blue-"]:not([data-slot="badge"]),
+button[class*="bg-teal-"]:not([data-slot="badge"]),
+button[class*="bg-amber-"]:not([data-slot="badge"]),
+button[class*="bg-violet-"]:not([data-slot="badge"]),
+button[class*="bg-indigo-"]:not([data-slot="badge"]),
+button[class*="bg-purple-"]:not([data-slot="badge"]) {
+  border-radius: 9999px !important;
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+  color: #000000 !important;
+  font-weight: 700 !important;
+  font-size: 0.9375rem !important;
+  min-height: 44px !important;
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+button[class*="bg-emerald-"]:not([data-slot="badge"]):hover,
+button[class*="bg-green-"]:not([data-slot="badge"]):hover,
+button[class*="bg-blue-"]:not([data-slot="badge"]):hover,
+button[class*="bg-teal-"]:not([data-slot="badge"]):hover,
+button[class*="bg-amber-"]:not([data-slot="badge"]):hover,
+button[class*="bg-violet-"]:not([data-slot="badge"]):hover,
+button[class*="bg-indigo-"]:not([data-slot="badge"]):hover,
+button[class*="bg-purple-"]:not([data-slot="badge"]):hover {
+  background-color: #E5E5E5 !important;
+  color: #000000 !important;
+}
+
+button[class*="bg-emerald-"]:not([data-slot="badge"]) svg,
+button[class*="bg-green-"]:not([data-slot="badge"]) svg,
+button[class*="bg-blue-"]:not([data-slot="badge"]) svg,
+button[class*="bg-teal-"]:not([data-slot="badge"]) svg,
+button[class*="bg-amber-"]:not([data-slot="badge"]) svg,
+button[class*="bg-violet-"]:not([data-slot="badge"]) svg,
+button[class*="bg-indigo-"]:not([data-slot="badge"]) svg,
+button[class*="bg-purple-"]:not([data-slot="badge"]) svg {
+  color: #000000 !important;
+  stroke: #000000 !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════

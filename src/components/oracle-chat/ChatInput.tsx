@@ -81,18 +81,18 @@ export function ChatInput({
         <button
           onClick={submit}
           disabled={!value.trim() || streaming}
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition ${
             value.trim() && !streaming
-              ? 'bg-gradient-to-br from-emerald-400 to-emerald-500 text-black hover:from-emerald-300 hover:to-emerald-400 shadow-lg shadow-emerald-500/20'
+              ? 'bg-white text-black font-bold hover:bg-neutral-200 active:scale-95 shadow-none'
               : 'bg-white/5 text-zinc-500'
           }`}
         >
-          {streaming ? <Square className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
+          {streaming ? <Square className="h-4 w-4 fill-current" /> : <ArrowUp className="h-4 w-4 stroke-[2.5]" />}
         </button>
       </div>
       {!compact && (
         <p className="flex items-center justify-center gap-1.5 text-[11px] text-zinc-500">
-          <Sparkles className="h-3 w-3 text-emerald-400/60" />
+          <Sparkles className="h-3 w-3 text-white/60" />
           Oracle answers only from your real business data — never fabricated.
         </p>
       )}

@@ -90,15 +90,15 @@ export const instructionalText = typography.instructional;
 // ── UNIVERSAL BUTTON SPECIFICATION ───────────────────────────────────────────
 // Matches the white "Post" pill button reference screenshot
 export const buttonSpec = {
-  pill: 'rounded-full font-semibold active:scale-[0.98] transition-all duration-150',
+  pill: 'rounded-full font-bold active:scale-[0.98] transition-all duration-150',
   primary:
-    'bg-white text-black hover:bg-neutral-200 active:bg-neutral-300 rounded-full font-semibold shadow-none border border-transparent',
+    'bg-white text-black hover:bg-[#E5E5E5] active:bg-[#D4D4D4] rounded-full font-bold shadow-none border-0 min-h-[44px] px-8 py-3',
   secondary:
-    'bg-[#181818] text-[#EDEDED] border border-white/[0.08] hover:bg-[#222222] hover:border-white/20 rounded-full font-medium',
+    'bg-white text-black hover:bg-[#E5E5E5] active:bg-[#D4D4D4] rounded-full font-bold shadow-none border-0 min-h-[44px] px-8 py-3',
   outline:
-    'border border-white/[0.12] bg-transparent text-[#EDEDED] hover:bg-white/[0.06] hover:border-white/20 hover:text-white rounded-full font-medium',
+    'bg-white text-black hover:bg-[#E5E5E5] active:bg-[#D4D4D4] rounded-full font-bold shadow-none border-0 min-h-[44px] px-8 py-3',
   ghost:
-    'bg-transparent text-[#A1A1A1] hover:text-white hover:bg-white/[0.04] rounded-full font-medium',
+    'bg-white/[0.08] text-white hover:bg-white hover:text-black rounded-full font-bold min-h-[44px] px-6 py-2.5',
 } as const;
 
 // ── CARD SPEC ─────────────────────────────────────────────────────────────────

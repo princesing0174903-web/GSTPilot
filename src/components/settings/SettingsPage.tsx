@@ -1812,7 +1812,7 @@ function TeamSection() {
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-transparent border-zinc-700 text-zinc-200 hover:bg-zinc-900">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleTransfer} disabled={!transferTo || transferring} className="bg-blue-600 hover:bg-blue-500 text-white">
+            <AlertDialogAction onClick={handleTransfer} disabled={!transferTo || transferring}>
               {transferring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
               Transfer Ownership
             </AlertDialogAction>
@@ -2082,7 +2082,7 @@ function ApiKeysSection() {
             </div>
           </div>
           <AlertDialogFooter>
-            <AlertDialogAction className="bg-blue-600 hover:bg-blue-500 text-white" onClick={() => { setRevealedKey(null); setRevealedId(null); }}>
+            <AlertDialogAction onClick={() => { setRevealedKey(null); setRevealedId(null); }}>
               I've copied it
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -219,8 +219,8 @@ function CommandCenter() {
             <CornerDownLeft className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/20" />
           )}
         </div>
-        <Button type="submit" disabled={loading || !input.trim()} className="bg-emerald-500 text-black hover:bg-emerald-400">
-          {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <SendIcon className="h-4 w-4" />}
+        <Button type="submit" disabled={loading || !input.trim()} loading={loading}>
+          {!loading && <SendIcon className="h-4 w-4" />}
         </Button>
       </form>
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -486,7 +486,7 @@ export function OracleBrainDashboard() {
       <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <ShieldAlert className="h-10 w-10 text-rose-400" />
         <p className="mt-3 text-sm text-white/60">Oracle encountered an error: {error}</p>
-        <Button onClick={refresh} className="mt-4 bg-emerald-500 text-black hover:bg-emerald-400">
+        <Button onClick={refresh} className="mt-4">
           <RefreshCw className="mr-2 h-4 w-4" /> Retry
         </Button>
       </div>

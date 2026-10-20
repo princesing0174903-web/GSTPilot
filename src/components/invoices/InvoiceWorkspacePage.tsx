@@ -716,27 +716,24 @@ export default function InvoiceWorkspacePage() {
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2.5">
             <AskOracleButton context="invoices" />
             <Button
-              variant="outline"
-              size="sm"
               onClick={() => {
                 refetchInvoices();
                 refetchClients();
               }}
-              className="h-9 border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] text-foreground"
+              className="gap-2 px-6 font-bold cursor-pointer"
               aria-label="Refresh"
             >
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span className="hidden md:inline ml-1.5">Refresh</span>
+              <RefreshCw className="h-4 w-4 stroke-[2.5]" />
+              <span className="hidden md:inline">Refresh</span>
             </Button>
             <Button
-              size="sm"
               onClick={handleOpenCreate}
-              className="h-9 font-medium"
+              className="gap-2 px-6 font-bold cursor-pointer"
             >
-              <Plus className="h-4 w-4 mr-1.5" />
+              <Plus className="h-4 w-4 stroke-[2.5]" />
               <span className="hidden sm:inline">New Invoice</span>
               <span className="sm:hidden">New</span>
             </Button>

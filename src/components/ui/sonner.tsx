@@ -23,9 +23,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
             "glass-surface border-white/[0.10] !backdrop-blur-2xl !rounded-xl !shadow-[0_20px_50px_-12px_rgba(0,0,0,0.7)]",
           title: "!text-white !font-semibold",
           description: "!text-white/60",
-          actionButton: "!bg-[#3B82F6] !text-white",
+          actionButton: "!bg-white !text-black !font-bold !rounded-full !px-4 !py-1.5",
           cancelButton:
-            "!bg-white/[0.06] !text-white/70 !border-white/[0.08]",
+            "!bg-white/[0.06] !text-white/70 !border-white/[0.08] !rounded-full !px-3",
         },
       }}
       {...props}
